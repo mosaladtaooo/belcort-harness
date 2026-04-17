@@ -1,15 +1,28 @@
 ---
-description: Run the 14-point quality audit on existing .harness/spec/ and feature contract files. Surfaces missing sections, inconsistencies, and spec drift.
+description: Run the 13-point quality audit on existing .harness/spec/ files (BMAD tri-modal). Surfaces missing sections, inconsistencies, and spec drift without regenerating anything.
 ---
 
-# `/harness:validate`
+# `/harness:validate` — Validate existing spec
 
-Invoke the BELCORT Harness skill and execute the **`/harness:validate`** procedure.
+For when you want to audit an existing PRD without regenerating it.
 
-Read `skills/harness/SKILL.md` and follow the `/harness:validate` section. Audit targets:
-- `.harness/spec/constitution.md`
-- `.harness/spec/prd.md`
-- `.harness/spec/architecture.md`
-- Each `.harness/features/*/contract.md` (if requested or all by default)
+## Procedure
 
-Produce a concise report: ✓ passed items, ✗ failed items with file:line references, and suggested fixes. Do NOT auto-fix — surface findings and let the user decide.
+1. Read all `.harness/spec/` files
+2. Run the Planner's 13-point validation checklist against them
+3. Report findings:
+   ```
+   ═══════════════════════════════
+     Harness — Spec Validation
+   ═══════════════════════════════
+   V1  Completeness:    PASS/FAIL  [details]
+   V2  SMART NFRs:      PASS/FAIL  [details]
+   V3  Traceability:    PASS/FAIL  [details]
+   ...
+   V13 Right-sized:     PASS/FAIL  [details]
+
+   Result: [N]/13 passed
+   Fix: [list of specific issues to address]
+   ═══════════════════════════════
+   ```
+4. If issues found, offer to fix them in-place (user confirms per fix)

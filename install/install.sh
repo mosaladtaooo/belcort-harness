@@ -1,8 +1,33 @@
 #!/bin/bash
-# BELCORT Harness — Installer
-# Copies harness files into ~/.claude/ and sets up hooks.
+# BELCORT Harness — Installer (DEPRECATED)
+#
+# This script is kept for backwards compatibility with installs predating the
+# Claude Code plugin system. New users should install via the plugin instead:
+#
+#   /plugin marketplace add mosaladtaooo/belcort-harness
+#   /plugin install harness@belcort-harness
+#   /harness:setup
+#
+# The plugin auto-registers skills, agents, hooks, commands, and MCP servers
+# with zero settings.json editing. This shell installer is manual and fragile
+# by comparison — it exists only so existing installs don't break.
 
 set -e
+
+echo ""
+echo "⚠️  DEPRECATION NOTICE"
+echo "──────────────────────"
+echo "The shell installer is deprecated. Prefer the plugin install:"
+echo "  /plugin marketplace add mosaladtaooo/belcort-harness"
+echo "  /plugin install harness@belcort-harness"
+echo "  /harness:setup"
+echo ""
+read -p "Continue with the legacy shell install anyway? [y/N] " -n 1 -r LEGACY_REPLY
+echo ""
+if [[ ! $LEGACY_REPLY =~ ^[Yy]$ ]]; then
+  echo "Aborted. Use the plugin install path instead."
+  exit 0
+fi
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
@@ -55,8 +80,10 @@ backup_if_exists "$CLAUDE_DIR/hooks/pre-tool-use.sh"
 # Install files
 echo ""
 echo "→ Installing harness files..."
-cp "$REPO_ROOT/skill/SKILL.md" "$CLAUDE_DIR/skills/harness/SKILL.md"
+cp "$REPO_ROOT/skills/harness/SKILL.md" "$CLAUDE_DIR/skills/harness/SKILL.md"
+cp -r "$REPO_ROOT/commands" "$CLAUDE_DIR/commands-harness"
 echo "  installed: skills/harness/SKILL.md"
+echo "  installed: commands-harness/ (raw command files — plugin users get these namespaced automatically)"
 
 cp "$REPO_ROOT/agents/planner.md" "$CLAUDE_DIR/agents/planner.md"
 cp "$REPO_ROOT/agents/generator.md" "$CLAUDE_DIR/agents/generator.md"

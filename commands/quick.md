@@ -3,15 +3,22 @@ description: Fast pipeline — skip Planner, use minimal contract, single build 
 argument-hint: "<what to build, concise>"
 ---
 
-# `/harness:quick`
+# `/harness:quick` — Fast Mode
 
-Invoke the BELCORT Harness skill and execute the **`/harness:quick`** procedure with the user's prompt: `$ARGUMENTS`
+For small changes where planning overhead > implementation time. The user's prompt is `$ARGUMENTS`. If empty, ask what to build first.
 
-Read `skills/harness/SKILL.md` and follow the `/harness:quick "<prompt>"` section. Differences from `sprint`:
+## Procedure
 
-- Skip the Planner entirely
-- Write a minimal inline contract (Generator drafts, no negotiation)
-- Single Generator → Evaluator pass (no retry loop)
-- Skip retrospective
+1. Write a minimal contract directly (no Planner subagent):
+   ```markdown
+   # Quick Build Contract
+   ## Task: $ARGUMENTS
+   ## Test Criteria:
+   - [ ] [inferred from the prompt]
+   ## Done when: tests pass, lint clean, feature works
+   ```
+2. Dispatch Generator immediately (see [sprint.md § 3. BUILD](sprint.md) for the dispatch block — `quick` reuses it verbatim)
+3. Single Evaluator pass (no retry loop — see [sprint.md § 4. EVALUATE](sprint.md) for the dispatch block)
+4. Merge on pass, report on fail
 
-If the task turns out to be larger than expected mid-build, offer to promote to a full sprint. If `$ARGUMENTS` is empty, ask the user what to build first.
+If the task turns out to be larger than expected mid-build, offer to promote to a full `/harness:sprint`.
