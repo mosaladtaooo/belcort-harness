@@ -1,0 +1,18 @@
+{
+  "name": "belcort-harness",
+  "owner": {
+    "name": "BELCORT AI Consulting",
+    "email": "tools@belcort.com",
+    "url": "https://github.com/mosaladtaooo/belcort-harness"
+  },
+  "plugins": [
+    {
+      "name": "harness",
+      "source": ".",
+      "description": "Planner → Generator → Evaluator harness pipeline for Claude Code. Adapted from Anthropic's long-running agent research.",
+      "version": "1.2.0",
+      "category": "workflow",
+      "tags": ["harness", "planner", "generator", "evaluator", "tdd", "orchestration"]
+    }
+  ]
+}

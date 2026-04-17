@@ -1,0 +1,12 @@
+# Shell scripts must be LF — CRLF breaks bash on Mac/Linux ("/bin/bash^M: bad interpreter")
+*.sh text eol=lf
+
+# JSON is cross-platform but stays LF for consistency
+*.json text eol=lf
+
+# Markdown: LF to match other text assets
+*.md text eol=lf
+
+# YAML: LF
+*.yaml text eol=lf
+*.yml  text eol=lf

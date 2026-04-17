@@ -33,17 +33,29 @@ See [docs/anthropic-alignment.md](docs/anthropic-alignment.md) for a point-by-po
 
 ## Installation
 
-Requires Claude Code (claude.ai/code) installed and working.
+Requires Claude Code installed and working.
+
+### Option A — Plugin install (recommended)
+
+```
+/plugin marketplace add mosaladtaooo/belcort-harness
+/plugin install harness@belcort-harness
+/harness:setup
+```
+
+That's it. The plugin auto-registers the skill, three agents, ten slash commands, two hooks (SessionStart + PreToolUse), and two MCP servers (context7 + playwright). The one-time `/harness:setup` command patches `~/.claude/CLAUDE.md` with the harness behavioral rules so they apply globally and survive context compaction. The patch is idempotent, version-aware, and removable (`scripts/uninstall-rules.sh`).
+
+### Option B — Manual install (legacy)
 
 ```bash
-git clone https://github.com/<you>/belcort-harness.git
+git clone https://github.com/mosaladtaooo/belcort-harness.git
 cd belcort-harness
 ./install/install.sh
 ```
 
-Then complete the two manual steps the installer prints (append CLAUDE.md snippet, register hooks in settings.json).
+Complete the two manual steps the installer prints (append CLAUDE.md snippet, register hooks in `~/.claude/settings.json`).
 
-Verify:
+Verify either install:
 
 ```bash
 ./install/verify.sh
