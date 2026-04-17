@@ -1,0 +1,333 @@
+# BELCORT Harness Engine
+
+You operate within the BELCORT Harness Engine — a Planner → Generator → Evaluator pipeline inspired by Anthropic's harness engineering research.
+
+## Three Agents, Three Jobs
+
+| Agent | Job | Context | Tools |
+|-------|-----|---------|-------|
+| **Planner** | Expand prompt → PRD + high-level tech direction + draft contract | Fresh subagent | Context7, web search |
+| **Generator** | (Negotiate mode) Propose HOW to build, then (Build mode) implement with TDD | Fresh subagent per mode | Context7, filesystem, bash, git |
+| **Evaluator** | (Review-proposal mode) Review proposal pre-code, then (Evaluate mode) test running app and grade | Fresh subagent (MUST be separate from Generator) | Playwright MCP, filesystem, bash |
+
+Every agent runs as a **fresh subagent** with clean context. The Evaluator MUST NEVER share context with the Generator — that's the core GAN insight.
+
+## The Rule (adapted from Superpowers' "1% rule")
+
+**If there is even a 1% chance the harness should be active, check for it.**
+
+This is not optional. This is not negotiable. You cannot rationalize your way out of this.
+
+### Session start behavior
+The SessionStart hook (`hooks/session-start.sh`) fires automatically and injects harness state into your context. You don't need to do anything — the hook handles detection.
+
+### When `.harness/manifest.yaml` exists
+- You MUST read it before doing anything else
+- If `state.phase` is not "complete": tell the user the harness is active and offer `/harness:resume`
+- Do NOT start coding, do NOT answer technical questions about the project, until you've acknowledged the harness state
+- The harness state is your source of truth — not your memory of previous conversations
+
+### When no harness exists but the user describes building something
+Trigger words: "build", "create", "implement", "make an app", "develop", "set up a project", "new feature" (when it's substantial, not a one-liner fix).
+
+If you detect these AND the request involves multiple components, a full feature, or anything that would take more than 15 minutes to build well:
+→ Suggest: "This looks like it would benefit from the harness pipeline. Want me to run `/harness:sprint`?"
+
+Do NOT suggest the harness for:
+- Quick questions ("how do I X?")
+- Single-line fixes ("fix this typo")
+- Conversational requests ("explain how React hooks work")
+- Tasks the user is clearly doing manually and wants help with
+
+### Red flags (you're about to skip the harness when you shouldn't)
+- "I know how to build this, I'll just start coding" → STOP. That's exactly when the harness helps most.
+- "This is simple, I don't need planning" → Check: is it actually < 15 min, or are you underestimating?
+- "The user didn't ask for the harness" → You don't need them to ask. Suggest it if it fits.
+
+| Command | What happens |
+|---------|-------------|
+| `/harness:sprint "<prompt>"` | Full loop: plan (2-pass) → analyze → [human gate] → negotiate → build → evaluate → tuning check → retry/retrospective → merge |
+| `/harness:quick "<prompt>"` | Skip planning. Minimal contract. Build → single QA pass |
+| `/harness:resume` | Read manifest.yaml + changelog, continue from last phase (handles mid-build recovery) |
+| `/harness:validate` | Run 14-point quality audit on existing spec files |
+| `/harness:edit "<change>"` | Targeted spec modification with downstream reference updates |
+| `/harness:analyze` | Cross-artifact consistency check (PRD vs architecture vs contract) |
+| `/harness:negotiate` | Generator ↔ Evaluator contract negotiation before build |
+| `/harness:retrospective` | Post-merge drift analysis — sync spec with what was actually built |
+| `/harness:tune-evaluator` | Review divergence patterns and propose calibration improvements (examples / prompt) |
+| `/harness:audit` | Verification debt scan — find deferred issues, stale known-issues, silent skips |
+
+## Pipeline Flow
+
+```
+/harness:sprint "Build X"
+       │
+       ▼
+   PLANNER (subagent, two-pass)
+   Pass 1: PRD + constitution (what & why, tech-agnostic)
+   Pass 2: HIGH-LEVEL technical direction (stack only, NOT components/files)
+           + criteria + DRAFT contract (high-level deliverables)
+   Self-validates with 14-point checklist
+   Creates features/NNN-name/ folder + updates ROADMAP.md
+       │
+       ▼
+   ANALYZE (cross-artifact consistency check)
+   Checks: coverage, NFR alignment, constitution compliance
+   Writes: features/NNN/analysis-report.md
+   CRITICAL findings halt; warnings proceed
+       │
+       ▼
+   YOU REVIEW + APPROVE (human gate — specs + analysis)
+       │
+       ▼
+   NEGOTIATE (Generator ↔ Evaluator, before any code)
+   Generator writes: features/NNN/proposal.md (HOW to build)
+   Evaluator writes: features/NNN/review.md (verdict + asks)
+   Iterate up to 3 rounds until agreement
+   On agreement: Generator writes final features/NNN/contract.md
+   On stalemate: escalate to human
+       │
+       ▼
+   GENERATOR (subagent, fresh context)
+   Reads: features/NNN/contract.md (final, negotiated) + spec/
+   Does: TDD red→green→refactor, atomic git commits
+   Writes: source code, features/NNN/implementation-report.md
+       │
+       ▼
+   EVALUATOR (subagent, fresh context, skeptical, SEPARATE from Generator)
+   Reads examples.md + evaluator-notes.md BEFORE scoring (calibration)
+   Writes: features/NNN/eval-report.md
+       │
+       ▼
+   TUNING CHECK (orchestrator asks human: "agree with this judgment?")
+   On disagreement → append to tuning-log.md
+   Optionally → add example to examples.md (or spec/evaluator-notes.md)
+   Pattern detection: ≥3 entries in same category → suggest /harness:tune-evaluator
+       │
+   ┌───┴───┐
+   │       │
+  PASS    FAIL → feedback from eval-report → FRESH Generator → re-evaluate
+   │              (max 3 retries, then escalate to human)
+   ▼
+   RETROSPECTIVE (drift analysis)
+   Reads: features/NNN/* + source code
+   Finds: spec drift (positive/negative/neutral)
+   Writes: features/NNN/retrospective.md
+   Human approves spec updates
+       │
+       ▼
+   MERGE + update ROADMAP.md ("✅ Shipped") + manifest features.completed
+```
+
+## Subagent Dispatch
+
+```bash
+
+
+# Feature name (used by all dispatches below)
+FEATURE=$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')
+
+# 1. Planner (runs first, creates draft contract)
+claude -p "$(cat ~/.claude/agents/planner.md)
+--- USER REQUEST ---
+<the user's prompt>" \
+  --allowedTools "Read,Write,Bash,mcp__context7"
+
+# 2. Generator — NEGOTIATE mode (proposes HOW, before writing code)
+claude -p "$(cat ~/.claude/agents/generator.md)
+--- MODE: NEGOTIATE ---
+Read the draft contract and propose HOW to implement. Write to
+.harness/features/${FEATURE}/proposal.md. Do NOT write code.
+--- CONTEXT ---
+$(cat .harness/spec/constitution.md)
+$(cat .harness/spec/architecture.md)
+$(cat .harness/features/${FEATURE}/contract.md)
+$(cat .harness/evaluator/criteria.md)" \
+  --allowedTools "Read,Write,mcp__context7"
+
+# 3. Evaluator — REVIEW-PROPOSAL mode (reviews proposal, no Playwright)
+claude -p "$(cat ~/.claude/agents/evaluator.md)
+--- MODE: REVIEW-PROPOSAL ---
+Review the Generator's proposal. Write verdict + asks to
+.harness/features/${FEATURE}/review.md. Do NOT run Playwright — no app yet.
+--- CONTEXT ---
+$(cat .harness/evaluator/criteria.md)
+$(cat .harness/features/${FEATURE}/contract.md)
+$(cat .harness/features/${FEATURE}/proposal.md)" \
+  --allowedTools "Read,Write"
+
+# (Loop NEGOTIATE ↔ REVIEW-PROPOSAL up to 3 rounds until agreement.
+#  On agreement, dispatch Generator in FINALIZE-CONTRACT mode to write final contract.md.)
+
+# 4. Generator — BUILD mode (implements against finalized contract)
+claude -p "$(cat ~/.claude/agents/generator.md)
+--- MODE: BUILD ---
+--- PROJECT CONTEXT ---
+$(cat .harness/spec/constitution.md)
+$(cat .harness/spec/architecture.md)
+$(cat .harness/features/${FEATURE}/contract.md)
+$(cat .harness/features/${FEATURE}/proposal.md)
+$(cat .harness/features/${FEATURE}/review.md)
+$(cat .harness/evaluator/criteria.md)
+$([ -f .harness/features/${FEATURE}/eval-report.md ] && echo '--- EVALUATOR FEEDBACK (FIX THESE) ---' && cat .harness/features/${FEATURE}/eval-report.md)" \
+  --allowedTools "Read,Write,Bash,mcp__context7"
+
+# 5. Evaluator — EVALUATE mode (tests running app)
+claude -p "$(cat ~/.claude/agents/evaluator.md)
+--- MODE: EVALUATE ---
+--- EVALUATION CONTEXT ---
+$(cat .harness/evaluator/criteria.md)
+$(cat .harness/features/${FEATURE}/implementation-report.md)
+$(cat .harness/features/${FEATURE}/contract.md)
+$(cat .harness/spec/constitution.md)" \
+  --allowedTools "Read,Write,Bash,mcp__playwright"
+```
+
+### Subagent Isolation (adapted from Superpowers)
+
+Every agent prompt contains a `<SUBAGENT-CONTEXT>` block that tells the dispatched agent:
+- You were dispatched for ONE specific job
+- Do NOT re-invoke the harness pipeline
+- Do NOT check for other skills or orchestrate further agents
+- If the SessionStart hook or harness SKILL.md fires inside your context, SKIP IT
+- Complete your task and stop
+
+**Why this matters:** Without this marker, a dispatched Generator subagent might detect the `.harness/` directory, re-read the SKILL.md, and try to become the orchestrator — entering an infinite loop of self-orchestration. The skip marker prevents this.
+
+The orchestrator (your main session) is the ONLY agent that reads SKILL.md and dispatches other agents. Subagents are workers, not managers.
+
+## Persistent State (.harness/)
+
+All state is file-based and git-tracked. Agents communicate via files, never via shared conversation.
+
+```
+.harness/
+├── manifest.yaml            # Active state: phase, current_feature, current_task, verification_debt, tuning_debt
+├── ROADMAP.md               # Shipped/in-progress/planned features (product lifetime)
+├── spec/                    # GLOBAL — persists across features
+│   ├── constitution.md      # Project principles (enforceable rules)
+│   ├── prd.md               # Product requirements — evolves
+│   ├── architecture.md      # Stack + high-level tech direction (NO file paths / component details)
+│   └── evaluator-notes.md   # Project-specific Evaluator calibration (optional, appended over time)
+├── features/                # PER-FEATURE artifacts (numbered, isolated, preserved)
+│   ├── 001-user-auth/
+│   │   ├── contract.md              # Final negotiated contract
+│   │   ├── proposal.md              # Generator's HOW proposal (from negotiation)
+│   │   ├── review.md                # Evaluator's proposal review (from negotiation)
+│   │   ├── implementation-report.md # Generator's handoff
+│   │   ├── eval-report.md           # Evaluator's PASS/FAIL verdict
+│   │   ├── analysis-report.md       # Cross-artifact consistency check (optional)
+│   │   └── retrospective.md         # Post-merge drift analysis (optional)
+│   ├── 002-bookmarks/
+│   └── 003-search/
+├── evaluator/
+│   ├── criteria.md          # Grading rubric (global — 4 criteria with thresholds)
+│   ├── examples.md          # Few-shot calibration examples (MANDATORY reading for Evaluator)
+│   └── tuning-log.md        # Append-only divergence log between Evaluator and human
+├── progress/
+│   ├── changelog.md         # Session log across all features (append-only)
+│   ├── decisions.md         # Architecture Decision Records (append-only) — includes Evaluator prompt changes
+│   └── known-issues.md      # Minor deferred findings tracked for /harness:audit
+└── init.sh                  # Health check
+```
+
+**manifest.yaml** tracks where you are:
+```yaml
+harness: { version: "1.2", model: "claude-opus-4-6", model_tuning_revision: 0 }
+project: { name: "", description: "" }
+config: { max_retries: 3, max_negotiation_rounds: 3, testing: { unit: vitest, e2e: playwright } }
+state:
+  phase: planning|analyzing|negotiating|building|evaluating|retrospective|complete
+  current_feature: "001-feature-name"
+  current_task: "FR-005"
+  negotiation_round: 0
+  retry_count: 0
+features: { completed: [], in_progress: "", planned: [] }
+verification_debt: { deferred: [], pending_human: [] }
+tuning_debt:
+  unreviewed_divergences: 0  # count of tuning-log.md entries not yet analyzed by /harness:tune-evaluator
+  patterns_pending: []       # divergence categories with >=3 entries awaiting review
+```
+
+## TDD Protocol (Generator enforces this)
+
+1. **RED**: Write test. Run it. It MUST fail.
+2. **GREEN**: Write minimum code to pass.
+3. **REFACTOR**: Clean up with tests green.
+4. **COMMIT**: `[harness:build] <behavior description>`
+
+No code without a failing test. No exceptions.
+
+## Evaluator Criteria (4 gradable dimensions)
+
+| Criterion | Threshold | How tested |
+|-----------|-----------|-----------|
+| Functionality | 6/10 | Playwright: exercise all flows + edge cases |
+| Code Quality | 6/10 | Source review against constitution |
+| Test Coverage | 6/10 | Run suite + check TDD evidence in git log |
+| Product Depth | 5/10 | Use app as real user, try to break it |
+
+ANY criterion below threshold = FAIL → Generator retries with feedback.
+
+## MCP Servers and Plugins (configure these)
+
+### Required
+```bash
+# Evaluator: interactive app testing
+claude mcp add playwright -- npx @anthropic/mcp-playwright
+
+# Planner + Generator: live framework docs lookup
+claude mcp add context7 -- npx -y @upstash/context7-mcp@latest
+```
+
+### Recommended
+```bash
+# Generator: production-grade UI design
+/plugin install frontend-design@claude-plugins-official
+
+# Generator + Evaluator: OWASP security checks
+/plugin install security-guidance@claude-plugins-official
+
+# Evaluator: automated code quality (33 checks)
+/plugin install agentlint@claude-plugins-official
+```
+
+### Optional
+```bash
+# Planner: scrape reference sites, competitor research
+claude mcp add firecrawl -- npx -y firecrawl-mcp
+
+# Post-merge: auto-create PRs and issues
+claude mcp add github -- npx -y @anthropic/mcp-github
+
+# Generator: if you want Superpowers TDD + debugging skills too
+/plugin marketplace add obra/superpowers-marketplace
+/plugin install superpowers@superpowers-marketplace
+```
+
+## Git Workflow
+
+- Worktrees for isolation: `git worktree add .worktrees/current -b harness/build/<name>`
+- Atomic commits: `[harness:<phase>] <description>`
+- Squash merge on pass
+- Never force push
+
+## Complexity Adaptation
+
+| Size | Planning | Evaluator |
+|------|----------|-----------|
+| Small (quick fix) | `/harness:quick` — skip Planner | Single pass, no retry loop |
+| Medium (feature) | Full Planner, no sprint decomposition | QA at end + retry loop |
+| Large (multi-day) | Planner decomposes into ordered contracts | QA per contract + final pass |
+
+Opus 4.6 handles most medium projects without sprint decomposition. Only decompose when the Generator demonstrably loses coherence.
+
+## Rules
+
+1. If a `.harness/` exists, read `manifest.yaml` before doing anything
+2. Evaluator is ALWAYS a separate subagent — never self-evaluate in the same context
+3. Every technical decision must align with `constitution.md`
+4. Agents communicate via `.harness/` files, never via shared context
+5. When uncertain, ask the human ONE focused question
+6. Planner does NOT specify files, components, data models, or API paths — those 
+   are negotiated between Generator and Evaluator before building

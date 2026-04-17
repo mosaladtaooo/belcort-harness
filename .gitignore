@@ -1,0 +1,23 @@
+# Nothing user-specific should ever land in this repo.
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Installer artifacts
+.harness-backup-*/
+
+# Don't accidentally commit a runtime .harness/ if testing locally
+.harness/
+
+# Secrets
+.env
+.env.*
+*.key
+*.pem

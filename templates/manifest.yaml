@@ -1,0 +1,48 @@
+# BELCORT Harness Engine — Project Manifest
+# This file is the single source of truth for live state.
+# Agents read this first to know where they are in the pipeline.
+
+harness:
+  version: "1.1"           # Increment when harness design changes
+  model: "claude-opus-4-6" # Model these prompts were tuned for
+  model_tuning_revision: 0    # incremented each time evaluator.md prompt is modified via /harness:tune-evaluator
+  created: ""              # ISO date when harness was initialized
+
+project:
+  name: ""
+  description: ""
+  created: ""
+
+config:
+  max_retries: 3              # QA retry limit after Evaluator FAIL
+  max_negotiation_rounds: 3   # Proposal↔review limit before human escalation
+  testing:
+    unit: "vitest"
+    e2e: "playwright"
+  context_strategy: "fresh_subagent"  # fresh_subagent | single_session (Opus 4.6+)
+
+state:
+  phase: "planning"          # planning | analyzing | negotiating | building | evaluating | retrospective | complete
+  current_feature: ""        # e.g., "001-bookmark-crud"
+  current_task: ""           # e.g., "FR-005" — updated after each TDD cycle for mid-build recovery
+  negotiation_round: 0       # incremented each proposal↔review cycle; max 3 before escalation
+  retry_count: 0
+  last_session: ""           # ISO timestamp of last agent dispatch
+
+features:
+  completed: []              # List of completed feature folder names
+  in_progress: ""            # Currently active feature
+  planned: []                # Upcoming features from roadmap
+
+verification_debt:           # Items flagged but not addressed (from GSD pattern)
+  deferred: []               # [{feature, finding_id, severity, reason}]
+  pending_human: []          # [{feature, finding_id, question}]
+
+tuning_debt:                   # Evaluator calibration health (from 3.1 tuning loop)
+  unreviewed_divergences: 0   # count of tuning-log.md entries not yet analyzed by /harness:tune-evaluator
+  patterns_pending: []         # [{category: "Leniency", count: 4}] — categories with >=3 entries
+
+git:
+  main_branch: "main"
+  merge_strategy: "squash"
+  worktree_prefix: "harness/build/"

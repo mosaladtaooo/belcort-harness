@@ -1,0 +1,73 @@
+# Evaluator Calibration Examples
+
+Few-shot examples with detailed score breakdowns, used by the Evaluator in EVALUATE mode to calibrate scoring against human preferences.
+
+## Purpose
+
+Anthropic's harness research found that "tuning a standalone evaluator to be skeptical turns out to be far more tractable than making a generator critical of its own work." This file is where that tuning accumulates over time. Every example here represents a case where the Evaluator's initial judgment diverged from a human grader's — sanitized and turned into calibration data.
+
+## How this file is used
+
+The Evaluator reads this file at the start of EVALUATE mode, BEFORE scoring any criterion. The examples set the scoring scale for "what a 3/10 looks like," "what a 5/10 looks like," "what an 8/10 looks like" — in concrete, not abstract, terms.
+
+## How this file is populated
+
+- **Automatically**: Added by `/harness:tune-evaluator` when a human flags an eval as diverging from their judgment
+- **Manually**: You can add examples directly when you notice a grading pattern that needs correction
+
+## Scoring Scale Reference (reminder)
+
+- 1-2: Fundamentally broken, unusable
+- 3-4: Major gaps, core features missing or broken
+- 5-6: Passes threshold but with visible issues
+- 7-8: Solid work, minor gaps only
+- 9-10: Exceptional (rare, should trigger "is something hiding?" check)
+
+---
+
+## Examples by Criterion
+
+### Functionality
+
+<!-- Each example follows this structure:
+
+### Example F-NNN — [Short title of the situation]
+**Scenario**: [what was tested, what was observed]
+**Wrong score**: X/10 — [why this feels right but is wrong]
+**Right score**: Y/10 — [the correct score and specific reasoning]
+**Lesson**: [the general principle this example teaches]
+
+-->
+
+_No examples yet. Will be populated by `/harness:tune-evaluator` over time._
+
+---
+
+### Code Quality
+
+_No examples yet._
+
+---
+
+### Test Coverage
+
+_No examples yet._
+
+---
+
+### Product Depth
+
+_No examples yet._
+
+---
+
+## Cross-cutting patterns
+
+_Patterns that apply across multiple criteria. Populated as patterns emerge._
+
+<!-- Example:
+
+### Pattern: "Happy path only" scoring
+When the Evaluator tests only the primary flow and gives a high score, that's a systematic failure mode. Any score ≥7 given without edge case testing should be reduced by 2.
+
+-->
