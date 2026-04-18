@@ -2,17 +2,23 @@
   "name": "belcort-harness",
   "owner": {
     "name": "BELCORT AI Consulting",
-    "email": "tools@belcort.com",
-    "url": "https://github.com/mosaladtaooo/belcort-harness"
+    "email": "tools@belcort.com"
+  },
+  "metadata": {
+    "description": "BELCORT Harness Engine — Planner → Generator → Evaluator pipeline for Claude Code",
+    "version": "1.2.0"
   },
   "plugins": [
     {
       "name": "harness",
-      "source": ".",
-      "description": "Planner → Generator → Evaluator harness pipeline for Claude Code. Adapted from Anthropic's long-running agent research.",
+      "source": {
+        "source": "github",
+        "repo": "mosaladtaooo/belcort-harness"
+      },
+      "description": "Planner → Generator → Evaluator harness pipeline adapted from Anthropic's long-running agent research. Orchestrates planning, contract negotiation, TDD implementation, and adversarial evaluation via fresh subagents.",
       "version": "1.2.0",
       "category": "workflow",
-      "tags": ["harness", "planner", "generator", "evaluator", "tdd", "orchestration"]
+      "keywords": ["harness", "planner", "generator", "evaluator", "tdd", "orchestration", "agent"]
     }
   ]
 }
