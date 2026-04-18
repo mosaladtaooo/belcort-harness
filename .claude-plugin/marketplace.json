@@ -11,10 +11,7 @@
   "plugins": [
     {
       "name": "harness",
-      "source": {
-        "source": "github",
-        "repo": "mosaladtaooo/belcort-harness"
-      },
+      "source": "./plugins/harness",
       "description": "Planner → Generator → Evaluator harness pipeline adapted from Anthropic's long-running agent research. Orchestrates planning, contract negotiation, TDD implementation, and adversarial evaluation via fresh subagents.",
       "version": "1.2.0",
       "category": "workflow",
