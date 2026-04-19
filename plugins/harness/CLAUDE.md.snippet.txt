@@ -274,7 +274,7 @@ ANY criterion below threshold = FAIL → Generator retries with feedback.
 ### Required
 ```bash
 # Evaluator: interactive app testing
-claude mcp add playwright -- npx @anthropic/mcp-playwright
+claude mcp add playwright -- npx -y @playwright/mcp@latest
 
 # Planner + Generator: live framework docs lookup
 claude mcp add context7 -- npx -y @upstash/context7-mcp@latest
