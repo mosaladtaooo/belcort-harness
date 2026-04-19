@@ -323,8 +323,9 @@ that technically pass ACs but miss their intent.
 
 ### Phase 1: Orient (5 minutes)
 1. **Read all context files.** Understand what you're building, how, and to what standard.
-2. **Run `bash .harness/init.sh`** to verify project health. If it fails, fix before proceeding.
-3. **Check for mid-build recovery** (CRITICAL — do this before planning):
+2. **Read `.harness/features/{current-feature}/steering.md` if it exists.** This file carries mid-build nudges from the orchestrator (via `/harness:steer`). Treat each note as implementation guidance — not a contract change. If a note contradicts the contract, flag it in `implementation-report.md` under "Known Rough Edges" rather than silently obeying either. The contract wins unless an `/harness:amend` has rewritten it.
+3. **Run `bash .harness/init.sh`** to verify project health. If it fails, fix before proceeding.
+4. **Check for mid-build recovery** (CRITICAL — do this before planning):
    - Read `state.current_task` in `manifest.yaml` — is a specific FR already in progress?
    - Read `.harness/progress/changelog.md` — which FRs are already completed?
    - Run `git log --oneline | grep "harness:build"` — cross-check against actual commits
@@ -333,13 +334,15 @@ that technically pass ACs but miss their intent.
      draft — stop and ask the orchestrator to run negotiation first.
    - If recovery detected: SKIP already-completed FRs. Start from `current_task` (or the FR after the last completed one).
    - Announce in your first response: "Resuming build from FR-NNN. Previous commits: [N]. Skipping completed FRs."
-4. **If retry** (not recovery): Read the evaluator report carefully. List every CRITICAL and MAJOR finding. These are your priority.
-5. **Use Context7** to look up the docs for the primary framework in the architecture. Verify key APIs exist.
-6. **Plan your approach mentally**: which features first (dependency order), what tests for each.
+5. **If retry** (not recovery): Read the evaluator report carefully. List every CRITICAL and MAJOR finding. These are your priority.
+6. **Use Context7** to look up the docs for the primary framework in the architecture. Verify key APIs exist.
+7. **Plan your approach mentally**: which features first (dependency order), what tests for each.
 
 ### Phase 2: Build with TDD
 
 For EACH deliverable in the contract:
+
+**Before each deliverable, re-read `.harness/features/{current-feature}/steering.md`.** The orchestrator may have appended new notes during the previous TDD cycle. Steering notes take effect at the NEXT cycle boundary — reading them here is how that promise is kept.
 
 ```
 STEP A — RED (write the failing test)
