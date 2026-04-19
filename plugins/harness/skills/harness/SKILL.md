@@ -33,6 +33,7 @@ Each procedure lives in its own file under `commands/`. This is a pointer table,
 | `/harness:negotiate` | [commands/negotiate.md](../../commands/negotiate.md) | Generator ↔ Evaluator contract negotiation (pre-build) |
 | `/harness:validate` | [commands/validate.md](../../commands/validate.md) | 13-point quality audit on existing spec files |
 | `/harness:edit "<change>"` | [commands/edit.md](../../commands/edit.md) | Targeted spec edit with downstream propagation |
+| `/harness:amend "<tweak>"` | [commands/amend.md](../../commands/amend.md) | Safe post-plan spec amendment via a fresh Planner subagent. Produces before→after patches, user confirms, orchestrator mechanically applies. **Never edits spec from orchestrator context.** Solves the post-plan tweak pollution failure mode. |
 | `/harness:retrospective` | [commands/retrospective.md](../../commands/retrospective.md) | Post-merge drift analysis + spec sync |
 | `/harness:tune-evaluator` | [commands/tune-evaluator.md](../../commands/tune-evaluator.md) | Review divergence log, propose calibration updates |
 | `/harness:audit` | [commands/audit.md](../../commands/audit.md) | Verification debt scan |
