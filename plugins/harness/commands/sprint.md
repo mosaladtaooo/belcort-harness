@@ -32,7 +32,7 @@ The Planner works in two passes:
 This ordering matters: architecture decisions shape how work decomposes, so PRD comes first.
 
 ```bash
-claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/planner.md)
+CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/planner.md)
 
 --- USER REQUEST ---
 $ARGUMENTS" \
@@ -95,7 +95,7 @@ Anthropic's original harness inserts a negotiation step here because the product
 FEATURE=$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')
 
 # Round 1: Generator writes implementation proposal
-claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
+CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
 --- MODE: NEGOTIATE ---
 You are in NEGOTIATE mode, not BUILD mode. Do NOT write code yet.
 Read the draft contract, architecture direction, and constitution.
@@ -115,7 +115,7 @@ $(cat .harness/evaluator/criteria.md)" \
   --allowedTools "Read,Write,mcp__context7"
 
 # Round 2: Evaluator reviews the proposal
-claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/evaluator.md)
+CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/evaluator.md)
 --- MODE: REVIEW-PROPOSAL ---
 You are reviewing a Generator's implementation proposal BEFORE any code is written.
 Do NOT run Playwright. There is no app yet.
@@ -139,7 +139,7 @@ $(cat .harness/features/${FEATURE}/proposal.md)" \
 # Max 3 negotiation rounds. If no agreement, escalate to human.
 
 # Round N (final): Generator writes the negotiated contract
-claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
+CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
 --- MODE: FINALIZE-CONTRACT ---
 The proposal and review have converged. Write the final negotiated contract.
 Merge the original draft contract + your proposal + any ACs added by Evaluator review.
@@ -174,7 +174,7 @@ $(cat .harness/evaluator/criteria.md)"
 --- EVALUATOR FEEDBACK (FIX THESE) ---
 $(cat .harness/features/${FEATURE}/eval-report.md)"
 
-claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
+CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
 --- PROJECT CONTEXT ---
 $CONTEXT" \
   --allowedTools "Read,Write,Bash,mcp__context7"
@@ -185,7 +185,7 @@ Update `manifest.yaml`: phase → "evaluating"
 ### 4. EVALUATE — Dispatch Evaluator subagent (FRESH context, SEPARATE from Generator)
 
 ```bash
-claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/evaluator.md)
+CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/evaluator.md)
 --- EVALUATION CONTEXT ---
 $(cat .harness/evaluator/criteria.md)
 $(cat .harness/features/${FEATURE}/implementation-report.md)

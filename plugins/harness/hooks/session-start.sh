@@ -6,6 +6,21 @@
 
 set -u
 
+# ─────────────────────────────────────────────────────────────
+# SUBAGENT GUARD — hard gate, must come BEFORE any state injection
+# ─────────────────────────────────────────────────────────────
+# The orchestrator dispatches Planner/Generator/Evaluator via `claude -p` with
+# CLAUDE_SUBAGENT=1 set. Without this guard, the hook fires inside those
+# subagents too and injects <harness-state>, which:
+#   1. bloats the subagent's context (the whole point of subagent isolation)
+#   2. can trigger the subagent to re-read SKILL.md and try to orchestrate
+#      its own pipeline — the self-orchestration loop we explicitly prevent
+# The SUBAGENT-CONTEXT block in each agent's prompt is the backup safety net.
+# This env-var check is the primary gate — cheaper, earlier, no tokens wasted.
+if [ "${CLAUDE_SUBAGENT:-0}" = "1" ]; then
+  exit 0
+fi
+
 # Only act if there's an active harness in this directory.
 # Otherwise stay silent — CLAUDE.md already tells Claude how to recognize
 # trigger phrases and suggest /harness:sprint.

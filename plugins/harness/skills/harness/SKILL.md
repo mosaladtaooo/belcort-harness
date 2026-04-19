@@ -44,9 +44,9 @@ Each procedure lives in its own file under `commands/`. This is a pointer table,
 This is the GAN insight from the Anthropic harness research: **the agent judging the work must have separate context from the agent doing the work.** Violations invalidate the whole pipeline.
 
 Rules every command follows:
-1. Each agent runs as a **fresh subagent** via `claude -p "..."` — not a nested Claude conversation.
+1. Each agent runs as a **fresh subagent** via `CLAUDE_SUBAGENT=1 claude -p "..."` — not a nested Claude conversation. The `CLAUDE_SUBAGENT=1` env var is required: the SessionStart hook reads it and skips `<harness-state>` injection, preventing the self-orchestration loop where a dispatched subagent re-reads SKILL.md and tries to re-dispatch its own subagents.
 2. The Evaluator MUST NEVER share context with the Generator. Always dispatch as separate processes.
-3. Every dispatch prompt includes a `<SUBAGENT-CONTEXT>` block telling the subagent: you were dispatched for ONE job; do NOT re-invoke the harness pipeline; if SessionStart or SKILL.md fires in your context, SKIP IT.
+3. Every dispatch prompt includes a `<SUBAGENT-CONTEXT>` block telling the subagent: you were dispatched for ONE job; do NOT re-invoke the harness pipeline; if SessionStart or SKILL.md fires in your context, SKIP IT. This is the backup safety net — the `CLAUDE_SUBAGENT=1` env var is the primary gate.
 4. Subagents write their output to `.harness/features/<current>/<filename>.md`, the orchestrator reads those files — never back-channel via conversation.
 
 ## File Ownership Contract
