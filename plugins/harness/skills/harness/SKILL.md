@@ -48,6 +48,47 @@ Rules every command follows:
 3. Every dispatch prompt includes a `<SUBAGENT-CONTEXT>` block telling the subagent: you were dispatched for ONE job; do NOT re-invoke the harness pipeline; if SessionStart or SKILL.md fires in your context, SKIP IT.
 4. Subagents write their output to `.harness/features/<current>/<filename>.md`, the orchestrator reads those files — never back-channel via conversation.
 
+## File Ownership Contract
+
+Every file under `.harness/` has exactly one writer per phase. If you're not the designated writer, you're a reader — do NOT write, not even to "fix" something.
+
+**This is the contract that keeps the orchestrator from silently corrupting spec files with its own fat chat context.** When the human tweaks a plan mid-flow, the orchestrator's instinct is to just edit the file directly. Don't. The orchestrator's context contains an entire conversation's worth of unrelated tokens. The spec files should contain only what a subagent wrote with a clean context. If the orchestrator starts editing spec files, the whole isolation property breaks and subsequent agents inherit the orchestrator's noise.
+
+| File | Writer | Readers |
+|---|---|---|
+| `manifest.yaml` → `state.*` transitions | Orchestrator | All agents (read-only) |
+| `manifest.yaml` → `features.*`, `verification_debt.*`, `tuning_debt.*` | Orchestrator | All agents (read-only) |
+| `ROADMAP.md` | Planner (init); Retrospective (update) | All agents |
+| `spec/prd.md` | Planner Pass 1 | All agents; Retrospective may propose drift-driven updates |
+| `spec/architecture.md` | Planner Pass 2 | All agents; Retrospective may propose drift-driven updates |
+| `spec/constitution.md` | Planner Pass 1 only — **immutable thereafter** | All agents |
+| `spec/evaluator-notes.md` | Orchestrator (during tuning check) | Evaluator EVALUATE |
+| `evaluator/criteria.md` | Planner Pass 2 | All agents; `/harness:tune-evaluator` may propose updates |
+| `evaluator/examples.md` | Orchestrator (during tuning check) | Evaluator EVALUATE |
+| `evaluator/tuning-log.md` | Orchestrator (on divergence) | `/harness:tune-evaluator` |
+| `features/NNN/contract.md` — **DRAFT** | Planner | Generator NEGOTIATE |
+| `features/NNN/contract.md` — **FINAL** (overwrites draft) | Generator FINALIZE-CONTRACT | Generator BUILD, Evaluator |
+| `features/NNN/proposal.md` | Generator NEGOTIATE | Evaluator REVIEW-PROPOSAL, Generator BUILD |
+| `features/NNN/review.md` | Evaluator REVIEW-PROPOSAL | Generator FINALIZE-CONTRACT, Generator BUILD |
+| `features/NNN/analysis-report.md` | Orchestrator (`/harness:analyze`) | Human, subsequent orchestrator phases |
+| `features/NNN/implementation-report.md` | Generator BUILD | Evaluator EVALUATE |
+| `features/NNN/eval-report.md` | Evaluator EVALUATE | Generator (on retry) |
+| `features/NNN/retrospective.md` | Orchestrator (`/harness:retrospective`) | Human |
+| `progress/changelog.md` | All agents append | All agents |
+| `progress/decisions.md` | Orchestrator (ADR on any spec/prompt change) | All agents |
+| `progress/known-issues.md` | Orchestrator (`/harness:retrospective`) | All agents |
+
+### The "orchestrator does not edit spec files" rule
+
+If you (as orchestrator) receive user feedback that requires modifying `spec/*` or `features/NNN/contract.md`, you MUST:
+
+1. NOT use `Edit` or `Write` from your own context on those files
+2. Dispatch the right subagent in the right mode (`/harness:edit`, `/harness:amend`, `/harness:clarify`, `/harness:tune-evaluator`, etc.)
+3. Let the subagent produce a structured diff
+4. Present the diff to the human before applying
+
+The temptation is to "just edit it, it's one line." Resist. Even a one-line edit from the orchestrator starts a precedent that lets human chatter bleed into spec files, and that's exactly the failure mode the harness is designed to prevent.
+
 ## Agent Communication Protocol
 
 Agents NEVER share conversation context. They communicate exclusively via `.harness/` files. Each feature has its own folder under `.harness/features/NNN-name/` for scoped artifacts.
