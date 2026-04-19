@@ -12,8 +12,12 @@ Runs independently of sprints. Scans all completed features for deferred verific
 2. Scan every `features/*/eval-report.md` for Major/Minor findings marked "deferred"
 3. Scan `.harness/progress/known-issues.md` for items older than 30 days
 4. Scan every `features/*/retrospective.md` for unresolved drift
-5. Cross-reference against current codebase (has anything been silently fixed?)
-6. Report:
+5. **Reward-hacking sweep** (git archaeology, cross-feature):
+   - For each completed feature, check if the post-merge code still contains the test files the Evaluator claimed to verify. Missing test files → flag.
+   - Run the same reward-hacking patterns the Evaluator uses in EVALUATE mode (`.skip`, trivial assertions, same-commit test+impl modifications) against the current codebase. Accumulated drift since the feature merged → flag.
+   - Check `git log --all --diff-filter=D --name-only` for test deletions that don't have a matching ADR in `progress/decisions.md`. Untracked deletions → flag.
+6. Cross-reference against current codebase (has anything been silently fixed?)
+7. Report:
    ```
    ═══════════════════════════════
      Harness — Verification Audit
@@ -26,11 +30,21 @@ Runs independently of sprints. Scans all completed features for deferred verific
    Pending human questions: [N]
    Silently resolved (can be closed): [N]
 
+   Reward-hacking indicators: [N]
+     - features/002: 3 tests marked .skip() appeared post-merge (FR-006 coverage regressed)
+     - global: 2 test files deleted with no ADR (src/lib/auth.test.ts, src/lib/token.test.ts)
+
    Recommendations:
      - Address M1 (old, may block shipping)
      - Close 3 items that are silently resolved
+     - Investigate features/002 reward-hacking indicators — consider /harness:rewind + re-evaluate
    ═══════════════════════════════
    ```
-7. Offer to promote high-priority items to new sprints via `/harness:sprint`
+8. Offer to promote high-priority items to new sprints via `/harness:sprint`
 
 Do NOT auto-fix. Present findings and ask the user which to address.
+
+**On reward-hacking indicators specifically**: do NOT close these without investigation. Unlike deferred findings (which are known and owned), reward-hacking indicators suggest the Evaluator may have been fooled on a feature that was claimed as shipped. The correct response is one of:
+- Confirm it was legitimate (e.g., test was deleted because the feature was also deleted) → add an ADR retroactively
+- Confirm it was reward-hacking → consider rolling back the feature or writing a regression test that re-covers the gap
+- Uncertain → flag for deeper review; never silently close

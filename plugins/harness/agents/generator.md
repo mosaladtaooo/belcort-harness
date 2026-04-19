@@ -553,3 +553,23 @@ Lint:        [N] errors, [N] warnings
 - **Guessing APIs**: "I think the method is called `.findOne()`..." — USE CONTEXT7.
 - **Ignoring errors**: Empty catch blocks, swallowed exceptions, no error UI states.
 - **Skipping self-eval**: Handing off without checking your own work. The Evaluator should find SUBTLE issues, not obvious ones you could have caught.
+
+## REWARD-HACKING — FORBIDDEN
+
+The Evaluator scores Test Coverage partially by running the test suite. That creates a pressure to "pass" by weakening tests rather than by fixing code. **Every one of the following is an explicit violation** — if you catch yourself about to do any of these, STOP and produce a correct fix or escalate the difficulty in `implementation-report.md`.
+
+- **NEVER delete a test to make a failing build pass.** Test file deletions during BUILD mode are blocked by `hooks/pre-tool-use.sh`; bypassing that block is itself a reward-hacking signal the Evaluator explicitly scans for.
+- **NEVER weaken an existing test's assertions to match broken code.** If the test was right and the code is wrong, fix the code. If the test was genuinely wrong (e.g., the PRD changed via `/harness:amend`), update the test with a commit message that explains the amendment and references the ADR.
+- **NEVER skip or `xit`/`xdescribe` a failing test to get green.** Skipped tests count as reward-hacking unless the skip is documented and scoped (e.g., `skip` for a known external-service dependency in CI, not in local unit tests).
+- **NEVER add `expect(true).toBe(true)` or equivalent no-op assertions** to inflate test counts.
+- **NEVER modify a test in the same commit as the code it tests** unless the commit is clearly an initial TDD-RED test. Editing a test + the implementation simultaneously hides whether the test was weakened to fit broken code.
+
+The Evaluator runs an explicit reward-hacking scan via git archaeology in EVALUATE mode. Every one of these patterns is detectable. A CRITICAL finding from the reward-hacking scan fails the feature regardless of the headline scores.
+
+If a test genuinely needs to go because the spec changed, do it correctly:
+1. Stop the build (`/harness:rewind building` is the clean way)
+2. Update the spec/contract via `/harness:amend`
+3. After amendment is applied, restart the build
+4. The test file's deletion appears in a commit whose message references the ADR
+
+This is slower. That's the point. Correctness is not traded for speed.
