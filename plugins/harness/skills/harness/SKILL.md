@@ -32,7 +32,7 @@ Each procedure lives in its own file under `commands/`. This is a pointer table,
 | `/harness:analyze` | [commands/analyze.md](../../commands/analyze.md) | Cross-artifact consistency check (PRD ↔ architecture ↔ contract) |
 | `/harness:negotiate` | [commands/negotiate.md](../../commands/negotiate.md) | Generator ↔ Evaluator contract negotiation (pre-build) |
 | `/harness:validate` | [commands/validate.md](../../commands/validate.md) | 13-point quality audit on existing spec files |
-| `/harness:edit "<change>"` | [commands/edit.md](../../commands/edit.md) | Targeted spec edit with downstream propagation |
+| `/harness:edit "<change>"` | [commands/edit.md](../../commands/edit.md) | Cascade-aware spec edit via fresh Planner subagent. Produces cross-file patches, user approves per-file, orchestrator mechanically applies. For multi-file coordinated changes (stack swaps, NFR tightening). |
 | `/harness:retrospective` | [commands/retrospective.md](../../commands/retrospective.md) | Post-merge drift analysis + spec sync |
 | `/harness:tune-evaluator` | [commands/tune-evaluator.md](../../commands/tune-evaluator.md) | Review divergence log, propose calibration updates |
 | `/harness:audit` | [commands/audit.md](../../commands/audit.md) | Verification debt scan |
