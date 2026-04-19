@@ -74,12 +74,20 @@ Files:
 
 Planner self-validation: [13/13 passed]
 
-Review the spec files and say "approved"
-to start building, or tell me what to change.
+Review the spec files and:
+  • say "approved"           → proceed to negotiate + build
+  • run /harness:clarify     → surface ambiguities, answer, auto-patch
+  • run /harness:amend "<X>" → make a specific tweak (coming in separate PR)
+  • run /harness:edit "<X>"  → targeted spec edit
+  • run /harness:rewind planning → fundamentally re-plan
 ═══════════════════════════════
 ```
 
 **DO NOT proceed until the user explicitly approves.** This is the only mandatory human gate.
+
+If the user wants to make changes, route them through a command — do NOT edit spec files from this orchestrator's own context. See [SKILL.md § File Ownership Contract](../skills/harness/SKILL.md) for why.
+
+**Auto-suggest `/harness:clarify` if:** the Planner's self-validation report mentions 3+ silent defaults, or the user's approval text contains uncertainty words ("maybe", "not sure", "I guess", "probably"). Surfacing ambiguities now is cheaper than correcting a misaligned build later.
 
 ### 2b. ANALYZE — Cross-artifact consistency check (automatic)
 

@@ -29,6 +29,7 @@ Each procedure lives in its own file under `commands/`. This is a pointer table,
 | `/harness:sprint "<prompt>"` | [commands/sprint.md](../../commands/sprint.md) | Full pipeline: plan → analyze → [human gate] → negotiate → build → evaluate → tuning → retrospect → merge |
 | `/harness:quick "<prompt>"` | [commands/quick.md](../../commands/quick.md) | Fast: skip Planner, minimal contract, single build+QA pass |
 | `/harness:resume` | [commands/resume.md](../../commands/resume.md) | Recover from any phase using `manifest.yaml` + `changelog.md` |
+| `/harness:clarify` | [commands/clarify.md](../../commands/clarify.md) | Post-plan structured Q&A — surface spec ambiguities, collect answers in files, auto-patch specs. Runs before human approval gate. |
 | `/harness:analyze` | [commands/analyze.md](../../commands/analyze.md) | Cross-artifact consistency check (PRD ↔ architecture ↔ contract) |
 | `/harness:negotiate` | [commands/negotiate.md](../../commands/negotiate.md) | Generator ↔ Evaluator contract negotiation (pre-build) |
 | `/harness:validate` | [commands/validate.md](../../commands/validate.md) | 13-point quality audit on existing spec files |
