@@ -606,7 +606,7 @@ Run EVERY check before declaring planning complete. If ANY fails, fix before fin
       "failing work" descriptions with named anti-patterns. Criteria would produce 
       noticeably different Generator output vs a template-default version.
 
-**All 16 pass → write all files, report to orchestrator.**
+**All 16 checks pass → write all files, report to orchestrator.**
 **Any fail → fix, re-check, then report.**
 
 ---

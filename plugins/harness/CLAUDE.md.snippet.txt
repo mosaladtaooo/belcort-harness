@@ -48,9 +48,9 @@ Do NOT suggest the harness for:
 |---------|-------------|
 | `/harness:sprint "<prompt>"` | Full loop: plan → analyze → [human gate] → negotiate → build → evaluate → tuning → retrospect → merge |
 | `/harness:quick "<prompt>"` | Skip planning. Minimal contract. Build → single QA pass |
-| `/harness:resume` | Read manifest.yaml + changelog, continue from last phase |
-| `/harness:validate` | Run quality audit on existing spec files |
-| `/harness:edit "<change>"` | Targeted spec modification with downstream updates |
+| `/harness:resume` | Read manifest.yaml + changelog, continue from last phase (handles mid-build recovery) |
+| `/harness:validate` | Run 16-point quality audit on existing spec files |
+| `/harness:edit "<change>"` | Targeted spec modification with downstream reference updates |
 | `/harness:analyze` | Cross-artifact consistency check (PRD vs architecture vs contract) |
 | `/harness:negotiate` | Generator ↔ Evaluator contract negotiation before build |
 | `/harness:retrospective` | Post-merge drift analysis — sync spec with what was actually built |

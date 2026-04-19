@@ -39,7 +39,7 @@ $ARGUMENTS" \
   --allowedTools "Read,Write,mcp__context7"
 ```
 
-Wait for Planner to finish. Verify all files exist in `.harness/`. The Planner runs its own 13-point self-validation before completing.
+Wait for Planner to finish. Verify all files exist in `.harness/`. The Planner runs its own 16-point self-validation before completing.
 
 ### 2. HUMAN GATE — Present summary, wait for approval
 
@@ -72,7 +72,7 @@ Files:
   ✓ features/NNN-name/contract.md
   ✓ init.sh
 
-Planner self-validation: [13/13 passed]
+Planner self-validation: [16/16 passed]
 
 Review the spec files and:
   • say "approved"           → proceed to negotiate + build

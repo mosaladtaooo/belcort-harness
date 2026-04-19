@@ -115,7 +115,7 @@ Not affiliated with Anthropic.
 
 ## License
 
-[Your choice — MIT or Apache 2.0 recommended]
+[MIT](LICENSE) — see the LICENSE file.
 
 ## Acknowledgements
 

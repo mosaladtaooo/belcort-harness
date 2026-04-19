@@ -32,7 +32,7 @@ Each procedure lives in its own file under `commands/`. This is a pointer table,
 | `/harness:clarify` | [commands/clarify.md](../../commands/clarify.md) | Post-plan structured Q&A — surface spec ambiguities, collect answers in files, auto-patch specs. Runs before human approval gate. |
 | `/harness:analyze` | [commands/analyze.md](../../commands/analyze.md) | Cross-artifact consistency check (PRD ↔ architecture ↔ contract) |
 | `/harness:negotiate` | [commands/negotiate.md](../../commands/negotiate.md) | Generator ↔ Evaluator contract negotiation (pre-build) |
-| `/harness:validate` | [commands/validate.md](../../commands/validate.md) | 13-point quality audit on existing spec files |
+| `/harness:validate` | [commands/validate.md](../../commands/validate.md) | 16-point quality audit on existing spec files |
 | `/harness:edit "<change>"` | [commands/edit.md](../../commands/edit.md) | Cascade-aware spec edit via fresh Planner subagent. Produces cross-file patches, user approves per-file, orchestrator mechanically applies. For multi-file coordinated changes (stack swaps, NFR tightening). |
 | `/harness:amend "<tweak>"` | [commands/amend.md](../../commands/amend.md) | Safe post-plan spec amendment via a fresh Planner subagent. Produces before→after patches, user confirms, orchestrator mechanically applies. **Never edits spec from orchestrator context.** Solves the post-plan tweak pollution failure mode. |
 | `/harness:retrospective` | [commands/retrospective.md](../../commands/retrospective.md) | Post-merge drift analysis + spec sync |
