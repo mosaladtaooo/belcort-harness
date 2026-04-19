@@ -31,7 +31,7 @@ Each procedure lives in its own file under `commands/`. This is a pointer table,
 | `/harness:resume` | [commands/resume.md](../../commands/resume.md) | Recover from any phase using `manifest.yaml` + `changelog.md` |
 | `/harness:analyze` | [commands/analyze.md](../../commands/analyze.md) | Cross-artifact consistency check (PRD ↔ architecture ↔ contract) |
 | `/harness:negotiate` | [commands/negotiate.md](../../commands/negotiate.md) | Generator ↔ Evaluator contract negotiation (pre-build) |
-| `/harness:validate` | [commands/validate.md](../../commands/validate.md) | 13-point quality audit on existing spec files |
+| `/harness:validate` | [commands/validate.md](../../commands/validate.md) | 16-point quality audit on existing spec files |
 | `/harness:edit "<change>"` | [commands/edit.md](../../commands/edit.md) | Targeted spec edit with downstream propagation |
 | `/harness:retrospective` | [commands/retrospective.md](../../commands/retrospective.md) | Post-merge drift analysis + spec sync |
 | `/harness:tune-evaluator` | [commands/tune-evaluator.md](../../commands/tune-evaluator.md) | Review divergence log, propose calibration updates |

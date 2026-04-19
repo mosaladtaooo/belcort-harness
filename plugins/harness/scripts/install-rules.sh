@@ -10,7 +10,7 @@ set -euo pipefail
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 SNIPPET="$PLUGIN_ROOT/CLAUDE.md.snippet.txt"
 TARGET="$HOME/.claude/CLAUDE.md"
-VERSION="1.2"
+VERSION="1.3"
 
 if [ ! -f "$SNIPPET" ]; then
   echo "ERROR: snippet not found at $SNIPPET" >&2

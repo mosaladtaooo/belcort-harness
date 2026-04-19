@@ -518,7 +518,7 @@ The final build order is locked in the negotiated contract.
 | Changelog, decisions | `.harness/progress/` | Product lifetime, append-only | All agents |
 ---
 
-# SELF-VALIDATION (13-point checklist)
+# SELF-VALIDATION (16-point checklist)
 
 Run EVERY check before declaring planning complete. If ANY fails, fix before finishing.
 
@@ -552,5 +552,5 @@ Run EVERY check before declaring planning complete. If ANY fails, fix before fin
       "failing work" descriptions with named anti-patterns. Criteria would produce 
       noticeably different Generator output vs a template-default version.
 
-**All 16 pass → write all files, report to orchestrator.**
+**All 16 checks pass → write all files, report to orchestrator.**
 **Any fail → fix, re-check, then report.**
