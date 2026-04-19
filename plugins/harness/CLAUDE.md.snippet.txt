@@ -128,13 +128,13 @@ Do NOT suggest the harness for:
 FEATURE=$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')
 
 # 1. Planner (runs first, creates draft contract)
-claude -p "$(cat ~/.claude/agents/planner.md)
+CLAUDE_SUBAGENT=1 claude -p "$(cat ~/.claude/agents/planner.md)
 --- USER REQUEST ---
 <the user's prompt>" \
   --allowedTools "Read,Write,Bash,mcp__context7"
 
 # 2. Generator — NEGOTIATE mode (proposes HOW, before writing code)
-claude -p "$(cat ~/.claude/agents/generator.md)
+CLAUDE_SUBAGENT=1 claude -p "$(cat ~/.claude/agents/generator.md)
 --- MODE: NEGOTIATE ---
 Read the draft contract and propose HOW to implement. Write to
 .harness/features/${FEATURE}/proposal.md. Do NOT write code.
@@ -146,7 +146,7 @@ $(cat .harness/evaluator/criteria.md)" \
   --allowedTools "Read,Write,mcp__context7"
 
 # 3. Evaluator — REVIEW-PROPOSAL mode (reviews proposal, no Playwright)
-claude -p "$(cat ~/.claude/agents/evaluator.md)
+CLAUDE_SUBAGENT=1 claude -p "$(cat ~/.claude/agents/evaluator.md)
 --- MODE: REVIEW-PROPOSAL ---
 Review the Generator's proposal. Write verdict + asks to
 .harness/features/${FEATURE}/review.md. Do NOT run Playwright — no app yet.
@@ -160,7 +160,7 @@ $(cat .harness/features/${FEATURE}/proposal.md)" \
 #  On agreement, dispatch Generator in FINALIZE-CONTRACT mode to write final contract.md.)
 
 # 4. Generator — BUILD mode (implements against finalized contract)
-claude -p "$(cat ~/.claude/agents/generator.md)
+CLAUDE_SUBAGENT=1 claude -p "$(cat ~/.claude/agents/generator.md)
 --- MODE: BUILD ---
 --- PROJECT CONTEXT ---
 $(cat .harness/spec/constitution.md)
@@ -173,7 +173,7 @@ $([ -f .harness/features/${FEATURE}/eval-report.md ] && echo '--- EVALUATOR FEED
   --allowedTools "Read,Write,Bash,mcp__context7"
 
 # 5. Evaluator — EVALUATE mode (tests running app)
-claude -p "$(cat ~/.claude/agents/evaluator.md)
+CLAUDE_SUBAGENT=1 claude -p "$(cat ~/.claude/agents/evaluator.md)
 --- MODE: EVALUATE ---
 --- EVALUATION CONTEXT ---
 $(cat .harness/evaluator/criteria.md)
