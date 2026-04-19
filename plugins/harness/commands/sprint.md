@@ -5,9 +5,23 @@ argument-hint: "<what to build, 1–4 sentences>"
 
 # `/harness:sprint` — Full Pipeline
 
-Runs: Planner → human gate → Generator → Evaluator → retry loop → merge. The user's request is `$ARGUMENTS`. If empty, ask them to describe what to build before dispatching anything.
+Runs: doctor → Planner → human gate → Generator → Evaluator → retry loop → merge. The user's request is `$ARGUMENTS`. If empty, ask them to describe what to build before dispatching anything.
 
 ## Procedure
+
+### 0. DOCTOR — Environment preflight (mandatory, blocking)
+
+Before dispatching any subagent, run the doctor. This catches missing MCPs (playwright, context7), wrong Node versions, missing plugins — everything that would silently break the pipeline mid-sprint.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh"
+DOCTOR_EXIT=$?
+```
+
+- If `DOCTOR_EXIT = 0`: environment ready, proceed to step 1.
+- If `DOCTOR_EXIT ≠ 0`: show the doctor's report (including the suggested fixes) to the user and **STOP**. Do not dispatch the Planner. Tell the user: "Fix the items above, then re-run `/harness:sprint \"$ARGUMENTS\"`." This is a hard gate — do not try to work around it.
+
+See [doctor.md](doctor.md) for what it checks and why.
 
 ### 1. PLAN — Dispatch Planner subagent (two-pass)
 

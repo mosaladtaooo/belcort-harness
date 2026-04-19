@@ -9,6 +9,16 @@ For small changes where planning overhead > implementation time. The user's prom
 
 ## Procedure
 
+### 0. DOCTOR — Environment preflight (mandatory, blocking)
+
+Even for quick builds, the environment must be ready. The Generator needs context7, the Evaluator needs playwright. Run doctor first:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh"
+```
+
+If doctor exits non-zero, stop and show its output. Do not dispatch any subagent until the CRITICAL items are resolved. See [doctor.md](doctor.md).
+
 1. Write a minimal contract directly (no Planner subagent):
    ```markdown
    # Quick Build Contract

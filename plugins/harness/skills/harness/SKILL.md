@@ -37,6 +37,7 @@ Each procedure lives in its own file under `commands/`. This is a pointer table,
 | `/harness:tune-evaluator` | [commands/tune-evaluator.md](../../commands/tune-evaluator.md) | Review divergence log, propose calibration updates |
 | `/harness:audit` | [commands/audit.md](../../commands/audit.md) | Verification debt scan |
 | `/harness:setup` | [commands/setup.md](../../commands/setup.md) | One-time install of harness rules into `~/.claude/CLAUDE.md` |
+| `/harness:doctor` | [commands/doctor.md](../../commands/doctor.md) | Environment preflight — verifies MCPs, Node, git, plugins. Auto-runs at sprint/quick start and blocks on CRITICAL failures. |
 
 ## Subagent Isolation Protocol
 
