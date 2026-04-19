@@ -39,6 +39,7 @@ Each procedure lives in its own file under `commands/`. This is a pointer table,
 | `/harness:tune-evaluator` | [commands/tune-evaluator.md](../../commands/tune-evaluator.md) | Review divergence log, propose calibration updates |
 | `/harness:steer "<nudge>"` | [commands/steer.md](../../commands/steer.md) | Mid-build steering — append a guidance note the Generator picks up at the next TDD cycle boundary. Lightweight alternative to amend/rewind for implementation nudges. |
 | `/harness:audit` | [commands/audit.md](../../commands/audit.md) | Verification debt scan |
+| `/harness:rewind <phase>` | [commands/rewind.md](../../commands/rewind.md) | Reset the current feature to an earlier phase. Archive-based (reversible via file copy). Requires explicit typed confirmation. Use when a phase went fundamentally wrong. |
 | `/harness:setup` | [commands/setup.md](../../commands/setup.md) | One-time install of harness rules into `~/.claude/CLAUDE.md` |
 | `/harness:doctor` | [commands/doctor.md](../../commands/doctor.md) | Environment preflight — verifies MCPs, Node, git, plugins. Auto-runs at sprint/quick start and blocks on CRITICAL failures. |
 
