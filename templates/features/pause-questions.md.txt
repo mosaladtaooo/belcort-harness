@@ -1,0 +1,64 @@
+<!-- BELCORT Harness — Template: pause-questions -->
+<!-- Written by: Generator BUILD mode (when it hits a genuine ambiguity
+     it can't reasonably guess past — see agents/generator.md §Pause Protocol)
+     Read by: orchestrator (sprint.md step 3 detects existence, surfaces to user,
+     accepts answers, then re-dispatches a fresh Generator)
+     Lifetime: created by Generator, archived to features/NNN/paused-history/
+     after the orchestrator integrates answers and re-dispatches.
+     Each pause increments calibration_metrics.agent_checkins in manifest.yaml. -->
+
+# Pause — Generator awaits human input
+
+**Time**: {{ISO-8601 UTC, e.g., 2026-04-20T16:34:12Z}}
+**Feature**: {{NNN-name from manifest.state.current_feature}}
+**At**: {{FR-NNN, current TDD phase (RED|GREEN|REFACTOR), what specific step}}
+**Why I'm pausing**: {{1-2 sentences — the genuine ambiguity I cannot reasonably guess past}}
+
+<!-- A pause is for GENUINE ambiguity, not risk-aversion. If you find yourself
+     pausing because "the obvious interpretation feels risky," that's NOT a
+     pause — make the obvious choice and proceed. Pause only when the obvious
+     interpretation would clearly violate user intent or cause unrecoverable
+     work. Each Q below MUST commit to a default — that prevents pause-as-
+     procrastination by forcing you to do the thinking even while asking. -->
+
+## Q1 — {{short title, ≤7 words}}
+
+**What contract says**: "{{verbatim quote from contract.md or stories/FR-NNN.md}}"
+**Ambiguity**: {{specific — what's underdetermined that the contract didn't pin down}}
+**My default if unanswered**: {{a concrete, committed choice — NOT 'I would need to decide'.
+                                Examples: 'sort by created_at desc', 'use cookies not JWT',
+                                'reject empty input with 400 + field-specific error'}}
+**Cost of getting it wrong**: {{realistic — 1 retry cycle / UX rework / data migration /
+                                 user-visible behavior change}}
+
+## Q2 — {{short title}}
+
+**What contract says**: "..."
+**Ambiguity**: ...
+**My default if unanswered**: ...
+**Cost of getting it wrong**: ...
+
+<!-- Cap at 3 questions per pause. If you need to ask more than 3, the spec
+     was under-determined — escalate to the orchestrator with a "spec
+     under-determined" finding instead of pausing. The orchestrator will
+     route to /harness:clarify or /harness:rewind. -->
+
+---
+
+## User answers
+<!-- The orchestrator appends below this line. Do NOT pre-fill these as
+     Generator — leave them blank for the orchestrator to populate. -->
+
+### Answer to Q1
+{{user's verbatim answer, OR "accept default" (use Generator's default), OR "skip" (defer — Generator marks FR partial)}}
+
+### Answer to Q2
+...
+
+---
+
+## Resolution
+<!-- Filled by orchestrator after dispatching the resumed Generator. -->
+
+**Resumed**: {{ISO date when re-dispatch happened}}
+**Generator outcome**: {{FR completed | partial | re-paused (with new pause-questions.md)}}

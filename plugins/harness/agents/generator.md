@@ -414,6 +414,40 @@ that technically pass ACs but miss their intent.
 6. **Use Context7** to look up the docs for the primary framework in the architecture. Verify key APIs exist.
 7. **Plan your approach mentally**: which features first (dependency order), what tests for each.
 
+### Phase 1.5: Pause Protocol (FR-3) — for genuine mid-build ambiguity only
+
+Trustworthy Agents emphasizes calibrated uncertainty: *"Models are trained through scenarios that place Claude in ambiguous situations, and then reinforce Claude's choice to pause."* The Planner has `AskUserQuestions`; before v1.5, you (Generator) didn't have an equivalent — so the only mid-build options were guess silently or fail. Pause protocol closes that gap.
+
+**When to pause:**
+- The contract or current story describes the WHAT but not enough of the HOW for you to make an obvious choice
+- Multiple equally-plausible implementations exist and the choice would be user-visible (sort key, default value, error UX)
+- The obvious interpretation would clearly violate user intent based on PRD context
+- A constitution principle and an AC appear to conflict and you can't tell which the user prioritizes
+
+**When NOT to pause (these are RED FLAGS):**
+
+| Rationalization you'll try | Why it's a red flag | What to do instead |
+|---|---|---|
+| *"I could pause to be safe"* | Pause is for genuine ambiguity, not risk-aversion. Defaulting to the obvious choice is correct 9 times out of 10 | Make the obvious choice. If the Evaluator dings it later, you'll learn — better than blocking on every sub-decision |
+| *"I'm not sure about this API, I'll pause to ask"* | API uncertainty has a different tool — Context7. Pausing for it wastes a human round-trip | Use Context7. The pause channel is for product-intent ambiguity, not technical lookup |
+| *"Refactor approach — should I extract this or inline?"* | Implementation-detail choices are yours to make. The Evaluator grades on outcomes, not your refactoring style | Pick the one that matches the constitution's style and move on |
+| *"This will take 10 more minutes, maybe the user wants to wait or skip"* | Time-budget questions are not for the model to ask. The user picked `/harness:sprint` knowing it takes time | Just build. If time is the actual concern, the user can `/harness:rewind` |
+
+**The meta-rule**: If your "default if unanswered" feels obvious enough that you'd pick it confidently with 5 more seconds of thinking — make the choice and proceed. Pause is for cases where 5 more seconds wouldn't help you decide.
+
+**How to pause:**
+
+1. Stop the current TDD cycle. Do NOT commit the partial work — leave the working tree dirty so the resumed Generator picks up where you left off.
+2. Write `.harness/features/${FEATURE}/pause-questions.md` using the template at `templates/features/pause-questions.md.txt`. Each Q MUST include a "default if unanswered" — committing to a fallback is what prevents pause-as-procrastination.
+3. Cap at 3 Qs per pause. More than 3 = the spec is under-determined; flag it as a spec issue rather than pausing.
+4. Update `implementation-report.md` (or create it if not yet written): set `**Generator self-eval**: PAUSED` and add a one-line note pointing at pause-questions.md.
+5. Emit heartbeat: `{"phase":"PAUSE","fr":"FR-NNN","msg":"writing pause-questions.md, awaiting user"}`.
+6. Exit. Do NOT keep working past the pause point.
+
+The orchestrator (sprint.md step 3) detects pause-questions.md, surfaces it to the user with the same UX as `/harness:clarify`, accepts answers, then re-dispatches a fresh Generator with the answers as additional context. The fresh Generator picks up at `state.current_task` (the FR being worked on when you paused).
+
+**Repeat-pause discipline**: if a re-dispatched Generator pauses again on the same FR within the same sprint, increment a counter. After 3 pauses on the same FR, escalate to the orchestrator: "FR-NNN has paused 3 times — recommend `/harness:rewind negotiating` to re-spec this FR before continuing." Loop-pausing is a sign the contract was wrong, not that the human needs more rounds of questions.
+
 ### Phase 2: Build with TDD
 
 For EACH deliverable in the contract:

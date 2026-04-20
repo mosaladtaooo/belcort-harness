@@ -296,6 +296,96 @@ stop_progress_poller "$PROGRESS_FILE"
 trap - EXIT
 ```
 
+### 3a. PAUSE CHECK (FR-3) — Generator may have requested user input mid-build
+
+Trustworthy Agents §calibrated uncertainty: agents should pause when faced with ambiguity rather than guess silently. The Generator's BUILD §Pause Protocol writes `pause-questions.md` when it hits a genuine ambiguity it cannot reasonably guess past. Detect, surface, accept answers, re-dispatch.
+
+```bash
+PAUSE_FILE=".harness/features/${FEATURE}/pause-questions.md"
+PAUSE_COUNT=0
+MAX_PAUSES=3   # per-sprint limit; escalate to /harness:rewind negotiating after this
+
+while [ -f "$PAUSE_FILE" ]; do
+  PAUSE_COUNT=$((PAUSE_COUNT + 1))
+  if [ "$PAUSE_COUNT" -gt "$MAX_PAUSES" ]; then
+    echo "❌ Generator has paused $PAUSE_COUNT times on this sprint."
+    echo "   Likely the contract is under-determined. Recommend:"
+    echo "     /harness:rewind negotiating   # re-spec the affected FR(s)"
+    echo "   Then re-run /harness:sprint."
+    exit 1
+  fi
+
+  # Surface the questions to the user
+  echo ""
+  echo "═══════════════════════════════"
+  echo "  Harness — Generator requested clarification (pause #$PAUSE_COUNT)"
+  echo "═══════════════════════════════"
+  cat "$PAUSE_FILE"
+  echo ""
+  echo "Answer each question by appending under '## User answers' in $PAUSE_FILE,"
+  echo "OR type your answers here and the orchestrator will append them."
+  echo "For each Q: provide your answer, OR 'accept default' (uses Generator's"
+  echo "fallback), OR 'skip' (Generator marks the FR partial)."
+  echo ""
+
+  # Wait for the user to provide answers (orchestrator-side: prompt for each Q,
+  # write into the file under '## User answers'). Implementation detail of how
+  # the orchestrator collects input is left to the chat UI — file format is the
+  # contract. Once answers are written, increment calibration metric.
+
+  # Increment agent_checkins in manifest (calibration_metrics tracking)
+  if [ -f ".harness/manifest.yaml" ]; then
+    if command -v gsed >/dev/null 2>&1; then
+      gsed -i.bak '/^[[:space:]]*calibration_metrics:/,/^[[:space:]]*[a-z]/ s/\(agent_checkins:[[:space:]]*\)\([0-9]*\)/printf "\1%d" $((\2+1))/e' .harness/manifest.yaml 2>/dev/null
+    else
+      # Simpler awk-based increment, portable across BSD/GNU
+      awk '
+        /^[[:space:]]*calibration_metrics:/ {in_cm=1}
+        in_cm && /^[[:space:]]*agent_checkins:/ {sub(/[0-9]+/, $2+1)}
+        /^[[:space:]]*[a-z]/ && !/^[[:space:]]*calibration_metrics:/ && in_cm {in_cm=0}
+        {print}
+      ' .harness/manifest.yaml > .harness/manifest.yaml.new && mv .harness/manifest.yaml.new .harness/manifest.yaml
+    fi
+    rm -f .harness/manifest.yaml.bak
+  fi
+
+  # Archive this pause for history (in case of re-pause on the same FR)
+  mkdir -p ".harness/features/${FEATURE}/paused-history"
+  cp "$PAUSE_FILE" ".harness/features/${FEATURE}/paused-history/pause-${PAUSE_COUNT}-$(date +%Y%m%d%H%M%S).md"
+
+  # Re-dispatch Generator with pause file as additional BUILD context
+  RESUMED_CONTEXT="$CONTEXT
+--- PAUSE ANSWERS (resume from state.current_task with these resolutions) ---
+$(cat $PAUSE_FILE)"
+
+  source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/progress-poller.sh"
+  start_progress_poller "$PROGRESS_FILE"
+  trap "stop_progress_poller '$PROGRESS_FILE'" EXIT
+
+  CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
+--- MODE: BUILD ---
+You are RESUMING a paused build. Read the PAUSE ANSWERS section in the
+context below — those resolve the questions you wrote in pause-questions.md.
+Pick up at state.current_task in manifest.yaml. Do NOT re-pause on the
+same questions; if a different ambiguity arises, that's a new pause.
+--- PROJECT CONTEXT ---
+$RESUMED_CONTEXT" \
+    ${BUILD_MODEL_FLAG} \
+    --allowedTools "Read,Write,Bash,mcp__context7"
+
+  stop_progress_poller "$PROGRESS_FILE"
+  trap - EXIT
+
+  # Remove the now-resolved pause file. If Generator paused again, it wrote
+  # a fresh pause-questions.md and this loop catches it on the next iteration.
+  rm -f "$PAUSE_FILE"
+done
+
+if [ "$PAUSE_COUNT" -gt 0 ]; then
+  echo "✓ Resumed after $PAUSE_COUNT pause(s). Pause history archived to features/${FEATURE}/paused-history/."
+fi
+```
+
 Update `manifest.yaml`: phase → "evaluating"
 
 ### 4. EVALUATE — Dispatch Evaluator subagent (FRESH context, SEPARATE from Generator)
