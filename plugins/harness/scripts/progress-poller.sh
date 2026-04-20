@@ -54,6 +54,10 @@ start_progress_poller() {
     return 0
   fi
 
+  # Ensure parent dir exists. On first sprint, .harness/ may not exist yet
+  # (Planner is what creates it). Without this mkdir, the truncate below
+  # fails silently and the poller never starts.
+  mkdir -p "$(dirname "$progress_file")" 2>/dev/null || true
   # Truncate or create the file so the poller starts from a clean slate
   : > "$progress_file"
   # Sentinel file the background loop watches — removing it causes graceful exit

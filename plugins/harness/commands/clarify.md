@@ -47,21 +47,17 @@ If no feature is active, tell the user to run `/harness:sprint` first.
 ### Step 2: Dispatch Planner in CLARIFY-QUESTIONS mode
 
 ```bash
-CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/planner.md)
---- MODE: CLARIFY-QUESTIONS ---
-You have already written the spec. Now you are identifying ambiguities —
-places where you made an implicit decision the user might want to override,
-or gaps where you had to pick a default without enough information.
+CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in CLARIFY-QUESTIONS mode (see your system prompt's MODE ROUTING table).
 
-Write 3–10 structured questions to
-.harness/features/${FEATURE}/clarifications.md using the template defined
-in your MODE: CLARIFY-QUESTIONS section.
+You have already written the spec. Now identify ambiguities — places where you made an implicit decision the user might want to override, or gaps where you had to pick a default without enough information.
 
-Do NOT edit any spec file. Do NOT write code. Only clarifications.md.
---- CONTEXT ---
-$(cat .harness/spec/prd.md)
-$(cat .harness/spec/architecture.md)
-$(cat .harness/features/${FEATURE}/contract.md)" \
+Read via Read tool:
+- .harness/spec/prd.md
+- .harness/spec/architecture.md
+- .harness/features/${FEATURE}/contract.md
+
+Write 3–10 structured questions to .harness/features/${FEATURE}/clarifications.md using the template defined in your MODE: CLARIFY-QUESTIONS section. Do NOT edit any spec file. Do NOT write code. Only clarifications.md." \
+  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/planner.md" \
   --allowedTools "Read,Write"
 ```
 
@@ -100,23 +96,16 @@ If user says `skip` on all → abort with "no changes to apply".
 Only if at least one question was answered (not all skipped):
 
 ```bash
-CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/planner.md)
---- MODE: CLARIFY-APPLY ---
-Read clarifications.md and the current spec files. For every question that
-has a user answer (not 'skipped', not 'accepted default' unless the default
-requires spec text you didn't write before), produce a patch that updates
-the spec file to reflect the answer.
+CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in CLARIFY-APPLY mode (see your system prompt's MODE ROUTING table).
 
-Write all patches to
-.harness/features/${FEATURE}/clarify-patches.md using the template defined
-in your MODE: CLARIFY-APPLY section.
+Read via Read tool:
+- .harness/features/${FEATURE}/clarifications.md (contains user answers)
+- .harness/spec/prd.md
+- .harness/spec/architecture.md
+- .harness/features/${FEATURE}/contract.md
 
-Do NOT write to spec files directly in this mode. Only clarify-patches.md.
---- CONTEXT ---
-$(cat .harness/spec/prd.md)
-$(cat .harness/spec/architecture.md)
-$(cat .harness/features/${FEATURE}/contract.md)
-$(cat .harness/features/${FEATURE}/clarifications.md)" \
+For every question that has a user answer (not 'skipped', not 'accepted default' unless the default requires spec text you didn't write before), produce a patch that updates the spec file to reflect the answer. Write all patches to .harness/features/${FEATURE}/clarify-patches.md per your MODE: CLARIFY-APPLY template. Do NOT write to spec files directly in this mode. Only clarify-patches.md." \
+  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/planner.md" \
   --allowedTools "Read,Write"
 ```
 

@@ -69,16 +69,13 @@ If they say no → exit. If they say yes → continue and flag in the changelog.
 ### Step 2: Dispatch fresh Planner in AMEND mode
 
 ```bash
-CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/planner.md)
---- MODE: AMEND ---
---- AMENDMENT REQUEST ---
+CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in AMEND mode (see your system prompt's MODE ROUTING table).
+
+The user wants this specific change applied to the spec:
 $ARGUMENTS
---- CONTEXT ---
-$(cat .harness/spec/prd.md)
-$(cat .harness/spec/architecture.md)
-$(cat .harness/spec/constitution.md)
-$(cat .harness/features/${FEATURE}/contract.md)
-$(cat .harness/evaluator/criteria.md)" \
+
+Read the current spec via Read tool (paths: .harness/spec/prd.md, architecture.md, constitution.md, .harness/features/${FEATURE}/contract.md, .harness/evaluator/criteria.md). Produce structured before→after patches to .harness/features/${FEATURE}/amend-patches.md per your AMEND mode procedure. Do NOT apply patches — the orchestrator applies after user confirmation." \
+  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/planner.md" \
   --allowedTools "Read,Write,mcp__context7"
 ```
 

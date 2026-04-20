@@ -95,11 +95,20 @@ PLANNER_PROGRESS=".harness/_progress-planner.jsonl"
 start_progress_poller "$PLANNER_PROGRESS"
 trap "stop_progress_poller '$PLANNER_PROGRESS'" EXIT
 
-CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/planner.md)
+# Dispatch pattern (v1.5.0+): the agent role goes in the system prompt via
+# --append-system-prompt-file, NOT inlined into the user message. The inline
+# pattern used in v1.4 and earlier produced empty output on Claude Code 2.1+.
+# The user message carries the phase framing + user request; it MUST NOT start
+# with `---` (Claude CLI parses leading `-` as an option), so we prefix with
+# prose even when the phase marker follows.
+CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in PLAN mode (see your system prompt for the full role and 2-pass procedure).
 
---- USER REQUEST ---
+Produce the full specification per PASS 1 + PASS 2. Write only the files your output sections list: spec/*, evaluator/criteria.md, features/NNN-name/contract.md, per-FR story files under features/NNN-name/stories/, init.sh, manifest.yaml, ROADMAP.md, progress/*. DO NOT write source code or implementation files — those are for the Generator. Run your 16-point self-validation before exiting and report the pass count.
+
+User request:
 $ARGUMENTS${BRAINSTORM_CONTEXT}" \
   ${MODEL_FLAG} \
+  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/planner.md" \
   --allowedTools "Read,Write,mcp__context7"
 
 stop_progress_poller "$PLANNER_PROGRESS"
@@ -189,49 +198,42 @@ PROGRESS_FILE=".harness/features/${FEATURE}/_progress.jsonl"
 GEN_MODEL_FLAG=$(resolve_model_flag generator)
 start_progress_poller "$PROGRESS_FILE"
 trap "stop_progress_poller '$PROGRESS_FILE'" EXIT
-CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
---- MODE: NEGOTIATE ---
-You are in NEGOTIATE mode, not BUILD mode. Do NOT write code yet.
-Read the draft contract, architecture direction, and constitution.
-Propose HOW you will implement each deliverable:
+CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in NEGOTIATE mode (see your system prompt's MODE ROUTING table).
+
+Do NOT write code in this mode. Read the draft contract, architecture direction, constitution, and criteria (all present in .harness/ — use the Read tool). Then write your implementation proposal to .harness/features/${FEATURE}/proposal.md covering:
 - Component/module breakdown
 - File and directory structure
 - Data model shapes
 - API endpoint design (if applicable)
 - Test strategy for each AC
 
-Write your proposal to .harness/features/${FEATURE}/proposal.md and stop.
---- CONTEXT ---
-$(cat .harness/spec/constitution.md)
-$(cat .harness/spec/architecture.md)
-$(cat .harness/features/${FEATURE}/contract.md)
-$(cat .harness/evaluator/criteria.md)" \
+Exit when proposal.md is written. Do not start the negotiation loop yourself — the orchestrator dispatches the Evaluator review separately." \
   ${GEN_MODEL_FLAG} \
+  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/generator.md" \
   --allowedTools "Read,Write,mcp__context7"
 stop_progress_poller "$PROGRESS_FILE"
 
 # Round 2: Evaluator reviews the proposal
 EVAL_MODEL_FLAG=$(resolve_model_flag evaluator)
 start_progress_poller "$PROGRESS_FILE"
-CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/evaluator.md)
---- MODE: REVIEW-PROPOSAL ---
-You are reviewing a Generator's implementation proposal BEFORE any code is written.
-Do NOT run Playwright. There is no app yet.
-Read the proposal and check:
+CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in REVIEW-PROPOSAL mode (see your system prompt's MODE ROUTING table).
+
+You are reviewing a Generator's implementation proposal BEFORE any code is written. Do NOT run Playwright — there is no app yet.
+
+Read these via the Read tool:
+- .harness/evaluator/criteria.md — grading rubric you'll apply later
+- .harness/features/${FEATURE}/contract.md — draft contract
+- .harness/features/${FEATURE}/proposal.md — Generator's proposal
+
+Check:
 - Does each deliverable have a clear HOW?
 - Are the test strategies adequate for each AC?
 - Will the Generator be able to verify completion against the criteria?
 - Any gaps, ambiguities, or risky shortcuts?
 
-Write your review to .harness/features/${FEATURE}/review.md with:
-- VERDICT: agreed | needs-revision
-- Specific items requiring revision (if any)
-- New ACs you want added (if proposal revealed testing gaps)
---- CONTEXT ---
-$(cat .harness/evaluator/criteria.md)
-$(cat .harness/features/${FEATURE}/contract.md)
-$(cat .harness/features/${FEATURE}/proposal.md)" \
+Write your review to .harness/features/${FEATURE}/review.md with a VERDICT line (agreed | needs-revision), specific items requiring revision, and any new ACs the proposal revealed." \
   ${EVAL_MODEL_FLAG} \
+  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/evaluator.md" \
   --allowedTools "Read,Write"
 stop_progress_poller "$PROGRESS_FILE"
 
@@ -240,17 +242,16 @@ stop_progress_poller "$PROGRESS_FILE"
 
 # Round N (final): Generator writes the negotiated contract
 start_progress_poller "$PROGRESS_FILE"
-CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
---- MODE: FINALIZE-CONTRACT ---
-The proposal and review have converged. Write the final negotiated contract.
-Merge the original draft contract + your proposal + any ACs added by Evaluator review.
-Overwrite .harness/features/${FEATURE}/contract.md with the final version.
-This is the source of truth for the Build phase.
---- CONTEXT ---
-$(cat .harness/features/${FEATURE}/contract.md)
-$(cat .harness/features/${FEATURE}/proposal.md)
-$(cat .harness/features/${FEATURE}/review.md)" \
+CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in FINALIZE-CONTRACT mode (see your system prompt's MODE ROUTING table).
+
+The proposal and review have converged. Read via Read tool:
+- .harness/features/${FEATURE}/contract.md — draft
+- .harness/features/${FEATURE}/proposal.md — your proposal
+- .harness/features/${FEATURE}/review.md — Evaluator review (must say 'agreed')
+
+Merge them into the final contract. Overwrite .harness/features/${FEATURE}/contract.md with the final version (include the **Negotiated**: marker per your mode spec). This is the source of truth for the Build phase." \
   ${GEN_MODEL_FLAG} \
+  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/generator.md" \
   --allowedTools "Read,Write"
 stop_progress_poller "$PROGRESS_FILE"
 trap - EXIT
@@ -298,10 +299,14 @@ PROGRESS_FILE=".harness/features/${FEATURE}/_progress.jsonl"
 start_progress_poller "$PROGRESS_FILE"
 trap "stop_progress_poller '$PROGRESS_FILE'" EXIT
 
-CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
---- PROJECT CONTEXT ---
+CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in BUILD mode (see your system prompt's MODE ROUTING table).
+
+Implement the negotiated contract via TDD (RED → GREEN → REFACTOR → COMMIT). Read per-FR stories at .harness/features/${FEATURE}/stories/FR-NNN.md via Read tool as you work — that's your canonical per-cycle context.
+
+Project-specific context follows. If any section references files you also want to read via the Read tool, do that — don't rely solely on the inline snapshot:
 $CONTEXT" \
   ${BUILD_MODEL_FLAG} \
+  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/generator.md" \
   --allowedTools "Read,Write,Bash,mcp__context7"
 
 stop_progress_poller "$PROGRESS_FILE"
@@ -370,15 +375,14 @@ $(cat $PAUSE_FILE)"
   start_progress_poller "$PROGRESS_FILE"
   trap "stop_progress_poller '$PROGRESS_FILE'" EXIT
 
-  CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
---- MODE: BUILD ---
-You are RESUMING a paused build. Read the PAUSE ANSWERS section in the
-context below — those resolve the questions you wrote in pause-questions.md.
-Pick up at state.current_task in manifest.yaml. Do NOT re-pause on the
-same questions; if a different ambiguity arises, that's a new pause.
---- PROJECT CONTEXT ---
+  CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in BUILD mode — RESUMING a paused build.
+
+Read the PAUSE ANSWERS section in the context below (and the file at .harness/features/${FEATURE}/pause-questions.md for full history). Those resolve the questions you wrote earlier. Pick up from state.current_task in manifest.yaml. Do NOT re-pause on the same questions — if a DIFFERENT ambiguity arises later, that's a new pause.
+
+Project-specific context follows:
 $RESUMED_CONTEXT" \
     ${BUILD_MODEL_FLAG} \
+    --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/generator.md" \
     --allowedTools "Read,Write,Bash,mcp__context7"
 
   stop_progress_poller "$PROGRESS_FILE"
@@ -407,13 +411,23 @@ PROGRESS_FILE=".harness/features/${FEATURE}/_progress.jsonl"
 start_progress_poller "$PROGRESS_FILE"
 trap "stop_progress_poller '$PROGRESS_FILE'" EXIT
 
-CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/evaluator.md)
---- EVALUATION CONTEXT ---
-$(cat .harness/evaluator/criteria.md)
-$(cat .harness/features/${FEATURE}/implementation-report.md)
-$(cat .harness/features/${FEATURE}/contract.md)
-$(cat .harness/spec/constitution.md)" \
+CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in EVALUATE mode (see your system prompt's MODE ROUTING table).
+
+Test the running application via Playwright MCP, grade against the four criteria with hard thresholds, run the reward-hacking scan, and write your verdict to .harness/features/${FEATURE}/eval-report.md.
+
+Read these via Read tool BEFORE scoring (calibration is mandatory):
+- .harness/evaluator/examples.md — few-shot scoring anchors
+- .harness/spec/evaluator-notes.md (if exists) — project-specific notes
+- .harness/evaluator/criteria.md
+- .harness/features/${FEATURE}/implementation-report.md (Generator's handoff)
+- .harness/features/${FEATURE}/contract.md (final negotiated)
+- .harness/features/${FEATURE}/proposal.md + review.md (WHY behind ACs)
+- .harness/spec/constitution.md
+- .harness/spec/prd.md
+
+Then exercise the running app via Playwright MCP. The app is expected at whatever URL its init.sh starts on." \
   ${EVAL_MODEL_FLAG} \
+  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/evaluator.md" \
   --allowedTools "Read,Write,Bash,mcp__playwright"
 
 stop_progress_poller "$PROGRESS_FILE"

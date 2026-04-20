@@ -105,15 +105,19 @@ The FR-2 spec-ownership hook authorizes constitution.md edits only during this p
 The Planner reads the current constitution + the proposed change, identifies which principle is being added/changed/removed, and produces structured before→after patches. **It does NOT auto-apply.**
 
 ```bash
-CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/planner.md)
---- MODE: CONSTITUTION-AMEND ---
---- AMENDMENT REASON ---
+CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in CONSTITUTION-AMEND mode (see your system prompt's MODE ROUTING table).
+
+The user wants to amend the constitution for this documented reason:
 ${REASON}
---- CONTEXT ---
-$(cat .harness/spec/prd.md)
-$(cat .harness/spec/architecture.md)
-$(cat .harness/spec/constitution.md)
-$(ls -1 .harness/features/*/contract.md 2>/dev/null | head -10 | xargs cat)" \
+
+Read via Read tool:
+- .harness/spec/prd.md
+- .harness/spec/architecture.md
+- .harness/spec/constitution.md (the current version — what you'll patch)
+- Up to 10 completed features' contract.md under .harness/features/*/contract.md (ls them first; sample the most recent)
+
+Produce before→after patches to .harness/constitution-amend-patches.md per your MODE: CONSTITUTION-AMEND procedure. Identify which principle(s) add/change/remove, flag conflicts, refuse non-testable principles, refuse §-renumbering. Do NOT apply patches — the orchestrator runs revalidation + applies after user confirmation." \
+  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/planner.md" \
   --allowedTools "Read,Write,mcp__context7"
 ```
 
@@ -190,25 +194,21 @@ COMPLETED=$(awk '/^features:/{f=1} f && /completed:/,/^[a-z]/' .harness/manifest
 for FEATURE in $COMPLETED; do
   echo "Re-validating ${FEATURE}..."
 
-  CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/evaluator.md)
---- MODE: REVALIDATE ---
-You are NOT running EVALUATE. You are checking whether a previously-shipped feature
-still complies with a NEWLY AMENDED constitution. Read the new constitution, the
-completed feature's source code, and produce a per-principle compliance report.
+  CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in REVALIDATE mode (see your system prompt's MODE ROUTING table).
 
-Output to .harness/.revalidation-<ts>/${FEATURE}.md:
-  - Each principle § from the NEW constitution: PASS | FAIL | N/A
-  - For FAIL: which file/line violates, what would need to change
-  - Summary: how many principles fail, are any blocking?
---- NEW CONSTITUTION (proposed) ---
-$(cat ${NEW_CONSTITUTION_PATH})
---- FEATURE CONTRACT ---
-$(cat .harness/features/${FEATURE}/contract.md)
---- FEATURE EVAL REPORT ---
-$(cat .harness/features/${FEATURE}/eval-report.md)
---- INSTRUCTION ---
-Use Read on src/ to inspect actual code. Do NOT run Playwright — this is a static
-constitutional audit, not functional retesting." \
+You are NOT running EVALUATE. You are checking whether the previously-shipped feature '${FEATURE}' still complies with the NEWLY AMENDED constitution. Static audit only — do NOT run Playwright, do NOT run the test suite.
+
+Read via Read tool:
+- ${NEW_CONSTITUTION_PATH} (proposed new constitution — patched but not yet applied)
+- .harness/features/${FEATURE}/contract.md (what the feature promised)
+- .harness/features/${FEATURE}/eval-report.md (what the original Evaluator found)
+- src/ (use Read + Bash grep/find to inspect actual code)
+
+Output per-principle compliance to .harness/.revalidation-<timestamp>/${FEATURE}.md:
+- Each principle § from the NEW constitution: PASS | FAIL | N/A
+- For FAIL: which file/line violates, what would need to change
+- Summary: how many principles fail, are any blocking?" \
+    --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/evaluator.md" \
     --allowedTools "Read,Write,Bash"
 
   cp ".harness/.revalidation-*/${FEATURE}.md" "$REVALIDATION_DIR/${FEATURE}.md" 2>/dev/null

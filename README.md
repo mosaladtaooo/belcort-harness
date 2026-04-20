@@ -2,7 +2,9 @@
 
 An opinionated harness for Claude Code that implements a **Planner → Generator → Evaluator** pipeline, inspired by Anthropic's published research on long-running agent harness design.
 
-Built for Claude Opus 4.6+. Tuned for TypeScript/Node.js full-stack projects but adaptable.
+Built for Claude Opus 4.6+ and Claude Code 2.1+. Tuned for TypeScript/Node.js full-stack projects but adaptable.
+
+**v1.5.0 compatibility note:** v1.4 and earlier are silently non-functional on Claude Code 2.1+ due to a change in how `claude -p` handles inlined agent prompts. v1.5.0 rewrites the dispatch pattern to use `--append-system-prompt-file`. Upgrade required for 2.x users.
 
 ## What this is
 
@@ -246,7 +248,7 @@ Requires Claude Code installed and working.
 /harness:setup
 ```
 
-That's it. The plugin auto-registers the skill, three agents, ten slash commands, two hooks (SessionStart + PreToolUse), and two MCP servers (context7 + playwright). The one-time `/harness:setup` command patches `~/.claude/CLAUDE.md` with the harness behavioral rules so they apply globally and survive context compaction. The patch is idempotent, version-aware, and removable (`scripts/uninstall-rules.sh`).
+That's it. The plugin auto-registers the skill, three agents, 19 slash commands (`sprint`, `quick`, `resume`, `brainstorm`, `clarify`, `amend`, `edit`, `steer`, `rewind`, `validate`, `analyze`, `negotiate`, `retrospective`, `tune-evaluator`, `audit`, `assumption-test` (v1.5), `constitution-amend` (v1.5), `doctor`, `setup`), three hooks (SessionStart + PreToolUse for Bash + PreToolUse for Edit/Write), and two MCP servers (context7 + playwright). The one-time `/harness:setup` command patches `~/.claude/CLAUDE.md` with the harness behavioral rules so they apply globally and survive context compaction. The patch is idempotent, version-aware, and removable (`scripts/uninstall-rules.sh`).
 
 ### Option B — Manual install (legacy)
 
@@ -318,12 +320,12 @@ This harness is actively used for BELCORT AI Consulting's internal projects. It 
 
 **Current branch.** This is the `harness/v1.5-trustworthy-agents-deep-alignment` branch — the v1.5 release candidate. See [What's new in v1.5](#whats-new-in-v15--trustworthy-agents-deep-alignment) above for the FR-by-FR breakdown. The release candidate is open for review against `release/v1.4`.
 
-**Released versions.**
-- v1.5 (this branch) — Trustworthy-Agents deep alignment: subagent observability, hook-enforced spec ownership, mid-build pause, per-FR story files, component-as-assumption test, constitution amendment governance
-- v1.4 — SpecKit/BMAD alignment: coverage matrix, two-stage eval, RED FLAGS in all agents, brainstorm pre-plan, per-agent model pinning, calibration metrics
-- v1.3 — Post-plan amendment flow, reward-hacking defenses, file ownership contract, environment preflight
-- v1.2 — Plugin conversion
-- v1.0 — Initial public release
+**Released versions** (see [CHANGELOG.md](CHANGELOG.md) for the full per-release breakdown).
+- **v1.5.0** (this branch) — Trustworthy-Agents deep alignment: subagent observability, hook-enforced spec ownership, mid-build pause, per-FR story files, component-as-assumption test, constitution amendment governance. **Also includes a critical subagent-dispatch fix required for Claude Code 2.1+**. 14 dispatch sites updated to use `--append-system-prompt-file` instead of inlining the agent prompt into the user message (the v1.4-and-earlier pattern produced empty output on 2.x).
+- v1.4 — SpecKit/BMAD alignment: coverage matrix, two-stage eval, RED FLAGS in all agents, brainstorm pre-plan, per-agent model pinning, calibration metrics. Superseded by v1.5.0.
+- v1.3 — Post-plan amendment flow, reward-hacking defenses, file ownership contract, environment preflight.
+- v1.2 — Plugin conversion.
+- v1.0 — Initial public release.
 
 Not affiliated with Anthropic.
 

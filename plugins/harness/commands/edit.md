@@ -58,28 +58,20 @@ fi
 The dispatch is identical in shape to `/harness:amend`'s but the instruction emphasises cascade analysis:
 
 ```bash
-CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/planner.md)
---- MODE: EDIT ---
---- EDIT REQUEST ---
+CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in EDIT mode (cascade-aware spec edit; note: this mode is currently driven by instruction since planner.md does not yet have a dedicated MODE: EDIT section — treat it as an AMEND-like flow with explicit cascade emphasis).
+
+The user wants this change (expected to touch MULTIPLE files):
 $ARGUMENTS
---- INSTRUCTION ---
-Unlike AMEND mode, this request is expected to touch MULTIPLE files.
+
+Read the current spec via Read tool (paths to check: .harness/spec/prd.md, architecture.md, constitution.md; .harness/features/${FEATURE:-global}/contract.md if exists; .harness/evaluator/criteria.md; .harness/init.sh).
+
 Your job:
-  1. Identify EVERY file affected by the requested change.
-  2. For each file, draft a before→after patch.
-  3. If a downstream file (e.g., init.sh, NFR metric, test criteria) exists
-     only because of a choice the edit is reversing, flag that the downstream
-     file may need to be rewritten entirely rather than patched — do NOT
-     produce a patch for it yourself; flag it in an UNCLEAR section.
-Write all patches to .harness/features/${FEATURE:-global}/edit-patches.md
-using the template your EDIT mode section specifies.
---- CONTEXT ---
-$(cat .harness/spec/prd.md 2>/dev/null)
-$(cat .harness/spec/architecture.md 2>/dev/null)
-$(cat .harness/spec/constitution.md 2>/dev/null)
-$([ -n \"$FEATURE\" ] && cat .harness/features/${FEATURE}/contract.md)
-$(cat .harness/evaluator/criteria.md 2>/dev/null)
-$([ -f .harness/init.sh ] && cat .harness/init.sh)" \
+1. Identify EVERY file affected by the requested change.
+2. For each file, draft a before→after patch.
+3. If a downstream file (e.g., init.sh, NFR metric, test criteria) exists only because of a choice the edit is reversing, flag that the downstream file may need to be rewritten entirely rather than patched — do NOT produce a patch for it yourself; flag it in an UNCLEAR section.
+
+Write all patches to .harness/features/${FEATURE:-global}/edit-patches.md. Do NOT apply patches — the orchestrator applies after user confirmation." \
+  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/planner.md" \
   --allowedTools "Read,Write,mcp__context7"
 ```
 
