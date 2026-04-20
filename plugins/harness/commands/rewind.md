@@ -176,14 +176,26 @@ Last 5 commits:
 
 Options:
   (a) Keep commits — branch survives, you can cherry-pick or discard manually later
-      Safe default.
+      Safe default. No git commands run.
   (b) Reset branch to base — destroys [N] commits on harness/build/${FEATURE}
       This is destructive. Type "reset build branch" to confirm.
+      The exact commands run will be:
+         git checkout harness/build/${FEATURE}
+         git reset --hard $(git merge-base main harness/build/${FEATURE})
+         git checkout -  # return to previous branch
+      Effect: branch still exists, pointing at the pre-build merge-base.
+      Staged changes and working-tree changes are NOT touched.
+      The [N] commits become unreachable but recoverable via reflog
+      for ~90 days (default git gc policy). If you want the branch
+      GONE entirely, run 'git branch -D harness/build/${FEATURE}'
+      manually after the rewind completes.
 
 Enter (a), (b), or "skip" to leave the branch alone:
 ```
 
 Default to (a) if the user hesitates. Git resets are destructive and rarely necessary — in most cases, leaving the branch around is fine (the user can `git branch -D` it later).
+
+**Why not offer `git branch -D`?** The rewind command is already destructive enough; chaining a branch deletion into the same prompt creates a footgun. Forcing the user to run `git branch -D` as a separate step means they see the branch one more time before deleting it, which catches typos (wrong feature name) and accidental invocations. Two intentional actions are safer than one automated one.
 
 ### Step 7: Log the rewind
 

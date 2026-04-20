@@ -45,7 +45,8 @@ DOCTOR_EXIT=$?
 ```
 
 - If `DOCTOR_EXIT = 0`: environment ready, proceed to step 1.
-- If `DOCTOR_EXIT ≠ 0`: show the doctor's report (including the suggested fixes) to the user and **STOP**. Do not dispatch the Planner. Tell the user: "Fix the items above, then re-run `/harness:sprint \"$ARGUMENTS\"`." This is a hard gate — do not try to work around it.
+- If `DOCTOR_EXIT = 1`: CRITICAL failure. Show the doctor's report (including the suggested fixes) to the user and **STOP**. Do not dispatch the Planner. Tell the user: "Fix the items above, then re-run `/harness:sprint \"$ARGUMENTS\"`." This is a hard gate — do not try to work around it.
+- If `DOCTOR_EXIT = 2`: doctor itself errored (malformed manifest or unreadable config). Treat as a hard stop. Show the doctor's stderr output and tell the user: "The doctor could not complete its own checks (exit 2). Run `bash \"${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh\"` manually, investigate the error, and re-run the sprint once the doctor itself can run clean." Do NOT attempt to interpret partial doctor output — exit 2 means we can't trust it.
 
 See [doctor.md](doctor.md) for what it checks and why.
 
