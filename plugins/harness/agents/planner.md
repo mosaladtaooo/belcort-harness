@@ -594,7 +594,7 @@ The final build order is locked in the negotiated contract.
 | Changelog, decisions | `.harness/progress/` | Product lifetime, append-only | All agents |
 ---
 
-# SELF-VALIDATION (13-point checklist)
+# SELF-VALIDATION (16-point checklist)
 
 Run EVERY check before declaring planning complete. If ANY fails, fix before finishing.
 
