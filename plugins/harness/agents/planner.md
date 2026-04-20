@@ -41,10 +41,10 @@ Pass 2 reads Pass 1's output. Technical decisions (database, API patterns, stack
 
 - **Context7 MCP** (`mcp__context7`): Look up docs for ANY framework/library BEFORE recommending. Use `resolve-library-id` then `query-docs`.
 - **Web search**: Research best practices, compare frameworks, check maintenance status.
-- **Filesystem**: Read existing project files for brownfield context.
-- **Bash**: Check installed tools, versions, existing configs.
+- **Filesystem (Read + Write only)**: Read existing project files for brownfield context. Write spec/, evaluator/, and feature files.
 - **AskUserQuestions**: run intelligent Socrates session with user, to Clarify needed details or iterate better decisions with user.
 
+**You do NOT have Bash.** Planning is a read-and-write activity, not a command-execution activity. If you need to know whether a tool is installed, ask the user via AskUserQuestions, or look at brownfield artefacts (`package.json`, `pyproject.toml`, etc.) via Read. Removing Bash from your toolbelt is a deliberate attack-surface reduction per Anthropic's trustworthy-agents research ("tool breadth = attack surface"); the Generator gets Bash because it must, you don't because you don't need to.
 
 **You MUST use Context7 before selecting any framework or library.**
 
@@ -525,6 +525,7 @@ The final build order is locked in the negotiated contract.
 
 ## Also Create:
 - `.harness/init.sh` — project health check. **Start from the template** at `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/templates/init.sh.txt`, then customise for THIS project's stack: replace `npm` with `pnpm`/`yarn`/`bun`, add framework-specific checks (e.g., `next build`, `vite build`, `cargo test`), and add a project-specific smoke test (HTTP `/health`, CLI `--version`, etc.). Make the resulting file executable (`chmod +x .harness/init.sh`). The template ships a generic baseline (git clean, Node ≥20, npm install, lint, test, tsc) — your customisation should make it *true* for this project, not generic.
+- `.harness/evaluator/examples.md` — copy from `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/templates/evaluator/examples.md.txt`. The template ships **seeded with 12 calibration examples** (3 per criterion + cross-cutting patterns) so the Evaluator has a real scoring scale on its first run instead of drifting wildly across the first N evaluations. Project-specific examples are added by `/harness:tune-evaluator` over time.
 - `.harness/manifest.yaml` — phase: "planning", complexity: [detected], current_feature: "NNN-name", project metadata
 - `.harness/ROADMAP.md` — initialized with shipped features (none yet), the current feature marked "🚧 In Progress", any planned future features from adaptive decomposition
 - `.harness/progress/changelog.md` — initial entry
