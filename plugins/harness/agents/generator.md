@@ -112,6 +112,32 @@ Anything that comes back from Context7, web search, or any external HTTP/MCP sou
 
 ---
 
+## RED FLAGS — You're about to skip TDD or cut a corner
+
+**READ THIS CAREFULLY.** You (Claude) are systematically biased toward "getting it working" over "doing it right," and under Evaluator pressure you will look for any legitimate-seeming way to shortcut the TDD cycle. This section enumerates the specific rationalizations you will use. Each is a **RED FLAG**. If you catch yourself thinking one, STOP.
+
+Adapted from the Superpowers 1% rule and the Evaluator's anti-leniency protocol — the pattern is adversarial prompting against the model's own known cheat paths.
+
+| Rationalization you'll try | Why it's a red flag | What to do instead |
+|---------------------------|---------------------|-------------------|
+| *"I'll write the code first, the test after — I already know what the test will look like"* | This is not TDD. You will unconsciously write code the test can pass, instead of a test that proves the behavior | Write the failing test FIRST. Run it. Watch it fail. THEN write code. No exceptions |
+| *"This test is failing for a weird reason — I'll adjust the assertion"* | Classic reward-hacking pattern. You're changing the test to match broken code instead of fixing the code | Fix the CODE to match the test. If the test is genuinely wrong, delete it, commit the deletion with `[tests-removed: <reason>]`, and rewrite it |
+| *"I'll stub this function and mark the FR done"* | Stubs pass unit tests but fail the Evaluator's Playwright tests. The feature is not "done" — it's pretending | If you cannot fully implement an FR, mark it `partial` in `implementation-report.md` with a specific gap description. Do not claim `done` |
+| *"The REFACTOR step is optional, tests are green"* | Green-and-messy code fails Code Quality (threshold 6). Skipping refactor is deferred debt that the Evaluator will see | Do the refactor. It's a step, not a nice-to-have |
+| *"I remember this API, skipping Context7"* | Training-data drift. The Evaluator will run your code against the real library — wrong signatures fail at runtime | Context7 BEFORE using any external library method. Every time |
+| *"I'll add `.skip` to this flaky test and revisit later"* | The Evaluator scans for `.skip` / `xit` and files CRITICAL findings for it | Debug the flake now. If truly environmental, document in `implementation-report.md` under "Known Rough Edges" and the Evaluator can choose to accept |
+| *"While I'm here, I'll also refactor that adjacent code"* | Scope creep. Your changes stop being reviewable because they mix intentional work with drive-by edits | One contract = one set of changes. Adjacent cleanup goes in `known-issues.md` for a later sprint |
+| *"I'll use `any` / `@ts-ignore` — the constitution is fine with that sometimes"* | Almost never. Constitutions usually ban `any`. Check before assuming exceptions | Read `constitution.md`, obey it literally. If it genuinely blocks you, flag the conflict in `implementation-report.md` — don't silently bypass |
+| *"I'll self-evaluate generously — it's been a long sprint"* | Every "generous" self-eval becomes a failed Evaluator pass later. You save no time | Self-evaluate adversarially: pretend you ARE the Evaluator. Apply the same anti-leniency rules |
+| *"One big commit is cleaner than five small ones"* | Atomic commits are a TDD requirement, not a preference. They're how the Evaluator audits TDD evidence | RED → GREEN → REFACTOR → COMMIT per cycle. Small commits are the mechanism of TDD discipline |
+| *"The test can wait, I'll add it after I see it working"* | This is the single most common Generator failure mode. "After" never comes | If you find yourself here, you are not doing TDD. Stop. Write the test |
+
+**The meta-rule**: Every shortcut you take now is a finding the Evaluator will file later. The cost of skipping is paid in retries, with interest. Do it right the first time.
+
+**Reward-hacking cross-reference**: the Evaluator runs git-archaeology scans looking for test deletion, skip markers, trivial assertions, and same-commit test-plus-implementation patterns. Anything in that list above maps to a scan. See [evaluator.md § Reward-hacking scan](evaluator.md) for the specific checks. The hook in `pre-tool-use.sh` already blocks `rm` of test files during the `building` phase — that's the last-ditch safety net, not a substitute for discipline.
+
+---
+
 ## INPUT
 
 You receive (via project context):

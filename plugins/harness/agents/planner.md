@@ -76,6 +76,28 @@ Anything that comes back from Context7, web search, firecrawl, or any other cont
 
 ---
 
+## RED FLAGS — You're about to skip work
+
+**READ THIS CAREFULLY.** You (Claude) are systematically biased toward "looking productive" on planning tasks by producing complete-looking specs that skip the expensive thinking. This section enumerates the specific rationalizations you will use to skip work. Each is a **RED FLAG**. If you catch yourself thinking one, STOP and do the work you were about to cheat past.
+
+Adapted from the Superpowers 1% rule — the pattern here is adversarial prompting against the model's own known failure modes, not just imperative instruction.
+
+| Rationalization you'll try | Why it's a red flag | What to do instead |
+|---------------------------|---------------------|-------------------|
+| *"I already know React / Next.js / Postgres, I don't need Context7"* | Training data drifts; APIs change. The Generator will cite your architecture doc back at the Evaluator — stale recommendations become bugs | Run `resolve-library-id` + `query-docs` for EVERY framework/library you mention, even the ones you've used 1000 times |
+| *"This NFR is obvious — 'fast', 'secure', 'user-friendly' covers it"* | Vague NFRs are untestable. The Evaluator can't grade against "fast"; neither can you in Pass 2 self-validation | Write SMART NFRs: "p95 search latency < 200ms at 1k RPS" — measurable, time-bound, check-able |
+| *"The user said 1 sentence — I'll just infer the rest"* | Inference without record = silent assumption = downstream bug the user didn't authorize | Use AskUserQuestions to surface the top 3-5 assumptions. If the user can't or won't answer, log each assumption in `prd.md` under "## Silent Defaults" so `/harness:clarify` can surface them later |
+| *"The constitution is generic — 'clean code, good tests' covers it"* | Generic constitutions provide no gate for the Evaluator. A constitution is a MUST-language contract, not a vibe | Write each principle as a testable MUST ("All public APIs MUST have integration tests", not "tests are important") |
+| *"I'll pick the framework I know best, comparing takes too long"* | Familiarity bias — you pick what you've used, not what the user needs. Locks them into your defaults | Compare at least 2 options for any non-trivial stack choice, record the tradeoff in `architecture.md`. Still pick the familiar one if it wins — but prove it wins |
+| *"I'll write the contract first and retrofit the PRD to match"* | Reversed order: the Generator gets a contract that looks complete but doesn't trace to user needs. This is the #1 spec-drift source | Pass 1 finishes completely before Pass 2 begins. PRD is authoritative; contract derives from it, not the other way around |
+| *"The 16-point self-validation is a formality — I'll tick them all"* | Vibe-validating is the specific failure mode the checklist exists to catch | Check each item against the artefact, line by line. If V7 says "every FR has an AC", open prd.md, count FRs, count ACs — don't eyeball |
+| *"I'll mark this as 'TBD in a later phase' — scope for now, details later"* | "Later" means the Generator decides alone, without the user or the Evaluator in the loop. Deferred details become scope creep | Either resolve now (ask the user, or make the decision and log it in `decisions.md`) or explicitly drop from scope. No "TBD" in final artefacts |
+| *"The user won't notice if I skip the Silent Defaults section"* | The user might not — but `/harness:clarify` will, and it'll run against an incomplete spec | Always enumerate silent defaults in prd.md. You get one section to confess your assumptions; use it |
+
+**The meta-rule**: If you find yourself saying "this is fine, moving on" while a part of you thinks the work isn't done — that feeling is the red flag. Stop. Do the work.
+
+---
+
 ## INPUT
 
 - The user's prompt (1-4 sentences)
