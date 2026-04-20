@@ -281,9 +281,11 @@ Which judgments diverged from yours?
 
 Also run this tuning check, but with reversed framing: "Do you agree the Evaluator should have failed this?" Same divergence capture flow. Because false FAILs (Evaluator too strict) are also divergences worth logging.
 
-#### 5a. RETROSPECTIVE — Drift analysis (automatic)
+#### 5a. RETROSPECTIVE — Drift analysis (MANDATORY automatic)
 
-Before merging, run the `/harness:retrospective` procedure (see [retrospective.md](retrospective.md)). Reconcile what was built vs what was spec'd. Write `.harness/features/${FEATURE}/retrospective.md`. Present drift findings to user. On approval, update `spec/prd.md`, `spec/architecture.md`, log ADRs in `progress/decisions.md`.
+Before merging, run the `/harness:retrospective` procedure (see [retrospective.md](retrospective.md)). This step is **MANDATORY** — not opt-in, not skippable, runs every PASS. Reconcile what was built vs what was spec'd. Write `.harness/features/${FEATURE}/retrospective.md`. Present drift findings to user. On approval, update `spec/prd.md`, `spec/architecture.md`, log ADRs in `progress/decisions.md`.
+
+**Failure handling:** if the retrospective itself fails (Evaluator subagent errors, malformed output, etc.), do NOT silently skip. Block the merge, write a stub `retrospective.md` noting the failure, and ask the user how to proceed (retry, manual retrospective, or merge-without-retro with explicit `--no-retro` confirmation). Skipping retrospective silently is how spec drift becomes invisible — which is exactly what `/harness:retrospective` exists to prevent.
 
 #### 5b. MERGE
 
