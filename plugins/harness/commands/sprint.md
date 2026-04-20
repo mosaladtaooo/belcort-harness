@@ -22,7 +22,7 @@ claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/planner.md)
 
 --- USER REQUEST ---
 $ARGUMENTS" \
-  --allowedTools "Read,Write,Bash,mcp__context7"
+  --allowedTools "Read,Write,mcp__context7"
 ```
 
 Wait for Planner to finish. Verify all files exist in `.harness/`. The Planner runs its own 13-point self-validation before completing.

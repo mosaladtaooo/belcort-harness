@@ -128,10 +128,13 @@ Do NOT suggest the harness for:
 FEATURE=$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')
 
 # 1. Planner (runs first, creates draft contract)
+# NOTE: Planner does NOT get Bash — it has no legitimate need to execute commands
+# during planning, and removing it tightens the attack surface per Anthropic's
+# trustworthy-agents principle ("tool breadth = attack surface").
 claude -p "$(cat ~/.claude/agents/planner.md)
 --- USER REQUEST ---
 <the user's prompt>" \
-  --allowedTools "Read,Write,Bash,mcp__context7"
+  --allowedTools "Read,Write,mcp__context7"
 
 # 2. Generator — NEGOTIATE mode (proposes HOW, before writing code)
 claude -p "$(cat ~/.claude/agents/generator.md)
@@ -233,7 +236,7 @@ All state is file-based and git-tracked. Agents communicate via files, never via
 
 **manifest.yaml** tracks where you are:
 ```yaml
-harness: { version: "1.2", model: "claude-opus-4-6", model_tuning_revision: 0 }
+harness: { version: "1.2", model: "claude-opus-4-7", model_tuning_revision: 0 }
 project: { name: "", description: "" }
 config: { max_retries: 3, max_negotiation_rounds: 3, testing: { unit: vitest, e2e: playwright } }
 state:

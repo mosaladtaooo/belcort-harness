@@ -4,7 +4,7 @@
 
 harness:
   version: "1.1"           # Increment when harness design changes
-  model: "claude-opus-4-6" # Model these prompts were tuned for
+  model: "claude-opus-4-7" # Model these prompts were tuned for
   model_tuning_revision: 0    # incremented each time evaluator.md prompt is modified via /harness:tune-evaluator
   created: ""              # ISO date when harness was initialized
 

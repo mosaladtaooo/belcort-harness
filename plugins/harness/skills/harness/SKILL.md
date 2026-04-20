@@ -151,7 +151,7 @@ ANY criterion below threshold = FAIL → Generator retries with feedback.
 ## Manifest schema
 
 ```yaml
-harness: { version: "1.2", model: "claude-opus-4-6", model_tuning_revision: 0 }
+harness: { version: "1.2", model: "claude-opus-4-7", model_tuning_revision: 0 }
 project: { name: "", description: "" }
 config: { max_retries: 3, max_negotiation_rounds: 3, testing: { unit: vitest, e2e: playwright } }
 state:
