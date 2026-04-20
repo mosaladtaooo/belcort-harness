@@ -125,6 +125,13 @@ FEATURE=${FEATURE:-$(grep 'current_feature:' .harness/manifest.yaml | awk '{prin
 if [ -f "$PLANNER_PROGRESS" ] && [ -n "$FEATURE" ] && [ -d ".harness/features/${FEATURE}" ]; then
   mv "$PLANNER_PROGRESS" ".harness/features/${FEATURE}/_progress-planner.jsonl"
 fi
+
+# v1.5.1+: Planner writes init.sh but has no Bash — orchestrator chmods it executable.
+# Without this, `bash .harness/init.sh` in later phases still works but `./.harness/init.sh` doesn't,
+# and the Evaluator's functional-test flow expects the latter.
+if [ -f ".harness/init.sh" ]; then
+  chmod +x .harness/init.sh
+fi
 ```
 
 Wait for Planner to finish. Verify all files exist in `.harness/`. The Planner runs its own 16-point self-validation before completing.
@@ -259,7 +266,15 @@ trap - EXIT
 
 See [negotiate.md](negotiate.md) for the standalone variant and anti-patterns to watch for.
 
-Update `manifest.yaml`: phase → "building"
+**After FINALIZE-CONTRACT returns (v1.5.1+):** the orchestrator — NOT the subagent — updates the manifest phase. The subagent is explicitly forbidden from touching `manifest.yaml` in FINALIZE mode (see agents/generator.md anti-patterns) because permission-gated edits cause the dispatch to return non-zero even when contract.md was written correctly. Run the phase transition as an orchestrator-side step here:
+
+```bash
+if command -v gsed >/dev/null 2>&1; then
+  gsed -i "s|^\([[:space:]]*\)phase:.*|\1phase: \"building\"|" .harness/manifest.yaml
+else
+  sed -i.bak "s|^\([[:space:]]*\)phase:.*|\1phase: \"building\"|" .harness/manifest.yaml && rm -f .harness/manifest.yaml.bak
+fi
+```
 
 ### 3. BUILD — Dispatch Generator subagent
 

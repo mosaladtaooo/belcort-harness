@@ -365,9 +365,9 @@ Overwrite `.harness/features/{current-feature}/contract.md` with:
 - TDD evidence in git log
 ```
 
-**Step 3: Update manifest**
+**Step 3: Stop**
 
-Set `state.phase: "building"`. The pipeline proceeds to BUILD mode dispatch.
+Write the final contract and exit. Do NOT update `manifest.yaml` — phase transitions are the orchestrator's responsibility (sprint.md handles the `negotiating → building` transition after your dispatch returns). Attempting to edit manifest.yaml from this mode previously caused permission-gated exits that made the dispatch return non-zero even though contract.md was written correctly.
 
 ### Anti-patterns in FINALIZE-CONTRACT mode
 
@@ -377,6 +377,7 @@ Set `state.phase: "building"`. The pipeline proceeds to BUILD mode dispatch.
   merging, not re-opening negotiation.
 - **Modifying spec files**: This mode only writes contract.md. Leave PRD, 
   architecture, constitution alone.
+- **Updating manifest.yaml**: NOT your job. The orchestrator transitions phase after you return. Trying to update manifest.yaml from this mode is what v1.5.0's FINALIZE subagent tried to do and got permission-gated.
 
 ---
 
@@ -449,6 +450,10 @@ The orchestrator (sprint.md step 3) detects pause-questions.md, surfaces it to t
 **Repeat-pause discipline**: if a re-dispatched Generator pauses again on the same FR within the same sprint, increment a counter. After 3 pauses on the same FR, escalate to the orchestrator: "FR-NNN has paused 3 times — recommend `/harness:rewind negotiating` to re-spec this FR before continuing." Loop-pausing is a sign the contract was wrong, not that the human needs more rounds of questions.
 
 ### Phase 2: Build with TDD
+
+**ATOMIC COMMIT RULE (v1.5.1+ — strengthened after real-use regression).** You MUST commit PER FR, NOT bundle multiple FRs into a single `[harness:build]` commit. The v1.5.0 real-use test surfaced a Generator that wrote all 3 FRs' implementation in one commit message `[harness:build] FR-001/002/003: ...` — the Evaluator still passed it, but atomic per-FR commits are constitutional, not cosmetic. They are the audit trail the Evaluator's reward-hacking scan depends on.
+
+Concretely: after finishing ONE FR's RED → GREEN → REFACTOR cycle, commit with `[harness:build] FR-NNN: <behavior>`. Only then begin the NEXT FR's RED. If you find yourself about to write `FR-001/002/003` in a single commit message, STOP and break it apart retroactively via `git reset` + re-commit per FR.
 
 For EACH deliverable in the contract:
 

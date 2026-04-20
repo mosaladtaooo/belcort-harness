@@ -6,6 +6,26 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## [1.5.1] — 2026-04-20
+
+**Theme:** Polish fixes surfaced by a real end-to-end sprint on v1.5.0.
+
+After v1.5.0 shipped, I ran the full pipeline against a real build target (Node.js CLI that SHA-256-hashes a file — 3 FRs, 10 ACs/ECs). The pipeline worked end-to-end (**PASS** verdict from Evaluator, 10/10 tests passing, TDD evidence strong) but surfaced three UX rough edges worth patching before calling v1.5 "done." All three are additive documentation/workflow fixes — no schema changes, no behavioural regressions.
+
+### Fixed
+
+- **FINALIZE-CONTRACT permission-gate regression**: the Generator's FINALIZE-CONTRACT mode in v1.5.0 had a "Step 3: Update manifest" step that tried to edit `manifest.yaml` from inside the subagent. With `--allowedTools "Read,Write"` the subagent lacked the permission claude-code 2.x requires to edit outside the immediate subtree, causing the dispatch to return exit code 2 even though contract.md was written correctly. Fix: removed Step 3 from `agents/generator.md` MODE: FINALIZE-CONTRACT. The orchestrator (sprint.md) now handles the `negotiating → building` phase transition explicitly as an orchestrator-side `sed` after the FINALIZE dispatch returns.
+
+- **Planner chmod paradox**: `agents/planner.md`'s "Also Create:" section instructed the Planner to `chmod +x .harness/init.sh`, but the Planner's allowed-tools intentionally exclude Bash (per Anthropic's trustworthy-agents "tool breadth = attack surface"). The subagent couldn't execute the chmod. Fix: updated planner.md to document that chmod is the orchestrator's responsibility; `sprint.md` now runs `chmod +x .harness/init.sh` automatically after the Planner dispatch returns.
+
+- **Per-FR atomic commits not enforced strongly enough**: the v1.5.0 real-use test produced a Generator that wrote all 3 FRs' implementation in a single commit (`[harness:build] FR-001/002/003: ...`). The constitution mandates atomic per-FR commits; the Evaluator still passed the sprint but flagged the bundled commit as a minor. The anti-pattern was only in §RED FLAGS, not in the main BUILD procedure. Fix: added an **ATOMIC COMMIT RULE** callout at the top of Phase 2 (TDD) in `agents/generator.md` — "commit per FR, never bundle; if you catch yourself writing `FR-001/002/003` in a single commit message, STOP and `git reset` retroactively."
+
+### Meta note on real-use validation
+
+v1.5.0 was the first version where the subagent dispatch pattern actually worked on Claude Code 2.1+. v1.5.1 is the first version where the pipeline also runs *cleanly* (no spurious exit-2 on FINALIZE, no "the Planner can't execute its own instructions" paradox, no bundled-commit TDD evidence gap). The real-use test that surfaced these is documented in the conversation log of the release; a follow-up should be to encode this flow as a self-test canary (F13 from the v1.5 contract — still deferred).
+
+---
+
 ## [1.5.0] — 2026-04-20
 
 **Theme:** Trustworthy-Agents deep alignment + Claude Code 2.x compatibility.
