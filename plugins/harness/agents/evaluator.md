@@ -468,9 +468,41 @@ Check for:
 - **Scope creep**: Files/features built that aren't in the contract (flag, don't penalize)
 - **Architecture drift**: Key files don't match the architecture.md directory structure
 
-### Step 6: Grading
+### Step 6: Two-stage grading (Part A then Part B — order matters)
 
-Score each criterion 1-10 using the rubric in `criteria.md`.
+Your evaluation has TWO distinct stages, computed in order. This is adapted from the Superpowers two-stage review pattern: **correctness is not the same question as craft**, and conflating them is how good code gets rejected for style and how missing features get masked by high craft scores.
+
+#### PART A — Contract Compliance (binary)
+
+Before you score anything numerically, answer one binary question per FR and per AC: **was the contract met?** No partial credit, no "mostly," no scores — just `Met` / `Not met` / `Partial` with evidence.
+
+Use the data from Step 5 (Spec Validation) to populate this. Part A is Step 5 formalized as the FIRST thing in your report, before scores.
+
+**Rendering:**
+```
+| FR       | Requirement                       | Met? | Evidence                          |
+|----------|-----------------------------------|------|-----------------------------------|
+| FR-001   | User can create a bookmark        | Y    | Tested via Playwright, row appears |
+| FR-002   | Bookmark persists on refresh      | Y    | Verified refresh, row survives     |
+| FR-003   | User can delete a bookmark        | N    | Delete button no-ops (C1)          |
+| FR-004   | List is sorted by created_at desc | Partial | Sorted only on first load (M1)  |
+
+| AC         | Expected behavior                   | Met? | Evidence                        |
+|------------|-------------------------------------|------|---------------------------------|
+| AC-001-1   | POST returns 201 on valid input     | Y    | vitest: passing                  |
+| AC-001-2   | POST returns 400 on missing URL     | Y    | vitest: passing                  |
+| AC-003-1   | DELETE removes row from DB          | N    | No DELETE route exists (C1)      |
+```
+
+**Gating rule — Part A GATES Part B:**
+
+If ANY FR row has `Met? = N` (not-met for a contracted FR), the overall verdict is **FAIL** regardless of Part B scores. Write Part B anyway — the Generator uses your scores to prioritize which criterion to improve — but the top-of-report verdict is FAIL.
+
+If all FRs are `Met` or `Partial` but no `N`, proceed to Part B scoring. Partials do not auto-fail but each one MUST show up as a Major or Critical finding below with a concrete gap description.
+
+#### PART B — Quality Scoring (numeric, 4 criteria)
+
+Only after Part A is complete, score each criterion 1-10 using the rubric in `criteria.md`.
 
 **BEFORE SCORING — Check calibration examples:**
 
@@ -497,9 +529,11 @@ If no matching example exists in `examples.md`, proceed with the ANTI-LENIENCY P
 | App works perfectly for all flows tested | 9 | 8 (something is probably hiding) |
 | Code is clean but one 200-line function exists | 7 | 5 |
 
-### Step 7: Write Report
+**Why this separation matters**: A single-pass grade lets "clean code but missing FR-003" average out to a 7 and pass, when the correct answer is FAIL because a contracted feature doesn't exist. It also lets "FR complete but `any` types everywhere" drag the grade down below threshold even though the user's feature works. Separating compliance (binary) from quality (numeric) makes each question answerable on its own terms — and the gating rule ensures missing features cannot hide behind high craft scores.
 
-Write to `.harness/features/{current-feature}/eval-report.md`:
+### Step 7: Write Report — two-part structure
+
+Write to `.harness/features/{current-feature}/eval-report.md`. The report has two parts in order: **Part A — Contract Compliance** (binary per FR/AC, decides PASS/FAIL), then **Part B — Quality Scoring** (numeric per criterion, shapes Generator's next-pass priorities).
 
 ```markdown
 # Evaluation Report
@@ -507,8 +541,36 @@ Write to `.harness/features/{current-feature}/eval-report.md`:
 **Result: PASS / FAIL**
 **Date**: [date]
 **Attempt**: [N]
+**Verdict reason**: [one line — e.g., "FR-003 not met (C1)" or "All FRs met, all criteria above threshold"]
 
-## Scores
+## Part A — Contract Compliance (gates PASS/FAIL)
+
+### FR compliance
+
+| FR      | Requirement                 | Met? | Evidence                                |
+|---------|-----------------------------|------|-----------------------------------------|
+| FR-001  | [quote from contract]       | Y    | [Playwright test result or file:line]   |
+| FR-002  | [quote from contract]       | Partial | [what works, what doesn't → M1]      |
+| FR-003  | [quote from contract]       | N    | [observed failure → C1]                 |
+
+### AC compliance
+
+| AC          | Expected behavior             | Met? | Evidence                               |
+|-------------|-------------------------------|------|----------------------------------------|
+| AC-001-1    | [quote from contract]         | Y    | vitest: passing                         |
+| AC-003-1    | [quote from contract]         | N    | [no code path observed → C1]            |
+
+### Compliance summary
+
+- FRs Met: [N]/[total]
+- FRs Partial: [N] (each flagged below)
+- FRs Not met: [N] — **if > 0, overall verdict is FAIL**
+- ACs Met: [N]/[total]
+- ACs Not met: [N]
+
+**Gating result**: [PASS — all FRs at Met or Partial] / [FAIL — N FR(s) not met]
+
+## Part B — Quality Scoring
 
 | Criterion | Score | Threshold | Status |
 |-----------|-------|-----------|--------|
@@ -516,6 +578,10 @@ Write to `.harness/features/{current-feature}/eval-report.md`:
 | Code Quality | X/10 | 6 | PASS/FAIL |
 | Test Coverage | X/10 | 6 | PASS/FAIL |
 | Product Depth | X/10 | 5 | PASS/FAIL |
+
+**Quality result**: [PASS — all criteria at/above threshold] / [FAIL — criterion X below threshold]
+
+**Overall verdict** = (Part A gating) AND (Part B result). If Part A says FAIL, overall is FAIL regardless of Part B. If Part A says PASS and Part B says FAIL, overall is FAIL. Only Part A PASS + Part B PASS = overall PASS.
 
 ## Critical Findings (must fix)
 
@@ -527,6 +593,7 @@ Write to `.harness/features/{current-feature}/eval-report.md`:
   3. Observe [wrong behavior]
 - **Expected**: [correct behavior]
 - **Actual**: [what happened]
+- **Maps to**: [FR-id / AC-id from Part A]
 
 ### C2: [Title]
 ...
@@ -537,16 +604,15 @@ Write to `.harness/features/{current-feature}/eval-report.md`:
 - **Where**: [location]
 - **Issue**: [description]
 - **Suggestion**: [how to fix]
+- **Maps to**: [FR-id / AC-id from Part A, if applicable]
 
 ## Minor Findings (nice to fix)
 
 ### m1: [Title]
 ...
 
-## Contract Compliance
-- Deliverables: [N]/[total] fully implemented
-- Test criteria: [N]/[total] verified passing
-- Missing: [list any gaps]
+## Reward-Hacking Findings
+[From Step 4.5 scan — "No reward-hacking patterns detected" if clean, or the specific findings with severity]
 
 ## Test Suite
 - Unit: [N] passed, [N] failed, [N] skipped
@@ -554,11 +620,13 @@ Write to `.harness/features/{current-feature}/eval-report.md`:
 - TDD evidence: [STRONG / WEAK / NONE] (based on git log)
 
 ## Recommendations for Generator (if FAIL)
-Priority order for fixes:
-1. [Most impactful fix — addresses which criterion]
-2. [Second most impactful]
+Priority order for fixes (Part A items always come first — missing FRs gate PASS):
+1. [Most impactful fix — Part A miss or blocking Critical]
+2. [Second most impactful — typically the criterion that fell below threshold]
 3. [Third]
 ```
+
+**Why Part A comes first**: The Generator reads this report to decide what to fix next. Putting Contract Compliance at the top means the very first thing they see is "was the contract met?" — not "what's my functionality score?". This re-anchors the retry around delivering the feature, not chasing numbers.
 
 ---
 
