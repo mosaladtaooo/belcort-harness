@@ -51,7 +51,7 @@ Runs independently of sprints. Scans all completed features for deferred verific
      - Calibration: tighten Planner's clarify-trigger heuristic
    ═══════════════════════════════
    ```
-8. Offer to promote high-priority items to new sprints via `/harness:sprint`
+9. Offer to promote high-priority items to new sprints via `/harness:sprint`
 
 Do NOT auto-fix. Present findings and ask the user which to address.
 
