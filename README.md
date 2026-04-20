@@ -1,244 +1,213 @@
-# BELCORT Harness
+# BELCORT Harness — v1.5.2
 
-An opinionated harness for Claude Code that implements a **Planner → Generator → Evaluator** pipeline, inspired by Anthropic's published research on long-running agent harness design.
+> **v1.5.2** is a doc-polish release of the v1.5.x series. The pipeline implementation is
+> unchanged from [v1.5.1](CHANGELOG.md). All internal file paths, command names, and
+> behavioral rules are identical.
 
-Built for Claude Opus 4.6+ and Claude Code 2.1+. Tuned for TypeScript/Node.js full-stack projects but adaptable.
+An opinionated **Planner → Generator → Evaluator** pipeline for Claude Code. Three fresh
+subagents, file-based communication, adversarial QA, and a mandatory human gate after
+planning. You supply a 1–4 sentence prompt; the harness orchestrates planning, contract
+negotiation, test-driven implementation, and retrospective drift analysis — all auditable
+via git.
 
-**v1.5.0 compatibility note:** v1.4 and earlier are silently non-functional on Claude Code 2.1+ due to a change in how `claude -p` handles inlined agent prompts. v1.5.0 rewrites the dispatch pattern to use `--append-system-prompt-file`. Upgrade required for 2.x users.
+This is **not** a framework or library. It is a set of markdown files and shell scripts
+that shape how Claude Code behaves on substantial software projects.
 
-## What this is
+Built for Claude Opus 4.7+ and Claude Code 2.1+. Tuned for TypeScript/Node.js full-stack
+projects; the Planner can target any stack.
 
-A set of Skills, agent prompts, and hooks that plug into Claude Code to enable autonomous multi-agent software development. You give Claude a 1–4 sentence prompt and the harness orchestrates planning, contract negotiation, test-driven implementation, adversarial QA, and retrospective drift analysis — all file-based, all auditable via git.
-
-This is NOT a framework or a library. It's a set of markdown files that shape how Claude Code behaves when working on substantial projects.
-
-## Origin
-
-Based on Anthropic Labs' engineering work:
-- [Harness design for long-running application development](https://www.anthropic.com/engineering/harness-design-long-running-apps) (Rajasekaran, 2026) — the GAN-inspired three-agent architecture
-- [Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) — the predecessor essay
-- [Trustworthy agents in practice](https://www.anthropic.com/research/trustworthy-agents) (2026) — calibrated uncertainty, opacity-at-scale, multi-layer defenses, approval-fatigue
-
-…cross-pollinated with three open-source traditions:
-- **GitHub SpecKit** — constitutional priority, /clarify, /analyze patterns
-- **BMAD-METHOD V6** — Scrum Master agent + hyper-detailed story files
-- **Superpowers (obra)** — adversarial 1% rule, brainstorming-as-mandatory, TDD discipline
-
-See [docs/anthropic-alignment.md](docs/anthropic-alignment.md) for a point-by-point mapping between design decisions in this harness and the source material — including the v1.5 sub-table tying each new FR to its source quote.
+**v1.5.0 compatibility note:** v1.4 and earlier are non-functional on Claude Code 2.1+
+due to a changed subagent dispatch pattern. See [Migrating from v1.4](#migrating-from-v14--v15x).
 
 ---
 
-## What's new in v1.5 — Trustworthy-Agents deep alignment
+## Why this exists
 
-This release closes six gaps the v1.4 alignment pass did not address. Each is grounded in either a documented Anthropic anti-pattern, a direct prescription from Rajasekaran 2026, or a 2026 evolution of one of the three open-source traditions above.
+Anthropic's published research identifies three compounding problems with naive
+long-running agent setups:
 
-The six FRs are summarized below; full technical detail is in [docs/feature-contracts/v1.5-trustworthy-agents-deep-alignment.md](docs/feature-contracts/v1.5-trustworthy-agents-deep-alignment.md).
+**1. Context degradation across sessions.**
+[Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
+showed that agents lose coherence across context windows. Structured state handoffs —
+progress files, git commits — outperform unstructured continuations.
 
-### FR-1 — Subagent observability streaming
-**Problem.** The orchestrator dispatches Generator/Evaluator with `claude -p` and blocks until exit. A 20-minute Generator BUILD was a black box to the human. Trustworthy Agents calls this out by name as the *opacity-at-scale* anti-pattern: *"Subagent workflows become no longer neatly visible as a single thread."*
+**2. Generator and evaluator share context.**
+Rajasekaran (2026) found that "separating the agent doing the work from the agent judging
+it proves to be a strong lever" ([Harness Design for Long-Running Application Development](https://www.anthropic.com/engineering/harness-design-long-running-apps)).
+When one agent both builds and grades the work, it optimises for the appearance of
+correctness rather than correctness itself.
 
-**What v1.5 ships.** A lightweight heartbeat. Each subagent appends one structured JSONL milestone per boundary event (mode start, TDD phase boundary, FR/AC tested, blockers) to `.harness/features/${FEATURE}/_progress.jsonl`. The orchestrator polls every 10s during dispatch and prints compact `[HH:MM AGENT] phase: msg` lines so the human can follow along.
+**3. Subagent opacity and over-confident acting.**
+[Trustworthy Agents in Practice](https://www.anthropic.com/research/trustworthy-agents)
+(2026) observes that subagent workflows "are no longer neatly visible as a single thread
+of actions" (verbatim), creating an opacity problem as agent count scales. The same
+article emphasises training models toward "raising concerns, seeking clarification, or
+declining to proceed" rather than forging ahead on assumptions (verbatim). Paraphrased:
+the antidote to subagent opacity is mandatory live observability and mandatory calibrated
+pausing on ambiguity — both of which the harness implements explicitly.
 
-**Files added.**
-- `plugins/harness/agents/_progress-protocol.md` — shared protocol (schema, when-to-emit by agent, when-NOT-to-emit anti-patterns, rate limit, emission/poller reference code)
-- `plugins/harness/scripts/progress-poller.sh` — `start_progress_poller` / `stop_progress_poller` helpers, jq-or-fallback formatting, respects `manifest.config.observability.heartbeat` toggle
-
-**Files updated.**
-- `agents/{planner,generator,evaluator}.md` — each gains a §Progress Logging section pointing to the protocol, with agent-specific milestone events
-- `commands/sprint.md` — wraps all 6 dispatches (Planner + 3 negotiate + BUILD + EVALUATE) with start/stop calls
-- `templates/manifest.yaml` — new `config.observability` block (`heartbeat`, `poll_interval_seconds`, `rate_limit_seconds`)
-
-**How to use.** Heartbeat is on by default in v1.5+ manifests. Set `config.observability.heartbeat: false` for fully silent runs (e.g., CI batch jobs where no human is watching).
-
-### FR-2 — Hook-enforced spec-file ownership
-**Problem.** v1.3 introduced the [File Ownership Contract](plugins/harness/skills/harness/SKILL.md) — "the orchestrator does NOT edit spec files; only fresh subagents do." But this rule was prose-only. A future Claude could violate it by Edit-ing `.harness/spec/*` directly from the orchestrator's fat-context session, leaking conversational noise into spec files. That's the exact failure mode subagent isolation exists to prevent.
-
-**What v1.5 ships.** The `pre-tool-use.sh` hook now inspects every `Edit` and `Write` tool call (it was Bash-only before). Writes to `.harness/spec/*`, `.harness/features/*/contract.md`, and `.harness/evaluator/criteria.md` are blocked when:
-- `CLAUDE_SUBAGENT≠1` (orchestrator is invoking, not a dispatched subagent), AND
-- `state.phase` in `manifest.yaml` is NOT in the authorized set: `amending | clarifying | editing | tuning | retrospective | constitution-amending`
-
-**Files added.**
-- `plugins/harness/scripts/phase-guard.sh` — `phase_set` / `phase_restore` helpers, portable BSD/GNU sed handling, idempotent restore
-
-**Files updated.**
-- `plugins/harness/hooks/pre-tool-use.sh` — adds Edit/Write inspection block ahead of the existing Bash-only checks; blocks with a copy-pasteable list of correct commands
-- 5 spec-edit commands gain `Step 0: Phase guard` (set "<phase>") + `Step Final: Restore phase`: `amend.md`, `clarify.md`, `edit.md`, `tune-evaluator.md`, `retrospective.md`
-- `SKILL.md` — File Ownership Contract gains an "Enforcement (FR-2, v1.5+)" subsection
-- `templates/manifest.yaml` — phase enum documentation expands to two families (pipeline + spec-edit)
-
-**How to use.** Nothing new at the user level. The dedicated spec-edit commands handle the phase wrapping automatically. If you (somehow) try to use raw `Edit` on a spec file from the orchestrator, the hook now stops you and tells you which command to use instead.
-
-### FR-3 — Mid-build pause-and-ask
-**Problem.** Generator hits genuine ambiguity in BUILD (e.g., contract says "user can sort bookmarks" — sort by what?). Pre-v1.5 options:
-- Guess silently → likely fails Evaluator
-- Mark `partial` → costs a retry round
-- Stop the build → user manually intervenes via rewind/amend
-
-Trustworthy Agents emphasizes calibrated uncertainty by name: *"reinforce Claude's choice to pause."* The Planner had `AskUserQuestions`; the Generator did not, precisely where the cost of guessing is highest.
-
-**What v1.5 ships.** A file-based pause matching the existing comm pattern. When the Generator hits an ambiguity it cannot reasonably guess past, it writes `.harness/features/${FEATURE}/pause-questions.md` with structured Qs. Each Q MUST include a `default if unanswered` fallback — that anti-procrastination clause forces the Generator to commit to a choice even while asking. The orchestrator detects the file, surfaces it to the user with the same UX as `/harness:clarify`, accepts answers, then re-dispatches a fresh Generator with the answers as additional context.
-
-**Files added.**
-- `plugins/harness/templates/features/pause-questions.md.txt` — structured template with self-documenting comments (lives in plugin runtime path so Generator can read it via `${CLAUDE_PLUGIN_ROOT}/templates/...`)
-
-**Files updated.**
-- `agents/generator.md` — new §Pause Protocol section under MODE: BUILD with 4 RED FLAGS calling out the rationalizations Claude will use to mis-pause (risk-aversion, API uncertainty, refactor style, time-budget questions)
-- `commands/sprint.md` — Step 3a wraps post-BUILD detection: pause-loop with `MAX_PAUSES=3` per sprint and explicit `/harness:rewind negotiating` escalation when exceeded; archives pauses to `paused-history/`; increments `agent_checkins` calibration metric per pause
-
-**How to use.** Nothing to invoke directly — pauses happen organically when Generator finds genuine ambiguity. You'll see the questions surface, answer in chat or by editing the file, and the build resumes. Repeat-pausing >3 times on the same sprint signals an under-determined contract and the orchestrator suggests a rewind.
-
-### FR-4 — Per-FR story files (BMAD V6)
-**Problem.** The aggregate `contract.md` bundles all FRs in one file. Generator BUILD reads the whole contract before each TDD cycle. As FR count grows, context budget for *the FR being worked on* shrinks. Recovery granularity is also coarse — `state.current_task: FR-005` requires re-reading the full contract on resume.
-
-BMAD V6's Scrum Master agent solves this with per-story files: *"hyper-detailed development stories that contain everything the Dev agent needs — full context, implementation details, and architectural guidance embedded directly in story files."*
-
-**What v1.5 ships.** Planner Pass 2 now emits ONE story per FR alongside the aggregate contract:
-
-```
-.harness/features/001-bookmarks/
-├── contract.md          # Aggregate (Evaluator's source of truth, unchanged)
-├── stories/
-│   ├── FR-001.md        # Self-contained per-FR story
-│   ├── FR-002.md
-│   └── FR-003.md
-└── …
-```
-
-Each story contains: the FR text + ACs + ECs (verbatim from contract — never paraphrased), persona snippet (only the personas referenced by this FR), architectural slice (only the ADRs that apply), constitution principles that bind here (subset of the 17), dev guidance from negotiation, and a TDD anchor (the observable behavior to test FIRST).
-
-Generator BUILD reads `stories/FR-${current_task}.md` at the START of each TDD cycle. Aggregate contract is consulted only for cross-FR concerns.
-
-**Critical invariant.** Stories MUST reference contract sections by ID — NEVER paraphrase. Drift between story and aggregate contract is a build failure (Evaluator hash-checks).
-
-**Files added.**
-- `plugins/harness/templates/features/story.md.txt` — template with the no-paraphrase invariant + authoring rules embedded as comments (lives in plugin runtime path so Planner Pass 2 can read it via `${CLAUDE_PLUGIN_ROOT}/templates/...`)
-
-**Files updated.**
-- `agents/planner.md` Pass 2 — emits `stories/` after writing the aggregate contract; authoring rules + folder layout documented; "Dev guidance" section is `{{populated by negotiate phase}}` placeholder until negotiation backfills
-- `agents/generator.md` BUILD Phase 2 — reads `stories/${CURRENT_FR}.md` per TDD cycle as canonical context; falls back to aggregate contract for legacy features without `stories/` (graceful degradation)
-- `commands/sprint.md` — BUILD dispatch context includes a STORY INDEX section pointing the Generator at the stories/ directory
-- `SKILL.md` File Ownership Contract — new row: `features/NNN/stories/FR-NNN.md` writer = Planner Pass 2 (init) + Generator BUILD (refinements)
-
-**How to use.** Automatic for new features in v1.5+ projects. Existing v1.4 features without `stories/` continue to work — Generator reads the aggregate contract as before.
-
-### FR-5 — Component-as-assumption stress test
-**Problem.** Direct quote from Rajasekaran 2026 — never previously implemented in any harness:
-
-> *"Every component in a harness encodes an assumption about what the model can't do on its own, and those assumptions are worth stress testing... removing one component at a time and reviewing what impact it had."*
-
-As Claude improves (Opus 4.7, future versions), some harness components silently become dead weight; others may grow more important. Without periodic stress-testing, the harness accumulates obsolete machinery.
-
-**What v1.5 ships.** A new command `/harness:assumption-test "<component>"` that runs a calibrated A/B with and without a named component on a user-supplied canary spec. The script computes per-criterion deltas, counts CRITICAL/MAJOR finding changes, and classifies the verdict:
-- `LOAD-BEARING` — any criterion drops ≥2 points OR critical findings increase
-- `MARGINAL` — criterion drops by 1 OR major findings increase
-- `OBSOLETE` — no degradation; component is no longer earning its keep
-
-Every run produces a mandatory ADR in `progress/decisions.md`.
-
-**Initial set of testable components (7):** `brainstorm`, `negotiation`, `two-stage-eval`, `red-flags`, `calibration-examples`, `reward-hacking-scan`, `analyze`.
-
-**Files added.**
-- `plugins/harness/commands/assumption-test.md` — full procedure, supported component matrix, verdict thresholds, anti-patterns
-- `plugins/harness/scripts/assumption-test.sh` — two modes: `--setup` prints the disable strategy per component (env-var auto for 4, manual plugin-copy for 3); `--compare` parses two eval-reports, computes deltas, emits JSON verdict
-
-**Files updated.**
-- `templates/manifest.yaml` — `harness.last_assumption_test` field (date, component, canary, verdict) — surfaced by `/harness:audit` for retest reminders
-- `harness.version` bumped 1.4 → 1.5
-
-**How to use.**
-```bash
-/harness:assumption-test "negotiation"
-# → orchestrator asks for canary path
-# → runs sprint with negotiation active (baseline)
-# → runs sprint with negotiation skipped (without)
-# → script computes verdict, you decide whether to keep or remove
-```
-
-**Cadence.** Quarterly per component. Each test runs a sprint twice — expensive. Don't run it ad-hoc.
-
-**v1.5 limitation explicit.** Full A/B automation is partial in v1.5: env-var-driven components (`brainstorm`, `analyze`, `calibration-examples`, `reward-hacking-scan`) work end-to-end via the script. Prompt-modifying components (`red-flags`, `two-stage-eval`, `negotiation`) require a temporary plugin copy with manual instructions printed. Full automation is future work.
-
-### FR-6 — Constitution amendment governance
-**Problem.** The constitution (`spec/constitution.md`) is the project's architectural DNA. v1.0–v1.4 made it "immutable post-init" — strong but rigid. Real projects sometimes need to amend (post-incident security rule, regulatory change, scope drift). The pre-v1.5 workaround was to manually edit the file, violating both file-ownership AND immutability rules.
-
-SpecKit handles this with explicit constitutional governance. v1.5 adopts the pattern with high ceremony — the friction is the feature, not the bug.
-
-**What v1.5 ships.** A new command `/harness:constitution-amend "<reason>"` with FIVE ceremony stages:
-
-1. **Typed confirmation** — must type `I-AM-AMENDING-THE-CONSTITUTION` verbatim (forces deliberate intent)
-2. **≥50-char reason** — forces explanation that becomes the ADR
-3. **In-progress feature handling** — surfaces the cost (current feature halts or ships under old rules)
-4. **Mandatory ADR** in `progress/decisions.md` — leaves an audit trail
-5. **Re-validation pass** against every completed feature — catches the case where past work no longer complies
-
-**Files added.**
-- `plugins/harness/commands/constitution-amend.md` — full procedure with all 5 ceremony stages, anti-patterns, why-so-much-ceremony rationale
-
-**Files updated.**
-- `agents/planner.md` — new MODE: CONSTITUTION-AMEND that structurally mirrors AMEND mode; identifies principle add/change/remove, drafts patches, flags conflicts, refuses non-testable principles, refuses §-renumbering
-- `agents/evaluator.md` — new MODE: REVALIDATE for STATIC constitutional audit (no Playwright, no test runs); per-principle PASS/FAIL/N/A report with backport-vs-grandfather recommendations
-- `SKILL.md` File Ownership Contract — `constitution.md` gains a SECOND writer (`/harness:constitution-amend`, behind the ceremony gates)
-- `templates/manifest.yaml` — `constitution.amendments` append-only history with full schema documented inline
-- The FR-2 hook already supports `constitution-amending` phase — wires together cleanly
-
-**How to use.** Don't use it casually. The ceremony exists because constitutional change cascades into every prior feature. When you do use it:
-
-```bash
-/harness:constitution-amend "Add §17: all PII fields MUST be encrypted at rest. Reason: Q2 incident IR-2026-04 found unencrypted email addresses in audit logs."
-# → typed confirmation prompt
-# → in-progress feature handling
-# → Planner drafts patches → you review
-# → Evaluator REVALIDATEs each completed feature → you decide backport vs grandfather
-# → patches applied → ADR written → manifest history updated
-```
+BELCORT Harness addresses all three. See [docs/anthropic-alignment.md](docs/anthropic-alignment.md)
+for a point-by-point decision-to-source map, including a v1.5 sub-table tying each new
+feature to its specific source quote.
 
 ---
 
-## v1.5 design choices worth knowing
+## Provenance
 
-- **Phase enum splits two families.** Pipeline phases (`planning|analyzing|negotiating|building|evaluating|retrospective|complete`) describe normal sprint flow. Spec-edit phases (`amending|clarifying|editing|tuning|constitution-amending`) authorize the FR-2 hook to permit orchestrator-side spec writes. The `retrospective` phase is in both families. See `templates/manifest.yaml` for inline documentation.
+Three open-source traditions, each contributing a distinct dimension:
 
-- **No breaking schema changes.** All new manifest fields have safe defaults. v1.4 manifests load without modification; new fields read as their documented defaults. The `harness.version` bump 1.4 → 1.5 is informational, not blocking.
-
-- **Backward-compatible degradations.** v1.5 features fall back gracefully on legacy state:
-  - FR-1 heartbeat is opt-out via `config.observability.heartbeat: false`
-  - FR-2 hook fails open if jq/python3 missing (existing pattern)
-  - FR-4 Generator uses aggregate contract when `stories/` is missing
-  - FR-5 manifest field defaults to empty (no test ever run)
-
-- **All shell scripts pass `bash -n`.** Verified at build time. Hook + helpers are portable across BSD (macOS) and GNU (Linux) sed/awk via runtime detection.
+- **[GitHub SpecKit](https://github.com/github/spec-kit)** — constitutional priority
+  ordering, surgical `/clarify` and `/analyze` patterns instead of whole-file regeneration,
+  and explicit constitutional governance. BELCORT's `/harness:constitution-amend` adopts
+  SpecKit's high-ceremony amendment model.
+- **[BMAD-METHOD V6](https://github.com/bmad-code-org/BMAD-METHOD)** — the Scrum Master
+  agent pattern of per-story files with full embedded context. BELCORT's FR-4 adopts this
+  as `features/NNN/stories/FR-NNN.md`, read by the Generator at the start of each TDD
+  cycle.
+- **[Superpowers (obra)](https://github.com/obra/superpowers)** — the adversarial 1% rule,
+  mandatory brainstorming before planning, and red-flag tables enumerating the specific
+  rationalizations models use to skip TDD. BELCORT imports the TDD discipline and the
+  anti-reward-hacking git-archaeology scan.
 
 ---
 
-## Migrating from v1.4
+## How it works — three-agent pipeline
 
-For existing projects:
+Each agent runs as a **fresh subagent** via
+`CLAUDE_SUBAGENT=1 claude -p ... --append-system-prompt-file`. They never share
+conversation context. They communicate exclusively via files in `.harness/`. This is the
+GAN insight from Rajasekaran 2026 applied to code generation: "taking inspiration from
+Generative Adversarial Networks (GANs), I designed a multi-agent structure with a
+generator and evaluator agent."
 
-1. **Re-run `/harness:setup`** — re-installs the global CLAUDE.md snippet, picks up any v1.5 rule changes
-2. **Re-run `/harness:doctor`** — verifies new components install correctly; existing v1.4 manifests still pass all checks
-3. **Optional: bump manifest** — change `harness.version: "1.4"` → `harness.version: "1.5"` for accurate reporting. Existing values for `config.calibration_metrics`, `tuning_debt`, etc. carry over unchanged.
-4. **Optional: enable observability** — add `config.observability: { heartbeat: true }` block to manifest if you want the FR-1 live progress lines. Default is on for v1.5+ manifests.
+### Planner ([agents/planner.md](plugins/harness/agents/planner.md))
 
-For new projects, the v1.5 plugin install handles everything — `/harness:sprint` Just Works.
+Two passes. **Pass 1**: PRD + constitution — what and why, no file paths or components.
+**Pass 2**: architecture direction + evaluator criteria + draft contract + per-FR story
+files. Explicitly constrained to "stay focused on product context and high level technical
+design rather than detailed technical implementation" (Rajasekaran 2026) — the HOW is for
+the Generator and Evaluator to negotiate. Runs a 16-point self-validation before returning.
 
-## Core design decisions (and their Anthropic-article basis)
+Writes: `spec/prd.md`, `spec/constitution.md`, `spec/architecture.md`,
+`evaluator/criteria.md`, `features/NNN/contract.md` (draft),
+`features/NNN/stories/FR-NNN.md` (one per FR), `init.sh`, `manifest.yaml`, `ROADMAP.md`.
+Tools: Read, Write, mcp__context7. No Bash (narrowest tool surface).
 
-| Decision | Source |
-|---|---|
-| Three agents (Planner / Generator / Evaluator) as separate subagents | GAN-inspired architecture described in the Anthropic post |
-| Evaluator MUST have separate context from Generator | "Separating the agent doing the work from the agent judging it proves to be a strong lever" |
-| Planner outputs high-level direction only, NOT file paths or components | "stay focused on product context and high level technical design rather than detailed technical implementation" |
-| Generator and Evaluator negotiate a sprint contract BEFORE any code is written | "Before each sprint, the generator and evaluator negotiated a sprint contract... before any code was written" |
-| File-based agent communication | "Communication was handled via files: one agent would write a file, another agent would read it..." |
-| Evaluator grades against 4 hard-threshold criteria | "Each criterion had a hard threshold, and if any one fell below it, the sprint failed" |
-| Few-shot calibration examples for Evaluator scoring | "I calibrated the evaluator using few-shot examples with detailed score breakdowns" |
-| Tuning loop: capture human-Evaluator divergence, refine over time | "The tuning loop was to read the evaluator's logs, find examples where its judgment diverged from mine..." |
-| Criteria weighting emphasizes model's weak dimensions | "by weighting design and originality more heavily it pushed the model toward more aesthetic risk-taking" |
-| Criteria wording deliberately chosen (shapes Generator output, not just Evaluator scoring) | "The wording of the criteria steered the generator in ways I didn't fully anticipate" |
+### Generator ([agents/generator.md](plugins/harness/agents/generator.md))
+
+Three modes. **NEGOTIATE**: proposes the HOW (component breakdown, data model, API shape,
+test strategy per AC) to `proposal.md`. **FINALIZE-CONTRACT**: merges proposal + Evaluator
+review into the final `contract.md`. **BUILD**: implements with strict
+RED → GREEN → REFACTOR → COMMIT TDD, reading `stories/FR-NNN.md` per TDD cycle as
+canonical per-cycle context. Contains explicit red-flag tables for the specific
+rationalizations models use to skip TDD, plus the reward-hacking prohibition list.
+
+Tools: Read, Write, Bash, mcp__context7.
+
+### Evaluator ([agents/evaluator.md](plugins/harness/agents/evaluator.md))
+
+Two modes. **REVIEW-PROPOSAL**: reviews the Generator's implementation plan before any
+code is written — the cheapest point to catch architectural risks. **EVALUATE**: exercises
+the running application via Playwright MCP, grades against four criteria with hard
+thresholds, and runs the reward-hacking scan (git archaeology for test deletions, skip
+markers, trivial assertions, same-commit test+impl patterns). Reads calibration examples
+in `evaluator/examples.md` before every scoring pass to prevent leniency drift.
+
+The Evaluator is **always dispatched as a separate process** from the Generator. Tools:
+Read, Write, Bash, mcp__playwright.
+
+**Evaluator criteria** (template at [templates/evaluator/criteria.md.txt](plugins/harness/templates/evaluator/criteria.md.txt); the runtime copy lives at `.harness/evaluator/criteria.md` inside each project, created by the Planner):
+
+| Criterion | Threshold | How tested |
+|-----------|-----------|-----------|
+| Functionality | 6/10 | Playwright: all flows + edge cases |
+| Code Quality | 6/10 | Source review against constitution |
+| Test Coverage | 6/10 | Run suite + TDD evidence in git log |
+| Product Depth | 5/10 | Use app as a real user, try to break it |
+
+Any criterion below threshold = FAIL → Generator retries with detailed feedback. Max 3
+retries (configurable via `config.max_retries` in `manifest.yaml`).
+
+---
+
+## The sprint flow
+
+Full procedure in [commands/sprint.md](plugins/harness/commands/sprint.md):
+
+1. **Brainstorm check (opt-in)** — scans the prompt for vagueness signals; if found,
+   suggests `/harness:brainstorm` before locking in direction.
+2. **Doctor** — environment preflight: Claude Code CLI, MCPs (context7, playwright), Node,
+   git. Hard stop on CRITICAL failures. See [commands/doctor.md](plugins/harness/commands/doctor.md).
+3. **Plan (two-pass)** — Planner subagent writes PRD, constitution, architecture, criteria,
+   draft contract, and per-FR story files. Runs 16-point self-validation before returning.
+   Orchestrator chmods `init.sh` (Planner has no Bash — v1.5.1 fix).
+4. **Analyze** — cross-artifact consistency check (PRD ↔ architecture ↔ contract).
+   CRITICAL findings halt the pipeline; warnings pass through. Runs BEFORE the human gate
+   so the reviewer sees any drift before being asked to approve.
+5. **Human gate** — you review `spec/prd.md`, `spec/architecture.md`,
+   `features/NNN/contract.md`, plus the analyze report. Options: approve, `/harness:clarify`
+   (Q&A auto-patch), `/harness:amend` (surgical tweak), `/harness:rewind planning`
+   (fundamentally re-plan). **Do not proceed until explicitly approved.**
+6. **Negotiate** — Generator writes `proposal.md`; Evaluator writes `review.md`; iterate
+   up to 3 rounds; Generator finalizes `contract.md`. "Before each sprint, the generator
+   and evaluator negotiated a sprint contract: agreeing on what 'done' looked like for
+   that chunk of work before any code was written." (Rajasekaran 2026)
+7. **Build (TDD)** — Generator implements against the negotiated contract, one FR at a
+   time, with atomic per-FR commits (`[harness:build] FR-NNN: <behavior>`).
+8. **Pause check** — if Generator wrote `pause-questions.md` (genuine mid-build
+   ambiguity), orchestrator surfaces the questions, collects answers, re-dispatches.
+   Max 3 pauses per sprint before escalation to `/harness:rewind negotiating`.
+9. **Evaluate** — Evaluator tests the running app via Playwright, grades, runs
+   reward-hacking scan, writes `eval-report.md`.
+10. **Tuning check** — orchestrator asks whether you agree with the Evaluator's judgment;
+    divergences feed `evaluator/tuning-log.md`. Pattern detection: ≥3 entries in the same
+    category triggers a `/harness:tune-evaluator` prompt.
+11. **Retrospective** — mandatory drift analysis: what was spec'd vs what was built; you
+    approve any spec updates.
+12. **Merge** — squash merge to main, ROADMAP.md updated, retry loop if FAIL (max 3).
+
+---
+
+## File layout
+
+What `.harness/` contains. Authoritative per-file writer/reader table in
+[SKILL.md § File Ownership Contract](plugins/harness/skills/harness/SKILL.md).
+
+```
+.harness/
+├── manifest.yaml            # Live state: phase, current_feature, current_task
+├── ROADMAP.md               # Shipped / in-progress / planned (product lifetime)
+├── spec/                    # Global — persists across features
+│   ├── prd.md               # Product requirements
+│   ├── architecture.md      # Stack + high-level direction (no file paths)
+│   ├── constitution.md      # Enforceable coding rules (immutable except via /constitution-amend)
+│   └── evaluator-notes.md   # Project-specific Evaluator calibration (optional)
+├── features/                # Per-feature artifacts
+│   └── 001-example/
+│       ├── contract.md      # Final negotiated contract (Evaluator's source of truth)
+│       ├── stories/         # FR-4: per-FR story files (Planner writes, Generator reads per cycle)
+│       │   └── FR-001.md
+│       ├── proposal.md      # Generator's HOW (from negotiation)
+│       ├── review.md        # Evaluator's review (from negotiation)
+│       ├── implementation-report.md
+│       ├── eval-report.md
+│       └── _progress.jsonl  # FR-1: live heartbeat stream
+├── evaluator/
+│   ├── criteria.md          # 4-criterion grading rubric
+│   ├── examples.md          # Few-shot calibration examples (mandatory pre-scoring read)
+│   └── tuning-log.md        # Human-Evaluator divergence log (append-only)
+├── progress/
+│   ├── changelog.md         # Session log (append-only)
+│   ├── decisions.md         # Architecture Decision Records
+│   └── known-issues.md      # Minor deferred findings
+└── init.sh                  # Project health check
+```
+
+---
 
 ## Installation
 
-Requires Claude Code installed and working.
+Requires Claude Code 2.1+ installed and working.
 
 ### Option A — Plugin install (recommended)
 
@@ -248,9 +217,13 @@ Requires Claude Code installed and working.
 /harness:setup
 ```
 
-That's it. The plugin auto-registers the skill, three agents, 19 slash commands (`sprint`, `quick`, `resume`, `brainstorm`, `clarify`, `amend`, `edit`, `steer`, `rewind`, `validate`, `analyze`, `negotiate`, `retrospective`, `tune-evaluator`, `audit`, `assumption-test` (v1.5), `constitution-amend` (v1.5), `doctor`, `setup`), three hooks (SessionStart + PreToolUse for Bash + PreToolUse for Edit/Write), and two MCP servers (context7 + playwright). The one-time `/harness:setup` command patches `~/.claude/CLAUDE.md` with the harness behavioral rules so they apply globally and survive context compaction. The patch is idempotent, version-aware, and removable (`scripts/uninstall-rules.sh`).
+Registers: the harness skill, three agent prompts, 19 slash commands, three hooks
+(SessionStart + PreToolUse for Bash + PreToolUse for Edit/Write), and two MCP servers
+(context7, playwright). The one-time `/harness:setup` patches `~/.claude/CLAUDE.md` with
+harness behavioral rules that survive context compaction. The patch is idempotent,
+version-aware, and removable via `scripts/uninstall-rules.sh`.
 
-### Option B — Manual install (legacy)
+### Option B — Manual install
 
 ```bash
 git clone https://github.com/mosaladtaooo/belcort-harness.git
@@ -258,82 +231,282 @@ cd belcort-harness
 ./install/install.sh
 ```
 
-Complete the two manual steps the installer prints (append CLAUDE.md snippet, register hooks in `~/.claude/settings.json`).
+Follow the two manual steps the installer prints: append the CLAUDE.md snippet, register
+hooks in `~/.claude/settings.json`.
 
 Verify either install:
 
 ```bash
-./install/verify.sh
+/harness:doctor
 ```
+
+---
 
 ## Quick start
 
-Once installed, in any project directory:
-
 ```bash
-# Start Claude Code, then:
+# In any project directory, start Claude Code, then:
 /harness:sprint "Build a minimal bookmark manager with tags and search"
 ```
 
-The harness will orchestrate planning, negotiation, build, and evaluation across the session. Your feedback gets captured into the Evaluator tuning loop for next time.
+For a 3-FR project on Opus 4.7, expect roughly 15–20 minutes and ~$8–10 in API usage,
+based on the v1.5.1 real-use test (Node.js CLI, 3 FRs, 10 ACs/ECs — see
+[CHANGELOG.md](CHANGELOG.md)). Rajasekaran 2026 discusses the cost/quality trade-off of
+harness overhead vs single-agent runs; read the essay for the authoritative numbers and
+methodology rather than trusting any specific quote here. Calibrate expectations to
+project size: a 30-FR epic costs far more than a 3-FR feature.
 
-## Commands
+For anything under 15 minutes of genuine work, use `/harness:quick` instead.
 
-| Command | What it does |
-|---|---|
-| `/harness:sprint "<prompt>"` | Full pipeline: plan → analyze → negotiate → build → evaluate → tune → retrospect → merge |
-| `/harness:quick "<prompt>"` | Skip planning. Minimal contract. Single build + QA pass |
-| `/harness:resume` | Continue an interrupted pipeline from the last checkpoint |
-| `/harness:validate` | Audit existing spec files against the 16-point quality checklist |
-| `/harness:edit "<change>"` | Targeted spec modification with downstream reference updates |
-| `/harness:analyze` | Cross-artifact consistency check (PRD vs architecture vs contract) |
-| `/harness:negotiate` | Generator ↔ Evaluator contract negotiation before build |
-| `/harness:retrospective` | Post-merge drift analysis — sync spec with what was built |
-| `/harness:tune-evaluator` | Review Evaluator divergence patterns; propose calibration improvements |
-| `/harness:audit` | Verification debt scan — find deferred issues |
-| `/harness:assumption-test "<component>"` (v1.5) | Component-as-assumption stress test — A/B a harness component on a canary spec, classify LOAD-BEARING/MARGINAL/OBSOLETE. Quarterly cadence. |
-| `/harness:constitution-amend "<reason>"` (v1.5) | High-ceremony constitution change — typed confirmation + ≥50-char reason + revalidation against every completed feature. The ONLY authorized path to amend `spec/constitution.md` after Planner Pass 1. |
+---
 
-## What it produces
+## Command reference
 
-A `.harness/` directory in your project, git-tracked and append-only:
+19 commands, grouped by category. Each links to its procedure file.
 
-```
-.harness/
-├── manifest.yaml
-├── ROADMAP.md
-├── spec/          # PRD, architecture, constitution, evaluator notes
-├── features/      # Per-feature folders with contract/proposal/review/reports
-├── evaluator/     # Criteria, few-shot examples, tuning log
-└── progress/      # Changelog, ADRs, known issues
-```
+| Command | What it does | Procedure |
+|---------|-------------|-----------|
+| **Pipeline** | | |
+| `/harness:sprint "<prompt>"` | Full pipeline: brainstorm check → doctor → plan → human gate → analyze → negotiate → build → evaluate → tune → retro → merge | [sprint.md](plugins/harness/commands/sprint.md) |
+| `/harness:quick "<prompt>"` | Skip planning. Minimal contract. Single build + QA pass. For <15 min tasks. | [quick.md](plugins/harness/commands/quick.md) |
+| `/harness:resume` | Recover from any interrupted phase using `manifest.yaml` + `changelog.md` | [resume.md](plugins/harness/commands/resume.md) |
+| **Spec evolution** | | |
+| `/harness:brainstorm "<idea>"` | Pre-plan ambiguity surfacing — extracts silent assumptions before Planner locks direction | [brainstorm.md](plugins/harness/commands/brainstorm.md) |
+| `/harness:clarify` | Post-plan structured Q&A: surface ambiguities, collect answers, auto-patch specs | [clarify.md](plugins/harness/commands/clarify.md) |
+| `/harness:amend "<tweak>"` | Surgical spec amendment via fresh Planner subagent (never from orchestrator context) | [amend.md](plugins/harness/commands/amend.md) |
+| `/harness:edit "<change>"` | Cascade-aware multi-file spec edit (stack swaps, NFR tightening) | [edit.md](plugins/harness/commands/edit.md) |
+| `/harness:steer "<nudge>"` | Mid-build guidance — Generator picks it up at next TDD cycle boundary | [steer.md](plugins/harness/commands/steer.md) |
+| `/harness:rewind <phase>` | Reset current feature to earlier phase. Archive-based (reversible). Requires typed confirmation. | [rewind.md](plugins/harness/commands/rewind.md) |
+| `/harness:validate` | 16-point quality audit on existing spec files | [validate.md](plugins/harness/commands/validate.md) |
+| `/harness:analyze` | Cross-artifact consistency check (PRD ↔ architecture ↔ contract) | [analyze.md](plugins/harness/commands/analyze.md) |
+| `/harness:negotiate` | Standalone Generator ↔ Evaluator contract negotiation | [negotiate.md](plugins/harness/commands/negotiate.md) |
+| **Per-sprint** | | |
+| `/harness:retrospective` | Post-merge drift analysis — spec vs what was built; propose spec updates | [retrospective.md](plugins/harness/commands/retrospective.md) |
+| `/harness:tune-evaluator` | Review divergence log; propose calibration improvements (examples first, prompt changes rarely) | [tune-evaluator.md](plugins/harness/commands/tune-evaluator.md) |
+| `/harness:audit` | Verification debt scan — deferred issues, stale known-issues, TODO/FIXME without owners | [audit.md](plugins/harness/commands/audit.md) |
+| **v1.5 additions** | | |
+| `/harness:assumption-test "<component>"` | A/B a harness component on a canary spec — LOAD-BEARING / MARGINAL / OBSOLETE verdict + mandatory ADR. Quarterly cadence. | [assumption-test.md](plugins/harness/commands/assumption-test.md) |
+| `/harness:constitution-amend "<reason>"` | High-ceremony constitution change: typed confirmation + ≥50-char reason + mandatory ADR + revalidation against every completed feature | [constitution-amend.md](plugins/harness/commands/constitution-amend.md) |
+| **Infrastructure** | | |
+| `/harness:doctor` | Environment preflight — Claude Code, MCPs, Node, git. Auto-runs at sprint/quick start. | [doctor.md](plugins/harness/commands/doctor.md) |
+| `/harness:setup` | One-time install of harness behavioral rules into `~/.claude/CLAUDE.md` | [setup.md](plugins/harness/commands/setup.md) |
 
-## Non-goals
+---
 
-- **Not a general agent framework.** Use LangGraph or CrewAI for that.
-- **Not a replacement for human review.** The human gate after planning is mandatory.
-- **Not optimized for trivial tasks.** For <15 minute work, `/harness:quick` or no harness at all.
+## What's new in v1.5
 
-## Status
+Full technical detail in
+[docs/feature-contracts/v1.5-trustworthy-agents-deep-alignment.md](docs/feature-contracts/v1.5-trustworthy-agents-deep-alignment.md).
+Polished in v1.5.1; documented in v1.5.2.
 
-This harness is actively used for BELCORT AI Consulting's internal projects. It is opinionated and evolves frequently. Breaking changes are documented in CHANGELOG.md.
+### Critical: Claude Code 2.x compatibility fix
 
-**Current branch.** This is the `harness/v1.5-trustworthy-agents-deep-alignment` branch — the v1.5 release candidate. See [What's new in v1.5](#whats-new-in-v15--trustworthy-agents-deep-alignment) above for the FR-by-FR breakdown. The release candidate is open for review against `release/v1.4`.
+v1.4 and earlier inlined the full ~55KB agent role prompt as the user message of
+`claude -p`. On Claude Code 2.1+ this produced empty output — dispatched subagents wrote
+no files. v1.5.0 moves the agent role to `--append-system-prompt-file` and frames the
+user message as an explicit mode prompt. 14 dispatch sites across 5 command files
+updated. **Upgrade to v1.5.0+ is required for Claude Code 2.1+ users.**
 
-**Released versions** (see [CHANGELOG.md](CHANGELOG.md) for the full per-release breakdown).
-- **v1.5.0** (this branch) — Trustworthy-Agents deep alignment: subagent observability, hook-enforced spec ownership, mid-build pause, per-FR story files, component-as-assumption test, constitution amendment governance. **Also includes a critical subagent-dispatch fix required for Claude Code 2.1+**. 14 dispatch sites updated to use `--append-system-prompt-file` instead of inlining the agent prompt into the user message (the v1.4-and-earlier pattern produced empty output on 2.x).
-- v1.4 — SpecKit/BMAD alignment: coverage matrix, two-stage eval, RED FLAGS in all agents, brainstorm pre-plan, per-agent model pinning, calibration metrics. Superseded by v1.5.0.
-- v1.3 — Post-plan amendment flow, reward-hacking defenses, file ownership contract, environment preflight.
-- v1.2 — Plugin conversion.
-- v1.0 — Initial public release.
+### FR-1 — Subagent observability streaming
 
-Not affiliated with Anthropic.
+Addresses the subagent-opacity problem described in Trustworthy Agents: subagent
+workflows "are no longer neatly visible as a single thread of actions" (verbatim). Each
+subagent appends JSONL milestones to
+`_progress.jsonl`; the orchestrator polls every 10s and prints `[HH:MM AGENT] phase: msg`
+lines during each dispatch. Toggle via `config.observability.heartbeat: false` for silent
+CI runs.
+
+Files added: [agents/_progress-protocol.md](plugins/harness/agents/_progress-protocol.md),
+[scripts/progress-poller.sh](plugins/harness/scripts/progress-poller.sh).
+
+### FR-2 — Hook-enforced spec-file ownership
+
+The v1.3 File Ownership Contract ("orchestrator does NOT edit spec files") was prose-only.
+v1.5 promotes it to a `pre-tool-use.sh` Edit/Write check gated on `state.phase`.
+Unauthorized orchestrator writes to `spec/*`, `features/*/contract.md`, and
+`evaluator/criteria.md` are now mechanically blocked. Dedicated spec-edit commands
+(`/amend`, `/clarify`, `/edit`, etc.) set the phase via `scripts/phase-guard.sh` at entry
+and restore it at exit. Subagents (`CLAUDE_SUBAGENT=1`) bypass the gate — they are the
+canonical writers.
+
+See [SKILL.md § Enforcement (FR-2)](plugins/harness/skills/harness/SKILL.md).
+
+### FR-3 — Mid-build pause-and-ask
+
+Generator gains a file-based pause path for genuine mid-build ambiguity. When the
+contract describes the WHAT but the HOW is genuinely underdetermined, the Generator writes
+`pause-questions.md` — each question with a mandatory "default if unanswered" fallback
+(anti-procrastination clause). Orchestrator surfaces questions, collects answers,
+re-dispatches a fresh Generator. Max 3 pauses per sprint before escalation to
+`/harness:rewind negotiating`. Risk-aversion, API uncertainty, and refactor-style choices
+are explicitly listed as invalid pause reasons in `generator.md §Pause Protocol`.
+
+Template: [templates/features/pause-questions.md.txt](plugins/harness/templates/features/pause-questions.md.txt).
+
+### FR-4 — Per-FR story files (BMAD V6)
+
+Planner Pass 2 emits `features/NNN/stories/FR-NNN.md` per FR — self-contained context
+containing: persona snippet (only those that apply), ACs/ECs as verbatim ID references
+(never paraphrased), architectural slice, applicable constitution principles, and TDD
+anchor (the observable behavior to test first). Generator BUILD reads the current story at
+the start of each TDD cycle; aggregate `contract.md` is consulted only for cross-FR
+concerns. Strict no-paraphrase invariant enforced: story files must reference contract
+sections by ID. Evaluator hash-checks for drift.
+
+Template: [templates/features/story.md.txt](plugins/harness/templates/features/story.md.txt).
+
+### FR-5 — Component-as-assumption stress test
+
+Operationalises Rajasekaran 2026's direct prescription: "Every component in a harness
+encodes an assumption about what the model can't do on its own, and those assumptions are
+worth stress testing." New `/harness:assumption-test "<component>"` runs an A/B with and
+without a named component on a user-supplied canary spec; computes per-criterion deltas;
+classifies verdict as `LOAD-BEARING` / `MARGINAL` / `OBSOLETE`. Mandatory ADR every run.
+
+Seven testable components: `brainstorm`, `negotiation`, `two-stage-eval`, `red-flags`,
+`calibration-examples`, `reward-hacking-scan`, `analyze`. Quarterly cadence recommended
+(each test runs a sprint twice — expensive).
+
+See [commands/assumption-test.md](plugins/harness/commands/assumption-test.md).
+
+### FR-6 — Constitution amendment governance
+
+The constitution was "immutable post-init" — correct in principle, brittle in practice.
+New `/harness:constitution-amend` with five ceremony stages: (1) typed confirmation
+(`I-AM-AMENDING-THE-CONSTITUTION`), (2) ≥50-char reason, (3) in-progress feature
+handling, (4) mandatory ADR in `progress/decisions.md`, (5) revalidation against every
+completed feature via Evaluator REVALIDATE mode. This is the ONLY authorized path to
+modify `spec/constitution.md` after Planner Pass 1; the FR-2 hook permits constitution
+writes only when `state.phase = constitution-amending`.
+
+See [commands/constitution-amend.md](plugins/harness/commands/constitution-amend.md).
+
+---
+
+## Design decisions and sources
+
+Condensed from [docs/anthropic-alignment.md](docs/anthropic-alignment.md).
+Every direct quote below is verified against the source.
+
+| Decision | Source | Quote / note |
+|----------|--------|-------|
+| Three agents as separate fresh subagents | [Rajasekaran 2026](https://www.anthropic.com/engineering/harness-design-long-running-apps) | "Taking inspiration from Generative Adversarial Networks (GANs), I designed a multi-agent structure with a generator and evaluator agent." |
+| Evaluator never shares context with Generator | Rajasekaran 2026 | "Separating the agent doing the work from the agent judging it proves to be a strong lever." |
+| Planner scoped to product + high-level direction | Rajasekaran 2026 | "Stay focused on product context and high level technical design rather than detailed technical implementation." |
+| Contract negotiation before any code | Rajasekaran 2026 | "Before each sprint, the generator and evaluator negotiated a sprint contract: agreeing on what 'done' looked like for that chunk of work before any code was written." |
+| File-based agent communication | Rajasekaran 2026 | "Communication was handled via files: one agent would write a file, another agent would read it and respond either within that file or with a new file." |
+| Four hard-threshold criteria | Rajasekaran 2026 | "Each criterion had a hard threshold, and if any one fell below it, the sprint failed and the generator got detailed feedback on what went wrong." |
+| Few-shot calibration for Evaluator | Rajasekaran 2026 | "I calibrated the evaluator using few-shot examples with detailed score breakdowns." |
+| Tuning loop for human-Evaluator divergence | Rajasekaran 2026 | "The tuning loop was to read the evaluator's logs, find examples where its judgment diverged from mine, and update the QA's prompt to solve for those issues." |
+| Criteria wording shapes Generator output | Rajasekaran 2026 | "The wording of the criteria steered the generator in ways I didn't fully anticipate." |
+| Human gate after planning | [Trustworthy Agents](https://www.anthropic.com/research/trustworthy-agents) | "Claude shows the user its intended plan of action up-front. The user can review, edit, and approve the whole thing before anything happens." |
+| Subagent observability (FR-1, v1.5) | Trustworthy Agents | "Subagents raise new questions about how users can understand and steer workflows that are no longer neatly visible as a single thread of actions." |
+| Component stress-testing (FR-5, v1.5) | Rajasekaran 2026 | "Every component in a harness encodes an assumption about what the model can't do on its own, and those assumptions are worth stress testing." |
+
+**Intentional deviations** from Rajasekaran 2026 (BELCORT-specific or third-party):
+
+- Constitution as immutable post-init → from [GitHub SpecKit](https://github.com/github/spec-kit)
+- TDD RED → GREEN → REFACTOR discipline → from [Superpowers](https://github.com/obra/superpowers)
+- File Ownership Contract → BELCORT-specific (prevents orchestrator-authored spec edits)
+- Per-FR story files → from [BMAD-METHOD V6](https://github.com/bmad-code-org/BMAD-METHOD)
+- `/harness:clarify` and `/harness:amend` → patterned after SpecKit but with surgical patches
+  instead of whole-file regeneration
+
+---
+
+## When NOT to use this
+
+- **Trivial tasks (<15 min).** Planning overhead exceeds benefit. Use `/harness:quick` or
+  no harness.
+- **General agent orchestration.** Use LangGraph or CrewAI. This harness is narrowly
+  scoped to software development on a single codebase.
+- **Replacing human review.** The human gate after planning is mandatory; the harness
+  requires a human to review the spec before build begins.
+- **Fully automated CI pipelines without oversight.** The harness is designed for
+  human-in-the-loop sessions; critical decisions (approve spec, review divergence) require
+  a human.
+
+---
+
+## Migrating from v1.4 → v1.5.x
+
+**For existing projects:**
+
+1. **Re-run `/harness:setup`** — installs the updated CLAUDE.md snippet (picks up v1.5
+   behavioral rules, including subagent isolation guard).
+2. **Re-run `/harness:doctor`** — verifies new components; existing v1.4 manifests pass
+   all checks.
+3. **Optional:** bump `harness.version: "1.5"` in `manifest.yaml` for accurate reporting.
+   Existing `config.calibration_metrics`, `tuning_debt`, etc. carry over unchanged.
+4. **Optional:** add `config.observability: { heartbeat: true }` to manifest to enable
+   FR-1 live progress lines.
+
+**For new projects:** plugin install handles everything; `/harness:sprint` works
+immediately.
+
+**No breaking schema changes.** All v1.5 manifest fields have safe defaults; v1.4
+manifests load without modification.
+
+---
+
+## Compatibility
+
+| Requirement | Minimum | Notes |
+|-------------|---------|-------|
+| Claude Code | 2.1 | Required for `--append-system-prompt-file`. v1.4 silently fails on 2.x. |
+| Node.js | 18 | For npx-based MCP servers (context7, playwright) |
+| OS | macOS / Linux | BSD and GNU sed/awk detected at runtime in hooks and scripts |
+| Model | Claude Opus 4.7 | Default. Sonnet 4.6 supported for Planner via per-agent model pinning. |
+
+Verified on Darwin (macOS) and Linux. Windows not tested.
+See [scripts/doctor.sh](plugins/harness/scripts/doctor.sh) for the full preflight check list.
+
+---
+
+## Limitations and known gaps
+
+As of [v1.5.1](CHANGELOG.md):
+
+- **`/harness:assumption-test` partial automation.** Env-var-driven components
+  (`brainstorm`, `analyze`, `calibration-examples`, `reward-hacking-scan`) support full
+  A/B automation. Prompt-modifying components (`red-flags`, `two-stage-eval`,
+  `negotiation`) require a temporary plugin copy with manual instructions printed by the
+  script. Full automation is future work.
+- **No shipped canary corpus.** `/harness:assumption-test` requires a user-supplied canary
+  spec. A self-test canary corpus (F13) is deferred.
+- **No bats-core self-tests.** Hooks and scripts are syntax-verified (`bash -n`) but not
+  integration-tested. A bats-core suite is the next P0 for repo CI.
+- **Planner cannot chmod `init.sh`.** Planner subagents intentionally lack Bash access
+  (narrowest tool surface). `sprint.md` chmods `init.sh` explicitly after the Planner
+  dispatch returns (v1.5.1 fix).
+
+---
+
+## Version history
+
+| Version | Date | Theme |
+|---------|------|-------|
+| **v1.5.2** | 2026-04-20 | Doc-polish release. Pipeline unchanged from v1.5.1. |
+| v1.5.1 | 2026-04-20 | Polish from first real end-to-end sprint: FINALIZE-CONTRACT permission gate, Planner chmod, atomic commit enforcement. |
+| v1.5.0 | 2026-04-20 | Trustworthy-Agents deep alignment (FR-1–6) + critical Claude Code 2.x dispatch fix. |
+| v1.4.0 | 2026-04-20 | SpecKit/BMAD alignment: coverage matrix, two-stage eval, RED FLAGS, brainstorm, per-agent model pinning. |
+| v1.3.0 | 2026-04-19 | Amendment flow (`/clarify`, `/amend`, `/steer`, `/rewind`), reward-hacking defenses, file ownership contract. |
+| v1.2.0 | 2026-04-18 | Plugin conversion. No design changes from v1.0. |
+| v1.0.0 | 2026-04-18 | Initial public release. |
+
+Full release notes: [CHANGELOG.md](CHANGELOG.md).
+
+---
 
 ## License
 
-[MIT](LICENSE) — see the LICENSE file.
+[MIT](LICENSE).
 
 ## Acknowledgements
 
-- The Anthropic Labs team, particularly Prithvi Rajasekaran, for publishing the underlying research
-- The Claude Code engineering team for the Agent SDK and the MCP protocol
+- Prithvi Rajasekaran and the Anthropic Labs team for publishing the underlying research
+- The Claude Code engineering team for the Agent SDK and MCP protocol
+- The GitHub SpecKit, BMAD-METHOD, and Superpowers communities for the open-source
+  traditions this harness builds on
+
+Not affiliated with Anthropic.

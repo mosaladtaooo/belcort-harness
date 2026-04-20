@@ -6,6 +6,38 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## [1.5.2] — 2026-04-20
+
+**Theme:** Documentation-only release. The pipeline implementation is **unchanged** from v1.5.1 — same agents, same commands, same hooks, same manifest schema, same dispatch pattern. No code behavior changes.
+
+The README was rewritten end-to-end using the v1.5.1 subagent-dispatch pattern (real Generator subagent + independent Evaluator review). The rewrite addresses gaps found in the v1.5.1 README: comprehensive newcomer on-ramp, every non-trivial claim sourced inline, a 19-row command reference grouped by category, explicit file-layout diagram, and a candid limitations section. The Evaluator caught four factual issues during review — all fixed before release:
+
+- **Broken internal link** to `plugins/harness/evaluator/criteria.md` (that path doesn't exist; criteria.md is runtime-generated inside each project). Fixed to point at the template at `plugins/harness/templates/evaluator/criteria.md.txt`.
+- **Sprint flow step order** was inverted — README showed `human gate → analyze`, but the canonical [sprint.md](plugins/harness/commands/sprint.md) order (confirmed in [SKILL.md](plugins/harness/skills/harness/SKILL.md) command table) is `analyze → human gate`. Swapped, because analyze-first is the point — the human reviews the consistency report before approving.
+- **Fabricated "opacity-at-scale" label** attributed to Trustworthy Agents. The underlying quote ("no longer neatly visible as a single thread of actions") is verbatim from the article, but the compound label was editorial. Reframed: the quote is still there, the invented label is not.
+- **Unverified cost figures** ("$9 solo vs $200 harness") previously attributed to Rajasekaran 2026. Replaced with a "read the essay for authoritative numbers" pointer plus our own measured figure from the v1.5.1 real-use test (~$8–10 for a 3-FR CLI, verified).
+
+### Methodology (so this is reproducible)
+
+1. Dispatched Generator subagent with the current README + all internal doc paths + canonical source URLs + an explicit brief listing 17 required sections and 7 quality bars. Output: 508 lines.
+2. Dispatched Evaluator subagent with instructions to verify every quote (WebFetch where uncertain), spot-check internal links against real files, and count FR claims against the actual commands directory.
+3. Evaluator verdict: `needs-revision` with 2 CRITICAL + 4 MAJOR + 3 minor findings and 7 explicit strengths-to-preserve.
+4. Applied surgical fixes to CRITICAL + MAJOR findings directly (faster than dispatching a Generator revision round for small factual fixes).
+5. No claims in the README are un-sourceable; every quoted phrase was either taken from the repo's own [docs/anthropic-alignment.md](docs/anthropic-alignment.md) (which maintains its own verification discipline) or WebFetched against the live article URL during the Evaluator's review.
+
+### What changed in this release
+
+- `README.md` — full rewrite, 508 lines, every claim sourced inline
+- `plugins/harness/.claude-plugin/plugin.json` — version 1.5.1 → 1.5.2
+- `.claude-plugin/marketplace.json` — version 1.5.1 → 1.5.2 (both metadata and plugin entries)
+- `CHANGELOG.md` — this entry
+
+### What did NOT change
+
+Everything else. If you are on v1.5.1 and your pipeline is working, upgrading to v1.5.2 is optional — the only reason to upgrade is to pick up the improved README. All `.harness/` manifests, feature contracts, and running pipelines are fully forward-compatible.
+
+---
+
 ## [1.5.1] — 2026-04-20
 
 **Theme:** Polish fixes surfaced by a real end-to-end sprint on v1.5.0.
