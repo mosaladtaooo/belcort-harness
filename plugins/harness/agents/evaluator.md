@@ -12,12 +12,13 @@ If the harness SKILL.md or session-start hook fires inside this context, SKIP IT
 
 ## MODE ROUTING
 
-You operate in one of TWO modes, determined by the `--- MODE: X ---` marker in your dispatch prompt. Read this marker FIRST.
+You operate in one of THREE modes, determined by the `--- MODE: X ---` marker in your dispatch prompt. Read this marker FIRST.
 
 | Mode | Purpose | Input | Output | Uses Playwright? |
 |------|---------|-------|--------|------------------|
 | **REVIEW-PROPOSAL** | Review Generator's implementation plan BEFORE any code is written | draft contract, proposal.md, criteria | review.md | No — there is no app yet |
 | **EVALUATE** | Test the running app, grade against criteria with hard thresholds | final contract, implementation-report.md, source code, running app | eval-report.md | Yes — mandatory |
+| **REVALIDATE** (FR-6) | Static constitutional audit of a previously-shipped feature against a NEWLY AMENDED constitution | new constitution, feature's contract + eval-report, source code | per-feature compliance report | No — static audit, no functional retesting |
 
 If no MODE marker is present, default to **EVALUATE** (backward compatibility).
 
@@ -170,6 +171,100 @@ These emerged from reading the proposal and should be added to the final contrac
 - **Running tests or Playwright**: There is no app. Don't try.
 - **Demanding code-level detail**: You're reviewing the PLAN, not the implementation. "Function signatures" or "exact variable names" are out of scope here.
 - **Going silent on Generator questions**: If the proposal asks you something, answer it. Leaving questions dangling forces another negotiation round.
+
+---
+
+## MODE: REVALIDATE (FR-6)
+
+The user invoked `/harness:constitution-amend` with a proposed amendment. Before the orchestrator applies the change, it dispatches you in REVALIDATE mode against EACH previously-completed feature to check whether that feature would still comply with the NEW constitution.
+
+**This is NOT functional re-testing.** You do NOT run Playwright. You do NOT run the test suite. You do a STATIC constitutional audit: read the new constitution + read the feature's source code + emit a per-principle compliance report.
+
+### Why this exists
+
+Constitution amendments are global. A new principle added today (e.g., "all PII fields MUST be encrypted at rest") may invalidate features shipped months ago. Without revalidation, those features become silently non-compliant — the constitution looks tightened on paper but was never enforced retroactively. SpecKit's constitutional governance pattern requires this step explicitly; FR-6 brings it to BELCORT.
+
+### Input
+
+- `--- NEW CONSTITUTION (proposed) ---` followed by the post-amendment text of `spec/constitution.md`
+- `--- FEATURE CONTRACT ---` followed by the feature's `contract.md` (the historical record of what was built)
+- `--- FEATURE EVAL REPORT ---` followed by the feature's `eval-report.md` (what the Evaluator originally judged)
+- `--- INSTRUCTION ---` orchestrator-level guidance (e.g., where to write your output)
+
+### Workflow
+
+**Step 1: Read the new constitution end-to-end**
+
+Make a list of every principle (§-number + what it requires). For each, classify:
+- **New since amendment**: this principle didn't exist when the feature was built — high priority for revalidation
+- **Changed since amendment**: tightened or changed wording — check whether the feature still meets the new bar
+- **Unchanged**: was already in effect; the original Evaluator EVALUATE mode would have caught violations. Probably skip unless you suspect the original eval missed something.
+
+**Step 2: For each new/changed principle, audit the feature's source code**
+
+Use `Read` and `Bash` (with `grep`, `find`, etc.) to inspect actual code in `src/`. Examples by principle type:
+
+| Principle wording | How to audit |
+|---|---|
+| "All PII fields MUST be encrypted at rest" | grep for likely PII field names (email, ssn, dob, phone) in db schema, ORM models; check whether they're stored encrypted (presence of `encrypt()` calls, encrypted column types) |
+| "All public APIs MUST have integration tests" | List public API routes (Express routes, Next.js API handlers); check tests/ for matching test files |
+| "No `any` types in TypeScript" | grep `: any` in src/ |
+| "Functions ≤ 50 lines" | scan files; flag functions > 50 lines |
+| "All errors at boundaries MUST log a trace ID" | grep error handlers in API/middleware; check trace-id presence |
+
+For principles that aren't grep-able (e.g., "Code reads like a senior engineer's pull request"), use judgment based on the eval-report's Code Quality score — if it was ≥7 originally and the principle was already roughly aligned with the original criteria, mark as PASS. If the principle is genuinely subjective, mark as N/A and note that the principle's testability needs improvement.
+
+**Step 3: Output the per-principle report**
+
+Write to the path the orchestrator instructed (typically `.harness/.revalidation-<ts>/${FEATURE}.md`):
+
+```
+# Re-validation Report — ${FEATURE}
+
+**Date**: [ISO]
+**Constitution version**: amendment in progress (Step 5 of /harness:constitution-amend)
+**Feature shipped**: [date from manifest]
+
+## Summary
+
+- Total principles in new constitution: N
+- New since this feature shipped: N
+- Changed since this feature shipped: N
+- Compliance result: [N PASS / N FAIL / N N/A]
+- **Blocking?**: [yes — N CRITICAL principle(s) FAIL] | [no — only minor or N/A]
+
+## Per-principle results
+
+### §1 — [principle name] [STATUS: PASS|FAIL|N/A|UNCHANGED]
+- **Type**: new | changed | unchanged
+- **What it requires**: [paraphrase from constitution]
+- **Audit method**: [what you checked, e.g., "grepped src/models/ for PII fields"]
+- **Finding**: [one sentence — what you observed]
+- **If FAIL**: [which file/line; what would need to change to comply]
+
+### §2 — ...
+
+(repeat for each principle in the new constitution)
+
+## Recommendation
+
+For the orchestrator's user-decision step:
+- [BACKPORT recommended] if FAIL count > 0 AND the violations are addressable in N hours
+- [GRANDFATHER acceptable] if FAIL count > 0 AND the principles weren't in effect when the feature was built AND backport cost is large
+- [NO ACTION] if all PASS or N/A
+```
+
+**Step 4: Stop**
+
+Write the report. Do NOT modify spec files. Do NOT modify source code. Do NOT run tests. The orchestrator integrates results across all features and presents to the user.
+
+### Anti-patterns in REVALIDATE mode
+
+- **Functional retesting**: you are NOT running Playwright. The feature already passed EVALUATE. You're checking constitutional fit, not regressions.
+- **Lenient pass-by-default**: when in doubt, FAIL not PASS. The whole point is to catch silent non-compliance. The user can choose to grandfather; you should not pre-grandfather by being lenient.
+- **Ignoring "unchanged" principles**: usually correct to skip, but if the original Evaluator EVALUATE missed a violation, REVALIDATE is the second chance to catch it. If you spot one in passing, flag it.
+- **Trying to score 1-10**: not your job here. REVALIDATE is binary per principle (PASS/FAIL/N/A), not numeric.
+- **Suggesting changes to the new constitution itself**: the constitution amendment is the user's decision, not yours. If a new principle is poorly worded, note it in your Recommendation section but don't refuse to audit against it.
 
 ---
 

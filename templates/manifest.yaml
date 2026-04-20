@@ -25,6 +25,22 @@ project:
   description: ""
   created: ""
 
+# FR-6 Constitution amendment history. Append-only. Each entry records a
+# /harness:constitution-amend invocation (the high-ceremony path that's the ONLY
+# authorized way to change spec/constitution.md after Planner Pass 1).
+constitution:
+  amendments: []
+  # Schema per entry:
+  #   - date: "<ISO>"
+  #     reason: "<≥50-char reason from /harness:constitution-amend $ARGUMENTS>"
+  #     adr: "ADR-NNN"          # link to progress/decisions.md
+  #     principles_changed: ["§N", "§M"]   # which principles were add/change/remove
+  #     revalidation_summary:
+  #       total_features: N
+  #       compliant: N
+  #       backported: N
+  #       grandfathered: N
+
 config:
   max_retries: 3              # QA retry limit after Evaluator FAIL
   max_negotiation_rounds: 3   # Proposal↔review limit before human escalation

@@ -20,6 +20,7 @@ Your dispatch prompt may contain a `--- MODE: X ---` marker. Read it FIRST.
 | **CLARIFY-QUESTIONS** | Identify ambiguities in the existing spec, produce structured questions for the user | features/NNN/clarifications.md (questions only) | No (spec already exists) |
 | **CLARIFY-APPLY** | Read user answers, produce before→after patches for spec files | features/NNN/clarify-patches.md | No |
 | **AMEND** | Translate a user's change request into structured before→after spec patches | features/NNN/amend-patches.md | Yes (if change touches architecture) |
+| **CONSTITUTION-AMEND** | High-ceremony constitution change. Read current constitution + amendment reason, identify principle(s) added/changed/removed, produce patches. Do NOT auto-apply. (FR-6) | .harness/constitution-amend-patches.md (top-level, global) | Yes (if change references a framework or library) |
 
 The rest of this document is organized by mode. Jump to the section matching your mode.
 
@@ -940,3 +941,118 @@ Write amend-patches.md. Do NOT edit spec files. Do NOT run analysis. The orchest
 - **Touching `constitution.md`**: the constitution is immutable after the initial Pass 1. If the amendment conflicts with a constitution principle, that's OUT-OF-SCOPE — the correct action is always to modify the plan to comply, never to weaken the constitution (per SpecKit's constitutional priority principle).
 - **Writing code**: no code, ever. Only amend-patches.md.
 - **Touching files outside spec/ and features/NNN/contract.md**: no evaluator file edits, no progress file edits, no manifest edits. Those have their own dedicated commands.
+
+---
+
+## MODE: CONSTITUTION-AMEND (FR-6)
+
+The user invoked `/harness:constitution-amend` with a reason for changing the constitution. The constitution is the project's architectural DNA — every prior feature was negotiated against it. Your job is to translate the user's reason into a structured patch (before→after) targeting `spec/constitution.md`, but NOT to apply it. The orchestrator applies after the user reviews patches AND a separate revalidation pass runs against every completed feature.
+
+**This mode is for the rare case where the constitution legitimately needs to change.** Most "I want to amend the constitution" requests are actually:
+- Clarifications → use `/harness:clarify`
+- New FRs → use `/harness:amend`
+- Cascade edits → use `/harness:edit`
+- Post-build drift → use `/harness:retrospective`
+
+If the request looks like one of these in disguise, flag as OUT-OF-SCOPE and suggest the appropriate command.
+
+### Input
+
+The dispatch prompt contains:
+- `--- AMENDMENT REASON ---` followed by the user's reason (≥50 chars; the user's `$ARGUMENTS`)
+- `--- CONTEXT ---` followed by: `spec/prd.md`, `spec/architecture.md`, `spec/constitution.md`, plus a sample of completed features' `contract.md` files (orchestrator includes up to 10)
+
+### Workflow
+
+**Step 1: Interpret the request**
+
+Read the AMENDMENT REASON. Identify:
+- **Type**: adding a new principle, changing an existing principle, removing a principle
+- **Target principle(s)**: which §-number(s) in the current constitution
+- **Scope of impact**: does this touch architecture, NFRs, or just constitution?
+
+If the reason is genuinely vague (e.g., "make it better"), flag as UNCLEAR — do not patch.
+
+**Step 2: Check completeness**
+
+Before patching, ask:
+- Does the new/changed principle have a TESTABLE form? (Constitution principles must be testable per the existing constitution discipline — vague principles like "code should be clean" provide no gate for the Evaluator.)
+- Will any existing principle conflict with the proposed change?
+- Is the change reversible (could a future amendment undo it cleanly), or does it cascade into the spec/architecture?
+
+If the change conflicts with existing principles or NFRs, flag the conflict in your patches output — the user needs to know.
+
+**Step 3: Use Context7 if the change touches framework/library standards**
+
+E.g., if the amendment is "all PII fields MUST use the `argon2id` hash" — verify with Context7 that the chosen library supports it on the project's stack.
+
+**Step 4: Draft the patch**
+
+Constitution amendments are usually a single principle change. The patch targets `spec/constitution.md`:
+
+- Adding a principle: insert at the appropriate §-number, renumber subsequent if needed (rare — usually append)
+- Changing a principle: before/after of the principle's text
+- Removing a principle: delete the §, note in the patch reasoning that subsequent §-numbers do NOT shift (preserves stable references; deleted § becomes a gap)
+
+**Step 5: Write `.harness/constitution-amend-patches.md`**
+
+```
+# Constitution Amendment Patches
+
+**Generated**: [ISO date]
+**Amendment reason**: [verbatim from user, ≥50 chars]
+
+## Interpretation
+[2-4 sentences: what you understand the user wants, what type of change (add/change/remove), which principles affected]
+
+## Impact assessment
+- Principles directly modified: [§-numbers]
+- Principles indirectly affected (if any): [§-numbers — e.g., a principle about TDD might be reinforced by a new principle about test types]
+- Architecture sections potentially affected: [list]
+- Completed features count (for revalidation): [N — orchestrator confirms]
+
+## Conflict check
+- [None] | [Principle §X conflicts with the proposed change because Y; recommend revising the amendment OR amending §X first]
+
+## Patches
+
+### Patch 1 — [short title]
+**File**: `.harness/spec/constitution.md`
+**Type**: add | change | remove
+**Target principle**: §N
+
+\`\`\`diff
+- [exact old text — at least 3 lines surrounding for uniqueness]
++ [exact new text]
+\`\`\`
+
+**Reasoning**: [one sentence — how the amendment reason translates to this patch]
+
+### Patch 2 — ... (rare; usually amendments are one patch)
+
+## Unclear items (if any)
+
+### UNCLEAR-1: [short title]
+**Original text from request**: "[quote]"
+**Why unclear**: [specific concern]
+**Suggested resolution**: [run /harness:clarify, or narrow the request, or split into two amendments]
+
+## Out-of-scope items (if any)
+
+### OOS-1: [short title]
+**Original text from request**: "[quote]"
+**Why out of scope**: [the request is actually a clarification / amend / edit / retrospective, not a constitutional change]
+**Suggested command**: [/harness:clarify | /harness:amend | etc.]
+```
+
+**Step 6: Stop**
+
+Write the patches file. Do NOT edit `constitution.md` directly. The orchestrator runs the revalidation pass + applies patches after user confirmation.
+
+### Anti-patterns in CONSTITUTION-AMEND mode
+
+- **Adding non-testable principles**: "Code should be elegant" is not a constitution principle — it's a vibe. Every principle needs a testable form. If the user's reason translates to a vibe, push back via UNCLEAR.
+- **Loosening principles silently**: if the amendment makes a principle EASIER to satisfy, flag this explicitly. Loosening should require even more justification than tightening.
+- **Renumbering principles**: don't shift §-numbers when removing a principle. Past contracts and ADRs reference §-numbers; renumbering breaks every back-reference.
+- **Touching files other than constitution.md**: this mode only patches the constitution. If the change cascades to architecture or NFRs, the user needs to run `/harness:edit` separately AFTER applying the constitutional amendment.
+- **Auto-applying**: the orchestrator MUST run the revalidation pass against completed features before applying. Your job ends at writing patches.

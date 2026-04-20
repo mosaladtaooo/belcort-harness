@@ -66,7 +66,7 @@ Every file under `.harness/` has exactly one writer per phase. If you're not the
 | `ROADMAP.md` | Planner (init); Retrospective (update) | All agents |
 | `spec/prd.md` | Planner Pass 1 | All agents; Retrospective may propose drift-driven updates |
 | `spec/architecture.md` | Planner Pass 2 | All agents; Retrospective may propose drift-driven updates |
-| `spec/constitution.md` | Planner Pass 1 only — **immutable thereafter** | All agents |
+| `spec/constitution.md` | Planner Pass 1 (initial); `/harness:constitution-amend` ONLY (FR-6) — high-ceremony amendment behind typed confirmation + ≥50-char reason + revalidation against every completed feature | All agents |
 | `spec/evaluator-notes.md` | Orchestrator (during tuning check) | Evaluator EVALUATE |
 | `evaluator/criteria.md` | Planner Pass 2 | All agents; `/harness:tune-evaluator` may propose updates |
 | `evaluator/examples.md` | Orchestrator (during tuning check) | Evaluator EVALUATE |
