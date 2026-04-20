@@ -77,7 +77,7 @@ Trustworthy Agents emphasizes calibrated uncertainty by name: *"reinforce Claude
 **What v1.5 ships.** A file-based pause matching the existing comm pattern. When the Generator hits an ambiguity it cannot reasonably guess past, it writes `.harness/features/${FEATURE}/pause-questions.md` with structured Qs. Each Q MUST include a `default if unanswered` fallback — that anti-procrastination clause forces the Generator to commit to a choice even while asking. The orchestrator detects the file, surfaces it to the user with the same UX as `/harness:clarify`, accepts answers, then re-dispatches a fresh Generator with the answers as additional context.
 
 **Files added.**
-- `templates/features/pause-questions.md.txt` — structured template with self-documenting comments
+- `plugins/harness/templates/features/pause-questions.md.txt` — structured template with self-documenting comments (lives in plugin runtime path so Generator can read it via `${CLAUDE_PLUGIN_ROOT}/templates/...`)
 
 **Files updated.**
 - `agents/generator.md` — new §Pause Protocol section under MODE: BUILD with 4 RED FLAGS calling out the rationalizations Claude will use to mis-pause (risk-aversion, API uncertainty, refactor style, time-budget questions)
@@ -109,7 +109,7 @@ Generator BUILD reads `stories/FR-${current_task}.md` at the START of each TDD c
 **Critical invariant.** Stories MUST reference contract sections by ID — NEVER paraphrase. Drift between story and aggregate contract is a build failure (Evaluator hash-checks).
 
 **Files added.**
-- `templates/features/story.md.txt` — template with the no-paraphrase invariant + authoring rules embedded as comments
+- `plugins/harness/templates/features/story.md.txt` — template with the no-paraphrase invariant + authoring rules embedded as comments (lives in plugin runtime path so Planner Pass 2 can read it via `${CLAUDE_PLUGIN_ROOT}/templates/...`)
 
 **Files updated.**
 - `agents/planner.md` Pass 2 — emits `stories/` after writing the aggregate contract; authoring rules + folder layout documented; "Dev guidance" section is `{{populated by negotiate phase}}` placeholder until negotiation backfills

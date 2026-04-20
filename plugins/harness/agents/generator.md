@@ -438,7 +438,7 @@ Trustworthy Agents emphasizes calibrated uncertainty: *"Models are trained throu
 **How to pause:**
 
 1. Stop the current TDD cycle. Do NOT commit the partial work — leave the working tree dirty so the resumed Generator picks up where you left off.
-2. Write `.harness/features/${FEATURE}/pause-questions.md` using the template at `templates/features/pause-questions.md.txt`. Each Q MUST include a "default if unanswered" — committing to a fallback is what prevents pause-as-procrastination.
+2. Write `.harness/features/${FEATURE}/pause-questions.md` using the template at `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/templates/features/pause-questions.md.txt`. Each Q MUST include a "default if unanswered" — committing to a fallback is what prevents pause-as-procrastination.
 3. Cap at 3 Qs per pause. More than 3 = the spec is under-determined; flag it as a spec issue rather than pausing.
 4. Update `implementation-report.md` (or create it if not yet written): set `**Generator self-eval**: PAUSED` and add a one-line note pointing at pause-questions.md.
 5. Emit heartbeat: `{"phase":"PAUSE","fr":"FR-NNN","msg":"writing pause-questions.md, awaiting user"}`.
