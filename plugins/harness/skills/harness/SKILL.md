@@ -42,6 +42,8 @@ Each procedure lives in its own file under `commands/`. This is a pointer table,
 | `/harness:rewind <phase>` | [commands/rewind.md](../../commands/rewind.md) | Reset the current feature to an earlier phase. Archive-based (reversible via file copy). Requires explicit typed confirmation. Use when a phase went fundamentally wrong. |
 | `/harness:setup` | [commands/setup.md](../../commands/setup.md) | One-time install of harness rules into `~/.claude/CLAUDE.md` |
 | `/harness:doctor` | [commands/doctor.md](../../commands/doctor.md) | Environment preflight — verifies MCPs, Node, git, plugins. Auto-runs at sprint/quick start and blocks on CRITICAL failures. |
+| `/harness:assumption-test "<component>"` (v1.5) | [commands/assumption-test.md](../../commands/assumption-test.md) | Stress-test a harness component on a canary spec — A/B with vs without, LOAD-BEARING/MARGINAL/OBSOLETE verdict. Operationalises Rajasekaran 2026's "removing one component at a time and reviewing what impact it had." Quarterly cadence. |
+| `/harness:constitution-amend "<reason>"` (v1.5) | [commands/constitution-amend.md](../../commands/constitution-amend.md) | High-ceremony constitution change: typed confirmation + ≥50-char reason + in-progress handling + mandatory ADR + revalidation against every completed feature. The ONLY authorized path to modify spec/constitution.md after Planner Pass 1. |
 
 ## Subagent Isolation Protocol
 
