@@ -87,6 +87,14 @@ fi
 # shellcheck disable=SC2086  # MODEL_FLAG is intentionally unquoted to allow empty expansion
 MODEL_FLAG=$(resolve_model_flag planner)
 
+# Subagent observability — Trustworthy Agents §opacity-at-scale (FR-1).
+# The Planner runs before the feature folder exists, so it emits to a top-level
+# path; we move it into the feature folder after Planner finishes.
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/progress-poller.sh"
+PLANNER_PROGRESS=".harness/_progress-planner.jsonl"
+start_progress_poller "$PLANNER_PROGRESS"
+trap "stop_progress_poller '$PLANNER_PROGRESS'" EXIT
+
 CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/planner.md)
 
 --- USER REQUEST ---
@@ -94,12 +102,19 @@ $ARGUMENTS${BRAINSTORM_CONTEXT}" \
   ${MODEL_FLAG} \
   --allowedTools "Read,Write,mcp__context7"
 
-# After Planner creates the feature folder, move brainstorm to it
+stop_progress_poller "$PLANNER_PROGRESS"
+trap - EXIT
+
+# After Planner creates the feature folder, move brainstorm + planner progress into it
 if [ -f ".harness/brainstorm-current.md" ]; then
   FEATURE=$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')
   if [ -n "$FEATURE" ] && [ -d ".harness/features/${FEATURE}" ]; then
     mv ".harness/brainstorm-current.md" ".harness/features/${FEATURE}/brainstorm.md"
   fi
+fi
+FEATURE=${FEATURE:-$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')}
+if [ -f "$PLANNER_PROGRESS" ] && [ -n "$FEATURE" ] && [ -d ".harness/features/${FEATURE}" ]; then
+  mv "$PLANNER_PROGRESS" ".harness/features/${FEATURE}/_progress-planner.jsonl"
 fi
 ```
 
@@ -166,8 +181,14 @@ Anthropic's original harness inserts a negotiation step here because the product
 ```bash
 FEATURE=$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')
 
+# Subagent observability (FR-1) — shared across all three negotiate dispatches
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/progress-poller.sh"
+PROGRESS_FILE=".harness/features/${FEATURE}/_progress.jsonl"
+
 # Round 1: Generator writes implementation proposal
 GEN_MODEL_FLAG=$(resolve_model_flag generator)
+start_progress_poller "$PROGRESS_FILE"
+trap "stop_progress_poller '$PROGRESS_FILE'" EXIT
 CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
 --- MODE: NEGOTIATE ---
 You are in NEGOTIATE mode, not BUILD mode. Do NOT write code yet.
@@ -187,9 +208,11 @@ $(cat .harness/features/${FEATURE}/contract.md)
 $(cat .harness/evaluator/criteria.md)" \
   ${GEN_MODEL_FLAG} \
   --allowedTools "Read,Write,mcp__context7"
+stop_progress_poller "$PROGRESS_FILE"
 
 # Round 2: Evaluator reviews the proposal
 EVAL_MODEL_FLAG=$(resolve_model_flag evaluator)
+start_progress_poller "$PROGRESS_FILE"
 CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/evaluator.md)
 --- MODE: REVIEW-PROPOSAL ---
 You are reviewing a Generator's implementation proposal BEFORE any code is written.
@@ -210,11 +233,13 @@ $(cat .harness/features/${FEATURE}/contract.md)
 $(cat .harness/features/${FEATURE}/proposal.md)" \
   ${EVAL_MODEL_FLAG} \
   --allowedTools "Read,Write"
+stop_progress_poller "$PROGRESS_FILE"
 
 # Loop: if review says needs-revision, Generator revises proposal (append round to same files)
 # Max 3 negotiation rounds. If no agreement, escalate to human.
 
 # Round N (final): Generator writes the negotiated contract
+start_progress_poller "$PROGRESS_FILE"
 CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
 --- MODE: FINALIZE-CONTRACT ---
 The proposal and review have converged. Write the final negotiated contract.
@@ -227,6 +252,8 @@ $(cat .harness/features/${FEATURE}/proposal.md)
 $(cat .harness/features/${FEATURE}/review.md)" \
   ${GEN_MODEL_FLAG} \
   --allowedTools "Read,Write"
+stop_progress_poller "$PROGRESS_FILE"
+trap - EXIT
 ```
 
 See [negotiate.md](negotiate.md) for the standalone variant and anti-patterns to watch for.
@@ -252,11 +279,21 @@ $(cat .harness/evaluator/criteria.md)"
 $(cat .harness/features/${FEATURE}/eval-report.md)"
 
 BUILD_MODEL_FLAG=$(resolve_model_flag generator)
+
+# Subagent observability (FR-1) — BUILD is the longest dispatch; heartbeat matters most here
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/progress-poller.sh"
+PROGRESS_FILE=".harness/features/${FEATURE}/_progress.jsonl"
+start_progress_poller "$PROGRESS_FILE"
+trap "stop_progress_poller '$PROGRESS_FILE'" EXIT
+
 CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
 --- PROJECT CONTEXT ---
 $CONTEXT" \
   ${BUILD_MODEL_FLAG} \
   --allowedTools "Read,Write,Bash,mcp__context7"
+
+stop_progress_poller "$PROGRESS_FILE"
+trap - EXIT
 ```
 
 Update `manifest.yaml`: phase → "evaluating"
@@ -265,6 +302,13 @@ Update `manifest.yaml`: phase → "evaluating"
 
 ```bash
 EVAL_MODEL_FLAG=$(resolve_model_flag evaluator)
+
+# Subagent observability (FR-1) — EVALUATE often runs many minutes (Playwright + edge cases)
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/progress-poller.sh"
+PROGRESS_FILE=".harness/features/${FEATURE}/_progress.jsonl"
+start_progress_poller "$PROGRESS_FILE"
+trap "stop_progress_poller '$PROGRESS_FILE'" EXIT
+
 CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/evaluator.md)
 --- EVALUATION CONTEXT ---
 $(cat .harness/evaluator/criteria.md)
@@ -273,6 +317,9 @@ $(cat .harness/features/${FEATURE}/contract.md)
 $(cat .harness/spec/constitution.md)" \
   ${EVAL_MODEL_FLAG} \
   --allowedTools "Read,Write,Bash,mcp__playwright"
+
+stop_progress_poller "$PROGRESS_FILE"
+trap - EXIT
 ```
 
 The Evaluator receives the Generator's implementation report as a starting point — but verifies every claim independently.

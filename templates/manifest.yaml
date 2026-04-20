@@ -46,6 +46,17 @@ config:
     agent_checkins: 0           # agent paused to ask a clarifying question
     last_sprint_ratio: ""       # computed at sprint end: "interrupts:checkins — e.g., 2:5"
 
+  # Subagent observability — closes Trustworthy Agents §opacity-at-scale.
+  # When true, each subagent appends one JSONL milestone per boundary event to
+  # .harness/features/${FEATURE}/_progress.jsonl, and the orchestrator polls and
+  # surfaces them as `[HH:MM AGENT] phase: msg` lines while the dispatch runs.
+  # Set to false for fully silent runs (e.g., CI batch jobs where no human is watching).
+  # Protocol details: plugins/harness/agents/_progress-protocol.md
+  observability:
+    heartbeat: true             # subagents emit milestones, orchestrator polls every 10s
+    poll_interval_seconds: 10   # orchestrator's reader cadence
+    rate_limit_seconds: 30      # max 1 non-boundary emission per agent per N seconds
+
 state:
   phase: "planning"          # planning | analyzing | negotiating | building | evaluating | retrospective | complete
   current_feature: ""        # e.g., "001-bookmark-crud"
