@@ -249,7 +249,15 @@ them in `/harness:negotiate` before building:
 
 ## Evaluator Criteria: `.harness/evaluator/criteria.md`
 
-4 criteria with hard thresholds. Before writing criteria.md, you must make TWO deliberate decisions that Anthropic's harness research documented as high-leverage:
+**START FROM THE TEMPLATE.** Read `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/templates/evaluator/criteria.md.txt` and use it as your starting point. The template ships with all four criteria pre-populated (Functionality, Code Quality, Test Coverage, Product Depth) at default thresholds and with concrete "strong work" / "failing work" descriptions. Your job is to *customise* the template for THIS project — not to author from scratch. Authoring from scratch is the historical failure mode that produced incompatible rubrics across projects.
+
+Customisation steps:
+1. Copy the template content as the basis for `.harness/evaluator/criteria.md`
+2. Fill in the **Weighting Decision** section with the project's actual type and Claude's weak dimensions for that type
+3. Adjust thresholds per the weighting decision (raise from defaults where Claude needs pushing)
+4. Per-criterion: keep the structure, but rewrite the "What strong work looks like" / "What failing work looks like" wording to be specific to THIS project's domain. The template's wording is generic; your job is to make it sharp.
+
+The template already encodes the two high-leverage decisions documented in Anthropic's harness research (weighting + wording). Read those decision principles below before customising.
 
 ### Decision 1: Weighting — identify the model's weak dimensions for THIS project type
 
