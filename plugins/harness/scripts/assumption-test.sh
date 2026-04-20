@@ -196,10 +196,16 @@ if [ "$MODE" = "compare" ]; then
 
   # Extract scores from "Part B — Quality Scoring" table
   # Format expected: | Functionality | X/10 | 6 | PASS/FAIL |
+  # Pull just the numerator before the slash; gsub-ing slashes + spaces (the
+  # previous approach) collapsed "8/10" to "810" which corrupted the JSON
+  # output and made the marginal-boundary threshold meaningless.
   extract_score() {
     local file="$1" criterion="$2"
     grep -E "^\| *${criterion}" "$file" 2>/dev/null \
-      | head -1 | awk -F'|' '{gsub(/[ \/]/,"",$3); print $3+0}' | head -c 4
+      | head -1 \
+      | grep -oE '[0-9]+/[0-9]+' \
+      | head -1 \
+      | awk -F/ '{print $1+0}'
   }
 
   count_findings() {

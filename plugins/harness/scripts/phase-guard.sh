@@ -36,7 +36,17 @@ phase_set() {
   [ -n "$new_phase" ] || { echo "phase_set: missing phase argument" >&2; return 1; }
   [ -f ".harness/manifest.yaml" ] || { echo "phase_set: no manifest.yaml" >&2; return 1; }
 
-  # Save prior phase so phase_restore can roll back even on script error
+  # Defensive: if a previous spec-edit command crashed between phase_set and
+  # phase_restore, .phase-prior exists with the original (non-spec-edit) phase.
+  # Restore it BEFORE saving the current (likely spec-edit) phase as the new
+  # prior — otherwise we'd save the orphan as the prior to restore, leaking
+  # state across commands. phase_restore is idempotent (no-op if no orphan).
+  if [ -f ".harness/.phase-prior" ]; then
+    echo "phase_set: orphaned .phase-prior found (likely from previous crashed command); recovering" >&2
+    phase_restore
+  fi
+
+  # Save current phase so phase_restore can roll back even on script error
   local prior
   prior=$(grep '^[[:space:]]*phase:' .harness/manifest.yaml | head -1 | awk '{print $2}' | tr -d '"')
   printf '%s\n' "$prior" > .harness/.phase-prior

@@ -345,20 +345,16 @@ while [ -f "$PAUSE_FILE" ]; do
   # the orchestrator collects input is left to the chat UI — file format is the
   # contract. Once answers are written, increment calibration metric.
 
-  # Increment agent_checkins in manifest (calibration_metrics tracking)
+  # Increment agent_checkins in manifest (calibration_metrics tracking).
+  # Earlier version tried to scope to the calibration_metrics block via in_cm
+  # tracking — but the "exit-block" condition triggered on user_interrupts
+  # (inside the block, but matched the indented-line regex), so the increment
+  # never fired. Simpler portable awk: match the unique field name directly.
+  # $2 is the second whitespace-separated token (the current count); +1 promotes it.
   if [ -f ".harness/manifest.yaml" ]; then
-    if command -v gsed >/dev/null 2>&1; then
-      gsed -i.bak '/^[[:space:]]*calibration_metrics:/,/^[[:space:]]*[a-z]/ s/\(agent_checkins:[[:space:]]*\)\([0-9]*\)/printf "\1%d" $((\2+1))/e' .harness/manifest.yaml 2>/dev/null
-    else
-      # Simpler awk-based increment, portable across BSD/GNU
-      awk '
-        /^[[:space:]]*calibration_metrics:/ {in_cm=1}
-        in_cm && /^[[:space:]]*agent_checkins:/ {sub(/[0-9]+/, $2+1)}
-        /^[[:space:]]*[a-z]/ && !/^[[:space:]]*calibration_metrics:/ && in_cm {in_cm=0}
-        {print}
-      ' .harness/manifest.yaml > .harness/manifest.yaml.new && mv .harness/manifest.yaml.new .harness/manifest.yaml
-    fi
-    rm -f .harness/manifest.yaml.bak
+    awk '/^[[:space:]]*agent_checkins:/ {sub(/[0-9]+/, $2+1)} {print}' \
+      .harness/manifest.yaml > .harness/manifest.yaml.new \
+      && mv .harness/manifest.yaml.new .harness/manifest.yaml
   fi
 
   # Archive this pause for history (in case of re-pause on the same FR)

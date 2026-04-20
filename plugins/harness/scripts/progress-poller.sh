@@ -94,8 +94,14 @@ start_progress_poller() {
       sleep "$interval"
     done
   ) &
-  # Record poller PID in case the trap-based shutdown fails
-  echo $! > "${progress_file}.poller.pid"
+  local poller_pid=$!
+  # Record poller PID so stop_progress_poller can find it
+  echo "$poller_pid" > "${progress_file}.poller.pid"
+  # disown detaches from the parent shell's job table so kill doesn't trigger
+  # the noisy "Terminated: 15 ( ... function body ... )" message when
+  # stop_progress_poller fires. Best-effort — disown errors when job control
+  # is off (non-interactive shells) which is fine, the noise wasn't there anyway.
+  disown "$poller_pid" 2>/dev/null || true
 }
 
 # ─────────────────────────────────────────────────────────────
