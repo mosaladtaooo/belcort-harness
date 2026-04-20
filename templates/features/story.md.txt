@@ -1,0 +1,112 @@
+<!-- BELCORT Harness — Template: story (FR-4, BMAD V6 hyper-detailed story) -->
+<!-- Written by: Planner Pass 2 (initial), Generator BUILD (refinements during build,
+                 e.g., adding "implementation note" lines under each AC).
+     Read by: Generator BUILD per TDD cycle (canonical per-cycle context),
+              Evaluator EVALUATE (cross-checks story narrative against aggregate
+              contract — should NEVER find drift; see invariant below).
+     Lifetime: feature-scoped. Lives at .harness/features/NNN-name/stories/FR-NNN.md.
+
+     INVARIANT — DRIFT IS A BUG:
+     Stories MUST reference contract.md sections by ID (FR-NNN, AC-NNN-N, EC-NNN-N).
+     Stories MUST NOT paraphrase or restate contract content. The story is an
+     ASSEMBLY of contract+spec content scoped to one FR — not a rewrite.
+     If a story's FR text differs from the aggregate contract, the story is wrong.
+     The Evaluator's hash-check will catch this and fail the build. -->
+
+# Story — {{FR-NNN}} {{short title verbatim from contract}}
+
+**Status**: pending | in-progress | complete | partial | paused
+**Priority**: P0 | P1 | P2 (verbatim from contract)
+**Parent contract**: features/{{NNN-name}}/contract.md § Deliverables § {{FR-NNN}}
+
+---
+
+## The user-facing change
+
+<!-- Verbatim from contract.md / prd.md — do NOT rewrite. Quote-style for clarity. -->
+
+> {{The FR's user story from contract: "As a <persona>, I want <action>, so that <benefit>"}}
+
+## Personas this serves
+
+<!-- Extract ONLY the personas referenced by this FR's parent UJ. Verbatim from PRD.
+     Don't include personas that don't touch this FR — that's just context noise. -->
+
+- **{{persona-name}}**: {{their context, goals, technical level — verbatim from PRD}}
+
+## Acceptance criteria
+
+<!-- Verbatim from contract. ID-referenced. Do NOT renumber, do NOT paraphrase. -->
+
+- [ ] **{{AC-NNN-1}}**: {{exact text from contract}}
+- [ ] **{{AC-NNN-2}}**: {{exact text from contract}}
+- [ ] **{{AC-NNN-3}}**: {{exact text from contract}}
+
+## Edge cases (in scope)
+
+<!-- Verbatim from contract's ECs for this FR. Skip if none. -->
+
+- **{{EC-NNN-1}}**: {{exact text from contract}}
+- **{{EC-NNN-2}}**: {{exact text from contract}}
+
+## Architectural slice
+
+<!-- ONLY the ADRs and stack rows from architecture.md that this FR depends on.
+     Don't dump the whole architecture doc — the point of stories is focused context. -->
+
+- **Stack components touched**: {{e.g., Frontend (Next.js), Database (Postgres), Auth (Clerk)}}
+- **Relevant ADRs**:
+  - **{{ADR-NNN}}**: {{title — one-line rationale from architecture.md}}
+
+## Applicable constitution principles
+
+<!-- The SUBSET of constitution principles this FR's implementation must satisfy.
+     Not all 17 — just the ones that bind here. Reference by number; the Generator
+     reads constitution.md for the full text when needed. -->
+
+- **§{{N}}**: {{principle name}} — {{one-line note on how it applies HERE}}
+- **§{{N}}**: ...
+
+## Dev guidance (from negotiation)
+
+<!-- The proposal.md row for this FR + any review.md asks. Verbatim. This is
+     the HOW that emerged from Generator↔Evaluator negotiation. -->
+
+**Components/files this FR will touch**: {{from proposal.md FR→Implementation Mapping table}}
+**Test strategy committed in negotiation**: {{from proposal.md AC→Test Approach table}}
+**New ACs added by Evaluator review** (if any): {{from review.md "New ACs to Add"}}
+
+## TDD anchor — the observable behavior to test FIRST
+
+<!-- This is the single sentence that should drive the RED test. Pick the
+     most user-visible AC. The Generator writes a failing test asserting THIS,
+     before any other test. Without an anchor, the Generator may pick an
+     implementation-detail AC for RED and miss the user-facing intent. -->
+
+> **First failing test asserts**: {{one sentence — e.g., "After clicking Add Bookmark, the new bookmark URL appears in the visible list on /bookmarks within 500ms."}}
+
+## Implementation log
+
+<!-- Generator appends as it works. Each entry is one TDD cycle. Used by mid-build
+     recovery + by Evaluator to verify TDD discipline (commits trace to log entries). -->
+
+### {{ISO date HH:MM}} — RED → GREEN → REFACTOR → COMMIT
+- **Test**: {{file:line of the failing test added}}
+- **Implementation**: {{file:line of the minimum code that turned it green}}
+- **Refactor**: {{what was cleaned up — or "none needed"}}
+- **Commit**: {{short SHA}} `[harness:build] {{FR-NNN}}: {{behavior summary}}`
+
+### (next cycle) ...
+
+---
+
+## Done criteria for this story
+
+This story is `complete` when:
+- [ ] All ACs above are checked
+- [ ] All ECs are exercised by tests
+- [ ] Constitution principles listed above are satisfied (Generator self-checks against the §-numbers)
+- [ ] At least one E2E test exists for the user-facing flow if the FR has UI
+- [ ] Implementation log shows TDD evidence (test commits before impl commits — visible in `git log --oneline`)
+
+If any item is unchecked, the story is `partial`. The Generator marks it so in the front-matter Status field, and the Evaluator's Part A (contract compliance) treats partial as not-met for the parent FR.

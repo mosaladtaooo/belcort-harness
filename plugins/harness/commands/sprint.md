@@ -266,11 +266,23 @@ Update `manifest.yaml`: phase → "building"
 # Create worktree
 git worktree add .worktrees/current -b "harness/build/${FEATURE}" 2>/dev/null || true
 
-# Assemble context
+# Assemble context — FR-4: prefer per-FR stories over the full aggregate contract
+# when the Generator has stories/ available. The aggregate contract is still
+# included for cross-FR concerns (build order, definition of done) but the
+# Generator BUILD reads the current story per cycle for focused per-FR context.
+STORIES_DIR=".harness/features/${FEATURE}/stories"
+STORY_INDEX=""
+if [ -d "$STORIES_DIR" ]; then
+  STORY_INDEX="
+--- STORY INDEX (FR-4 per-FR build artifacts; Generator reads each per cycle) ---
+$(ls -1 ${STORIES_DIR}/FR-*.md 2>/dev/null | sed 's|^|- |')
+"
+fi
+
 CONTEXT="$(cat .harness/spec/constitution.md)
 $(cat .harness/spec/architecture.md)
 $(cat .harness/features/${FEATURE}/contract.md)
-$(cat .harness/evaluator/criteria.md)"
+$(cat .harness/evaluator/criteria.md)${STORY_INDEX}"
 
 # Add evaluator feedback if retry
 [ -f ".harness/features/${FEATURE}/eval-report.md" ] && \

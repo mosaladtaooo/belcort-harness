@@ -73,6 +73,7 @@ Every file under `.harness/` has exactly one writer per phase. If you're not the
 | `evaluator/tuning-log.md` | Orchestrator (on divergence) | `/harness:tune-evaluator` |
 | `features/NNN/contract.md` — **DRAFT** | Planner | Generator NEGOTIATE |
 | `features/NNN/contract.md` — **FINAL** (overwrites draft) | Generator FINALIZE-CONTRACT | Generator BUILD, Evaluator |
+| `features/NNN/stories/FR-NNN.md` (FR-4) | Planner Pass 2 (initial); Generator BUILD (refinements during build, e.g., implementation log entries) | Generator BUILD per TDD cycle (canonical per-cycle context); Evaluator EVALUATE (cross-checks story narrative against aggregate contract — drift = build fails) |
 | `features/NNN/proposal.md` | Generator NEGOTIATE | Evaluator REVIEW-PROPOSAL, Generator BUILD |
 | `features/NNN/review.md` | Evaluator REVIEW-PROPOSAL | Generator FINALIZE-CONTRACT, Generator BUILD |
 | `features/NNN/analysis-report.md` | Orchestrator (`/harness:analyze`) | Human, subsequent orchestrator phases |

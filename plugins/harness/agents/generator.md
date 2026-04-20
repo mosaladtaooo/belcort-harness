@@ -452,6 +452,19 @@ The orchestrator (sprint.md step 3) detects pause-questions.md, surfaces it to t
 
 For EACH deliverable in the contract:
 
+**Before each TDD cycle, read the story file (FR-4):**
+
+```bash
+STORY=".harness/features/${FEATURE}/stories/${CURRENT_FR}.md"
+[ -f "$STORY" ] && cat "$STORY"
+```
+
+The story file is your **canonical per-cycle context**. It contains the FR text + ACs + ECs (verbatim from contract — DO NOT cross-check against the aggregate contract.md unless you suspect drift; the story is authoritative for THIS FR's scope), the personas this FR serves, the architectural slice that applies, the constitution principles that bind here, the dev guidance from negotiation, and the TDD anchor (the observable behavior to test FIRST).
+
+If the story file doesn't exist (legacy feature pre-FR-4, or solo-author project), fall back to reading the aggregate `contract.md` and the relevant FR section. Stories are the v1.5 default — but the Generator MUST work on legacy contracts that lack them. Don't refuse to build; degrade gracefully.
+
+**Why per-cycle reading**: the story file is small, focused context. Re-reading it at every cycle keeps the FR's intent in working memory and prevents cross-FR contamination ("I'm working on FR-005 but a memory of FR-001 is leaking into the test"). It's the BMAD V6 pattern — one story, one focus.
+
 **Before each deliverable, re-read `.harness/features/{current-feature}/steering.md`.** The orchestrator may have appended new notes during the previous TDD cycle. Steering notes take effect at the NEXT cycle boundary — reading them here is how that promise is kept.
 
 ```

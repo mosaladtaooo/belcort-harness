@@ -590,6 +590,41 @@ The final build order is locked in the negotiated contract.
 - TDD evidence in git log
 ```
 
+## Story Files (FR-4) — per-FR build artifacts
+
+**After writing the aggregate `contract.md`, emit ONE story file per FR** to `.harness/features/NNN-name/stories/FR-NNN.md`. Use the template at `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/templates/features/story.md.txt`.
+
+This is the BMAD V6 "Scrum Master" pattern adapted to BELCORT: the Generator's per-cycle reasoning quality improves when its context is scoped to a single FR rather than the full bundled contract. Stories are also the primary recovery anchor — `state.current_task: FR-005` resumes from `stories/FR-005.md`, not a full contract re-read.
+
+**Authoring rules — INVARIANT: stories must NEVER drift from the aggregate contract:**
+
+1. **Never paraphrase contract content.** ACs, ECs, FR text — quote verbatim. ID-reference everything.
+2. **Persona section**: extract ONLY the personas referenced by this FR's parent UJ. Don't include all personas from the PRD — that's noise.
+3. **Architectural slice**: ONLY the ADRs and stack rows that this FR depends on. The Generator reads the full architecture.md when needed; the story is the focused subset.
+4. **Constitution principles**: list the SUBSET of the 17 that bind here, by §-number. The Generator reads constitution.md for the full text.
+5. **Dev guidance**: leave the proposal/review-derived sections empty in the initial Pass 2 emission — they're populated during the negotiate phase. Mark them `{{populated by negotiate phase}}` placeholders.
+6. **TDD anchor**: pick the most user-visible AC and write a single sentence of "first failing test asserts: ..." This is what drives the Generator's RED step.
+
+The Evaluator (in EVALUATE mode) hash-checks each story's FR text against the aggregate contract. Drift = build fails. So treat stories as a strict assembly, not a rewrite.
+
+**Folder layout for a feature with N FRs:**
+
+```
+.harness/features/NNN-name/
+├── contract.md              # Aggregate (canonical for cross-FR concerns)
+├── stories/
+│   ├── FR-001.md            # Self-contained per-FR story
+│   ├── FR-002.md
+│   └── FR-NNN.md
+├── proposal.md              # (created during negotiate)
+├── review.md                # (created during negotiate)
+└── ...
+```
+
+For epic-decomposed projects with multiple feature folders, each folder gets its own `stories/` populated by Pass 2.
+
+**For now (Pass 2 initial emission)** — populate the FR / persona / architectural slice / constitution / TDD-anchor sections from your Pass 1 + Pass 2 outputs. Leave the "Dev guidance (from negotiation)" section as `{{populated by negotiate phase}}`. The negotiate phase backfills it.
+
 ## Also Create:
 - `.harness/init.sh` — project health check. **Start from the template** at `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/templates/init.sh.txt`, then customise for THIS project's stack: replace `npm` with `pnpm`/`yarn`/`bun`, add framework-specific checks (e.g., `next build`, `vite build`, `cargo test`), and add a project-specific smoke test (HTTP `/health`, CLI `--version`, etc.). Make the resulting file executable (`chmod +x .harness/init.sh`). The template ships a generic baseline (git clean, Node ≥20, npm install, lint, test, tsc) — your customisation should make it *true* for this project, not generic.
 - `.harness/evaluator/examples.md` — copy from `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/templates/evaluator/examples.md.txt`. The template ships **seeded with 12 calibration examples** (3 per criterion + cross-cutting patterns) so the Evaluator has a real scoring scale on its first run instead of drifting wildly across the first N evaluations. Project-specific examples are added by `/harness:tune-evaluator` over time.
