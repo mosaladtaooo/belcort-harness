@@ -82,6 +82,8 @@ Write to `.harness/features/{current-feature}/review.md` using the template belo
 
 ### Review Template
 
+**Canonical source**: [`templates/features/review.md.txt`](../../../templates/features/review.md.txt) — the plugin ships this. The inline structure below stays in sync with the template.
+
 Copy this structure into `review.md`:
 
 ```
@@ -534,6 +536,8 @@ If no matching example exists in `examples.md`, proceed with the ANTI-LENIENCY P
 ### Step 7: Write Report — two-part structure
 
 Write to `.harness/features/{current-feature}/eval-report.md`. The report has two parts in order: **Part A — Contract Compliance** (binary per FR/AC, decides PASS/FAIL), then **Part B — Quality Scoring** (numeric per criterion, shapes Generator's next-pass priorities).
+
+**Canonical template**: [`templates/features/eval-report.md.txt`](../../../templates/features/eval-report.md.txt). The structure below mirrors it — update the template file first if the structure ever needs to change, then propagate here.
 
 ```markdown
 # Evaluation Report

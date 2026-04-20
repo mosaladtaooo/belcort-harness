@@ -189,7 +189,7 @@ Write the proposal file. Do not write code. Do not modify any spec files. Exit.
 
 ### Proposal Template
 
-Copy this structure into `proposal.md`:
+**Canonical source**: [`templates/features/proposal.md.txt`](../../../templates/features/proposal.md.txt) — the plugin ships this as the source of truth. If you're on a fresh project that has the template file available at `{{CLAUDE_PLUGIN_ROOT}}/../templates/features/proposal.md.txt` or alongside the plugin checkout, copy from there. If not available, use the inline structure below (kept in sync with the template).
 
 ```
 # Implementation Proposal — Round {N}
@@ -281,6 +281,8 @@ Read review.md. Verdict MUST be `agreed`. If it says `needs-revision`, STOP —
 you shouldn't be in FINALIZE mode yet. Report back to orchestrator.
 
 **Step 2: Write final contract**
+
+**Canonical template**: [`templates/features/contract.md.txt`](../../../templates/features/contract.md.txt). Use it as your skeleton. The Evaluator's Step 1 setup grep's for the `**Negotiated**:` marker — it MUST be present.
 
 Overwrite `.harness/features/{current-feature}/contract.md` with:
 
@@ -500,7 +502,11 @@ IF RETRY — ADDITIONAL CHECKS
 
 ### Phase 4: Write Implementation Report
 
-This is the CRITICAL handoff artifact. The Evaluator reads this to know what was built, where to find it, and what to test. Write it to `.harness/features/{current-feature}/implementation-report.md` (where `{current-feature}` is read from `manifest.yaml` → `state.current_feature`):
+This is the CRITICAL handoff artifact. The Evaluator reads this to know what was built, where to find it, and what to test.
+
+**Canonical template**: [`templates/features/implementation-report.md.txt`](../../../templates/features/implementation-report.md.txt). Copy its structure exactly — the Evaluator's workflow in Step 1 setup `cat`s this file and expects the sections in a specific order (FR→Implementation Map first, then AC→Test Map).
+
+Write it to `.harness/features/{current-feature}/implementation-report.md` (where `{current-feature}` is read from `manifest.yaml` → `state.current_feature`):
 
 ```markdown
 # Implementation Report

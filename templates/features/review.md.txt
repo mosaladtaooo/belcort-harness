@@ -1,0 +1,64 @@
+<!-- BELCORT Harness — Template: review.md -->
+<!--
+Written by: Evaluator in REVIEW-PROPOSAL mode.
+Location when instantiated: .harness/features/{current-feature}/review.md
+Purpose: Evaluator's verdict on Generator's proposal — BEFORE any code is written.
+Mindset: collaborative skeptic, not adversarial grader. Save rigor for EVALUATE mode.
+Canonical source: this file. The inline copy in plugins/harness/agents/evaluator.md must stay in sync.
+-->
+
+# Proposal Review — Round {{N}}
+
+**Date**: {{ISO_DATE}}
+**Round**: {{N}} of max 3
+**VERDICT**: {{agreed | needs-revision}}
+
+## Summary
+{{2-3 sentences: overall read on proposal quality and whether it will satisfy the contract}}
+
+## FR Coverage Check
+
+| FR | Covered in proposal? | Test approach adequate? | Notes |
+|----|---------------------|------------------------|-------|
+| {{FR-001}} | {{Yes/No}} | {{Yes/No/Weak}} | {{notes_or_dash}} |
+
+## AC Coverage Check
+
+| AC | Test approach in proposal | Adequate? |
+|----|---------------------------|-----------|
+| {{AC-001-1}} | {{runner_and_assertion}} | {{Yes/No}} |
+
+## Items Requiring Revision
+
+### R1: {{Title}}
+- **What the proposal says**: {{quoted_line}}
+- **Why it's insufficient**: {{specific_concern}}
+- **What to change**: {{concrete_ask}}
+
+### R2: {{Title}}
+...
+
+## New ACs to Add (if any)
+
+These emerged from reading the proposal and should be added to the final contract:
+
+### AC-{{NNN-N}}: {{new_acceptance_criterion}}
+- **Why**: {{what_in_proposal_revealed_this_gap}}
+
+## Answers to Generator's Questions
+
+| Generator question | My answer |
+|-------------------|-----------|
+| {{from_proposal_md}} | {{direct_answer_or_decision}} |
+
+## Risk Flags Review
+
+| Flag raised by Generator | My assessment |
+|-------------------------|---------------|
+| {{from_proposal_md}} | {{accept_reject_or_mitigate}} |
+
+## If Round 2+: Did Generator Address Previous Asks?
+
+| Previous ask | Addressed? | Notes |
+|--------------|-----------|-------|
+| {{R1_from_round_N-1}} | {{Yes/No/Partial}} | {{what_still_missing}} |

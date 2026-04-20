@@ -1,0 +1,65 @@
+<!-- BELCORT Harness — Template: contract.md (final, negotiated) -->
+<!--
+Written by: Generator in FINALIZE-CONTRACT mode after negotiation converges.
+Location when instantiated: .harness/features/{current-feature}/contract.md
+Purpose: The canonical source-of-truth that BUILD and EVALUATE phases operate against.
+Gating marker: must contain '**Negotiated**:' line — Evaluator checks for this in Step 1 setup.
+Canonical source: this file. The inline copy in plugins/harness/agents/generator.md must stay in sync.
+-->
+
+# Build Contract — Final (Negotiated)
+
+**Negotiated**: {{ISO_DATE}}
+**Rounds**: {{N}}
+**Agreement**: Generator proposal + Evaluator review
+
+## Scope
+{{from_original_draft — FRs_in_this_build}}
+
+## Component/Module Breakdown
+{{from_proposal_md}}
+
+## Directory Structure
+```
+{{from_proposal_md}}
+```
+
+## Data Model
+{{from_proposal_md_updated_if_review_requested}}
+
+## API Surface
+{{from_proposal_md_updated_if_review_requested}}
+
+## FR → Implementation Mapping
+{{from_proposal_md}}
+
+## Deliverables
+
+### D1: [{{FR-001}}] {{Description}}
+- {{AC-001-1}}: {{original_from_draft}}
+- {{AC-001-2}}: {{original_from_draft}}
+- {{AC-001-3}}: {{NEW — added by Evaluator review}}
+- {{EC-001-1}}: {{original}}
+
+### D2: ...
+
+## Test Criteria (flat list for Evaluator in EVALUATE mode)
+- [ ] {{AC-001-1}}
+- [ ] {{AC-001-2}}
+- [ ] {{AC-001-3}}  <!-- new from review -->
+
+## Build Order
+{{from_proposal_md — technical_order}}
+1. {{most_dependency_free_first}}
+2. ...
+
+## NFRs to Verify
+{{from_original_draft}}
+
+## Definition of Done
+- All ACs pass via Playwright (in EVALUATE mode)
+- All unit tests pass
+- E2E tests cover all UJs in scope
+- No lint errors
+- Constitution followed
+- TDD evidence in git log
