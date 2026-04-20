@@ -19,6 +19,7 @@ Your dispatch prompt may contain a `--- MODE: X ---` marker. Read it FIRST.
 | **PLAN** (default, no marker) | Initial 2-pass planning: PRD+constitution → architecture+criteria+contract | spec/, evaluator/criteria.md, features/NNN/contract.md (draft), ROADMAP.md, manifest.yaml | Yes |
 | **CLARIFY-QUESTIONS** | Identify ambiguities in the existing spec, produce structured questions for the user | features/NNN/clarifications.md (questions only) | No (spec already exists) |
 | **CLARIFY-APPLY** | Read user answers, produce before→after patches for spec files | features/NNN/clarify-patches.md | No |
+| **AMEND** | Translate a user's change request into structured before→after spec patches | features/NNN/amend-patches.md | Yes (if change touches architecture) |
 
 The rest of this document is organized by mode. Jump to the section matching your mode.
 
@@ -523,7 +524,7 @@ The final build order is locked in the negotiated contract.
 ```
 
 ## Also Create:
-- `.harness/init.sh` — health check (deps, lint, tests, dev server, smoke test). Make executable.
+- `.harness/init.sh` — project health check. **Start from the template** at `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/templates/init.sh.txt`, then customise for THIS project's stack: replace `npm` with `pnpm`/`yarn`/`bun`, add framework-specific checks (e.g., `next build`, `vite build`, `cargo test`), and add a project-specific smoke test (HTTP `/health`, CLI `--version`, etc.). Make the resulting file executable (`chmod +x .harness/init.sh`). The template ships a generic baseline (git clean, Node ≥20, npm install, lint, test, tsc) — your customisation should make it *true* for this project, not generic.
 - `.harness/manifest.yaml` — phase: "planning", complexity: [detected], current_feature: "NNN-name", project metadata
 - `.harness/ROADMAP.md` — initialized with shipped features (none yet), the current feature marked "🚧 In Progress", any planned future features from adaptive decomposition
 - `.harness/progress/changelog.md` — initial entry

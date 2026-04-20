@@ -42,6 +42,18 @@ Recent changelog entries:
 
 ### Step 3: Run `bash .harness/init.sh` for health check
 
+If `.harness/init.sh` does not exist (older harness state from before the template was introduced), warn the user and offer to create it from the plugin template:
+
+```bash
+if [ ! -f .harness/init.sh ]; then
+  echo "WARN: .harness/init.sh missing — copying template from plugin"
+  cp "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/templates/init.sh.txt" .harness/init.sh
+  chmod +x .harness/init.sh
+  echo "Created .harness/init.sh from generic template. Customise for this project's stack."
+fi
+bash .harness/init.sh
+```
+
 ### Step 4: Phase-specific recovery
 
 **If `phase: planning`:**
