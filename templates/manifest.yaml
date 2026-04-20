@@ -3,10 +3,18 @@
 # Agents read this first to know where they are in the pipeline.
 
 harness:
-  version: "1.4"           # Increment when harness design changes
+  version: "1.5"           # Increment when harness design changes
   model: "claude-opus-4-7" # DEFAULT model (used by any agent without an override in config.models below)
   model_tuning_revision: 0    # incremented each time evaluator.md prompt is modified via /harness:tune-evaluator
   created: ""              # ISO date when harness was initialized
+  # FR-5 Component-as-Assumption stress test (Rajasekaran 2026). /harness:assumption-test
+  # writes here. /harness:audit reads it to remind the user which components are due for
+  # quarterly retesting. Empty values = no test ever run.
+  last_assumption_test:
+    date: ""               # ISO date of last test
+    component: ""          # component tested (brainstorm|negotiation|two-stage-eval|red-flags|calibration-examples|reward-hacking-scan|analyze)
+    canary: ""             # path to the canary spec used
+    verdict: ""            # LOAD-BEARING | MARGINAL | OBSOLETE
   # Schema migration note: fields added in a newer version ALWAYS have safe defaults so older
   # manifests read without modification. If a field is absent, treat it as its documented default
   # rather than erroring. Breaking schema changes bump harness.version MAJOR and come with a
