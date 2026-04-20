@@ -110,32 +110,11 @@ if [ -f ".harness/manifest.yaml" ]; then
   PHASE=$(grep '^[[:space:]]*phase:' .harness/manifest.yaml 2>/dev/null \
             | head -1 | awk -F: '{print $2}' | tr -d '" ' | head -c 20)
   if [ "$PHASE" = "building" ]; then
-    if echo "$TOOL_CMD" | grep -qE 'rm\s+(-[a-zA-Z]+\s+)*[^|;&]*(\.test\.|\.spec\.|__tests__/|/tests?/|/e2e/|playwright\.config)'; then
-      echo "BLOCKED: deleting test files during 'building' phase is forbidden (reward-hacking guard)." >&2
-      echo "If this deletion is legitimate, document the reason in your commit message with" >&2
-      echo "the tag [tests-removed: <reason>], run /harness:rewind building, then retry." >&2
-      exit 1
-    fi
-  fi
-fi
-
-# ─────────────────────────────────────────────────────────────
-# REWARD-HACKING GUARD — block test-file deletion during BUILD phase
-# ─────────────────────────────────────────────────────────────
-# A common Generator failure mode (reward hacking): when a test fails and the
-# Generator can't make it pass, it deletes the test. The Evaluator then sees
-# "all tests pass" and awards a high Test Coverage score even though coverage
-# actually dropped. This block prevents the most obvious form of that attack.
-#
-# Only fires when the harness is in the 'building' phase AND the tool input
-# looks like it's deleting a test file. Non-test deletions and non-build phases
-# are unaffected.
-if [ -f ".harness/manifest.yaml" ]; then
-  PHASE=$(grep 'phase:' .harness/manifest.yaml 2>/dev/null | head -1 | awk -F: '{print $2}' | tr -d '" ' | head -c 20)
-  if [ "$PHASE" = "building" ]; then
-    # Match `rm` (with any flags) followed by a path containing a test-ish marker.
-    # Patterns: *.test.*, *.spec.*, __tests__/, /test/, /tests/, /e2e/, .playwright.ts
-    if echo "$TOOL_INPUT" | grep -qE 'rm\s+(-[a-z]+\s+)*[^ ]*(\.test\.|\.spec\.|__tests__/|/tests?/|/e2e/|playwright\.config)'; then
+    # Patterns matched (preceded by word boundary `\b` so `tests/` matches
+    # whether at path start (`tests/foo`) or mid-path (`src/tests/foo`),
+    # without false-positive on `mytests/`):
+    #   .test.  .spec.  __tests__/  tests/  test/  e2e/  playwright.config
+    if echo "$TOOL_CMD" | grep -qE 'rm\s+(-[a-zA-Z]+\s+)*[^|;&]*(\.test\.|\.spec\.|__tests__/|\btests?/|\be2e/|playwright\.config)'; then
       echo "BLOCKED: deleting test files during 'building' phase is forbidden (reward-hacking guard)." >&2
       echo "If this deletion is legitimate, document the reason in your commit message with" >&2
       echo "the tag [tests-removed: <reason>], run /harness:rewind building, then retry." >&2
