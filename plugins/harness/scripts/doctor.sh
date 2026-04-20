@@ -116,6 +116,23 @@ else
     "Comes with Node.js — if missing, reinstall node"
 fi
 
+# JSON parser — pre-tool-use.sh needs jq OR python3 to parse tool input. Without
+# either, the hook fails open and every safety rail (force-push block, .harness/
+# deletion block, test-file deletion guard) is silently inactive. Catch it here
+# so the user knows before the sprint runs.
+if command -v jq >/dev/null 2>&1; then
+  JQ_VER=$(jq --version 2>/dev/null)
+  add_result "CRITICAL" "PASS" "JSON parser (jq)" "${JQ_VER:-jq available}"
+elif command -v python3 >/dev/null 2>&1; then
+  PY_VER=$(python3 --version 2>/dev/null | awk '{print $2}')
+  add_result "CRITICAL" "PASS" "JSON parser (python3 fallback)" \
+    "python3 ${PY_VER:-available} — jq preferred but not required"
+else
+  add_result "CRITICAL" "FAIL" "JSON parser (jq or python3)" \
+    "neither jq nor python3 found — pre-tool-use.sh cannot parse tool input, so force-push / .harness/ deletion / test-file deletion guards silently fail open" \
+    "macOS: brew install jq  |  Debian/Ubuntu: apt install jq  |  or install python3"
+fi
+
 # ─────────────────────────────────────────────────────────────
 # CRITICAL: MCP servers (the thing that burned the user last time)
 # ─────────────────────────────────────────────────────────────

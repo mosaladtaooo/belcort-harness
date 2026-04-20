@@ -51,6 +51,7 @@ Exit codes:
 - `git` on PATH (atomic commits + worktrees)
 - Node ≥ 20 (MCP servers require modern Node)
 - `npx` on PATH (launches MCP servers)
+- `jq` or `python3` available (pre-tool-use.sh needs one to parse tool input — without either, the safety hook silently fails open and force-push / `.harness/` deletion / test-file deletion guards do not fire)
 - `context7` MCP registered (Planner + Generator use for live docs)
 - `playwright` MCP registered (Evaluator uses for browser-driven QA — **this is the one that burned us last time**)
 - Harness plugin present (SKILL.md findable)
