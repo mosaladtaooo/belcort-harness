@@ -5,9 +5,35 @@ argument-hint: "<what to build, 1–4 sentences>"
 
 # `/harness:sprint` — Full Pipeline
 
-Runs: doctor → Planner → human gate → Generator → Evaluator → retry loop → merge. The user's request is `$ARGUMENTS`. If empty, ask them to describe what to build before dispatching anything.
+Runs: doctor → (brainstorm check) → Planner → human gate → Generator → Evaluator → retry loop → merge. The user's request is `$ARGUMENTS`. If empty, ask them to describe what to build before dispatching anything.
 
 ## Procedure
+
+### 0a. BRAINSTORM CHECK — Ambiguity gate (opt-in)
+
+Before touching the environment, scan the prompt for vagueness signals:
+
+- Prompt length ≤ 2 sentences AND no concrete verbs (build, implement, create, fix, migrate, refactor)
+- Uncertainty words present: `maybe`, `not sure`, `I think`, `figure out`, `help me decide`
+- Multiple plausible interpretations (e.g., "a dashboard" — for what, for whom, with what data?)
+- Unfamiliar domain with no prior features in `manifest.yaml`
+
+If ANY signal hits, suggest:
+
+> "Your prompt looks like it could benefit from `/harness:brainstorm` first — it surfaces silent assumptions before the Planner locks in a direction. Options:
+>   1. Run /harness:brainstorm \"$ARGUMENTS\" first (recommended)
+>   2. Proceed to /harness:sprint anyway — Planner will use AskUserQuestions to clarify
+>   3. Cancel
+>
+> Choose 1, 2, or 3:"
+
+On (1): run `/harness:brainstorm` (see [brainstorm.md](brainstorm.md)) and stop this sprint invocation. The user re-runs `/harness:sprint` after brainstorming.
+On (2): continue to step 0 (doctor).
+On (3): exit silently.
+
+If NO signal hits, skip this step silently and continue to doctor.
+
+**If `.harness/brainstorm-current.md` already exists** (user ran brainstorm previously), include its contents as additional Planner context in step 1, then move the file to the feature folder after it's created.
 
 ### 0. DOCTOR — Environment preflight (mandatory, blocking)
 
@@ -32,11 +58,27 @@ The Planner works in two passes:
 This ordering matters: architecture decisions shape how work decomposes, so PRD comes first.
 
 ```bash
+# If a brainstorm file exists, append it as additional context
+BRAINSTORM_CONTEXT=""
+if [ -f ".harness/brainstorm-current.md" ]; then
+  BRAINSTORM_CONTEXT="
+--- BRAINSTORM CONTEXT (from earlier /harness:brainstorm session) ---
+$(cat .harness/brainstorm-current.md)"
+fi
+
 CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/planner.md)
 
 --- USER REQUEST ---
-$ARGUMENTS" \
+$ARGUMENTS${BRAINSTORM_CONTEXT}" \
   --allowedTools "Read,Write,mcp__context7"
+
+# After Planner creates the feature folder, move brainstorm to it
+if [ -f ".harness/brainstorm-current.md" ]; then
+  FEATURE=$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')
+  if [ -n "$FEATURE" ] && [ -d ".harness/features/${FEATURE}" ]; then
+    mv ".harness/brainstorm-current.md" ".harness/features/${FEATURE}/brainstorm.md"
+  fi
+fi
 ```
 
 Wait for Planner to finish. Verify all files exist in `.harness/`. The Planner runs its own 16-point self-validation before completing.
