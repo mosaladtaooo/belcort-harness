@@ -58,7 +58,16 @@ config:
     rate_limit_seconds: 30      # max 1 non-boundary emission per agent per N seconds
 
 state:
-  phase: "planning"          # planning | analyzing | negotiating | building | evaluating | retrospective | complete
+  # phase enum, two families:
+  #   pipeline:   planning | analyzing | negotiating | building | evaluating | retrospective | complete
+  #   spec-edit:  amending | clarifying | editing | tuning | constitution-amending
+  # Spec-edit phases are set by /harness:amend|clarify|edit|tune-evaluator|constitution-amend at
+  # command entry (via scripts/phase-guard.sh) and restored at exit. The FR-2 hook in
+  # pre-tool-use.sh reads this field and only authorizes orchestrator-side Edit/Write to
+  # .harness/spec/*, features/*/contract.md, evaluator/criteria.md when phase is in the
+  # spec-edit set (or `retrospective`, which is both pipeline and spec-edit). Subagents
+  # bypass the check via CLAUDE_SUBAGENT=1 — they are the canonical writers.
+  phase: "planning"
   current_feature: ""        # e.g., "001-bookmark-crud"
   current_task: ""           # e.g., "FR-005" — updated after each TDD cycle for mid-build recovery
   negotiation_round: 0       # incremented each proposal↔review cycle; max 3 before escalation

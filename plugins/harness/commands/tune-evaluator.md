@@ -19,6 +19,17 @@ The default posture is CONSERVATIVE. Most divergences should result in adding an
 
 ## Procedure
 
+### Step 0: Phase guard (FR-2)
+
+Set the phase so the FR-2 spec-ownership hook authorizes the orchestrator's `Edit` calls in step 5 (appending to `examples.md`) and step 6 (potentially editing `evaluator.md` prompt). `examples.md` is under `evaluator/` and `evaluator.md` lives in the plugin install path — only the former is hook-guarded, but setting the phase keeps the pattern consistent across all spec-edit commands.
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
+phase_set "tuning"
+```
+
+Restored at Step Final.
+
 1. Read `.harness/evaluator/tuning-log.md` entirely.
 
 2. Group entries by divergence category:
@@ -69,6 +80,15 @@ Recommendations:
 6. On any prompt change to `evaluator.md`:
    - Update `manifest.yaml` → `harness.model_tuning_revision` field (new, integer counter)
    - Note in the ADR: which feature's tuning log triggered this, what was changed, why
+
+### Step Final: Restore phase (FR-2)
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
+phase_restore
+```
+
+Run on every exit path. Idempotent.
 
 ## Anti-patterns
 

@@ -88,11 +88,20 @@ Every file under `.harness/` has exactly one writer per phase. If you're not the
 If you (as orchestrator) receive user feedback that requires modifying `spec/*` or `features/NNN/contract.md`, you MUST:
 
 1. NOT use `Edit` or `Write` from your own context on those files
-2. Dispatch the right subagent in the right mode (`/harness:edit`, `/harness:amend`, `/harness:clarify`, `/harness:tune-evaluator`, etc.)
+2. Dispatch the right subagent in the right mode (`/harness:edit`, `/harness:amend`, `/harness:clarify`, `/harness:tune-evaluator`, `/harness:constitution-amend`, etc.)
 3. Let the subagent produce a structured diff
 4. Present the diff to the human before applying
 
 The temptation is to "just edit it, it's one line." Resist. Even a one-line edit from the orchestrator starts a precedent that lets human chatter bleed into spec files, and that's exactly the failure mode the harness is designed to prevent.
+
+**Enforcement (FR-2, v1.5+).** As of v1.5 this rule is no longer prose-only. `hooks/pre-tool-use.sh` inspects every `Edit` and `Write` tool call. Writes to `.harness/spec/*`, `.harness/features/*/contract.md`, and `.harness/evaluator/criteria.md` are blocked when:
+
+- `CLAUDE_SUBAGENT≠1` (i.e., the orchestrator is invoking, not a dispatched subagent), AND
+- `state.phase` in `manifest.yaml` is NOT in the authorized set: `amending | clarifying | editing | tuning | retrospective | constitution-amending`
+
+The dedicated spec-edit commands (`/harness:amend`, `/clarify`, `/edit`, `/tune-evaluator`, `/retrospective`, `/constitution-amend`) each call `phase_set <name>` from `scripts/phase-guard.sh` at command entry and `phase_restore` at command exit. This makes the rule mechanically unsabotagable: even if a future Claude tries to "just Edit the file," the hook blocks the call and prints the list of correct commands.
+
+The bypass for subagents (`CLAUDE_SUBAGENT=1`) is intentional — fresh subagents with clean context ARE the canonical writers. The hook only stops orchestrator-side edits.
 
 ## Agent Communication Protocol
 

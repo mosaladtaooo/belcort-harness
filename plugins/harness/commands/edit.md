@@ -28,6 +28,17 @@ This PR rewrites `/harness:edit` to match the amend/clarify pattern: subagent-au
 
 ## Procedure
 
+### Step 0: Phase guard (FR-2)
+
+Set the phase so the FR-2 spec-ownership hook authorizes the orchestrator's mechanical `Edit` calls in Step 4. Without this, the hook blocks patch application across the multiple files that an edit typically touches.
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
+phase_set "editing"
+```
+
+Restored at Step Final.
+
 ### Step 1: Precondition check
 
 ```bash
@@ -150,6 +161,15 @@ Append to `progress/changelog.md`:
 - Patches applied: [N] of [M]
 - Analyze result: [PASS / WARN / CRITICAL]
 ```
+
+### Step Final: Restore phase (FR-2)
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
+phase_restore
+```
+
+Run on every exit path. Idempotent.
 
 ## Anti-patterns
 

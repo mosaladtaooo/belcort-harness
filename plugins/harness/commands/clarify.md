@@ -19,6 +19,17 @@ The Planner works from a 1–4 sentence prompt. It has to make dozens of implici
 
 ## Procedure
 
+### Step 0: Phase guard (FR-2)
+
+Set the phase so the FR-2 spec-ownership hook authorizes the orchestrator's `Edit` calls in Step 6. Without this, the hook blocks patch application as an unauthorized orchestrator-side spec edit.
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
+phase_set "clarifying"
+```
+
+The phase persists across tool calls via `manifest.yaml`. Restored at Step Final.
+
 ### Step 1: Precondition check
 
 ```bash
@@ -147,6 +158,17 @@ Tell the user the spec has been updated. They can now:
 - Run `/harness:clarify` again if the clarifications revealed new ambiguities
 - Run `/harness:amend "<specific change>"` if they want to make a targeted tweak
 - Run `/harness:rewind planning` if clarifications revealed a fundamentally wrong direction
+
+### Step Final: Restore phase (FR-2)
+
+Restore the previous phase so subsequent orchestrator activity reverts to the default hook posture.
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
+phase_restore
+```
+
+Run on every exit path (early skip-all, no-changes-to-apply, post-apply success). The guard is idempotent.
 
 ## Anti-patterns
 

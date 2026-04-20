@@ -15,6 +15,17 @@ Over many features, specs drift. The Generator might add a helper not mentioned 
 
 ## Procedure
 
+### Step 0: Phase guard (FR-2)
+
+Set the phase so the FR-2 spec-ownership hook authorizes the orchestrator's `Edit` calls in step 6 (applying drift updates to `spec/prd.md`, `spec/architecture.md`).
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
+phase_set "retrospective"
+```
+
+The `retrospective` phase is also a normal pipeline state — sprint.md transitions into it after Evaluator PASS. So setting it explicitly here is consistent (and idempotent if it's already set). Restored at Step Final.
+
 1. Read the completed feature's artifacts:
    - `.harness/features/{current-feature}/contract.md` (what was planned)
    - `.harness/features/{current-feature}/implementation-report.md` (what Generator says was built)
@@ -61,3 +72,12 @@ Over many features, specs drift. The Generator might add a helper not mentioned 
 **On decline:** retrospective findings stay in `retrospective.md` as a record but specs aren't modified. User can revisit later.
 
 If run standalone, use the last completed feature from `manifest.features.completed[-1]`, or ask the user which feature to retrospect.
+
+### Step Final: Restore phase (FR-2)
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
+phase_restore
+```
+
+When invoked from the sprint.md auto-flow, sprint.md sets `state.phase: "complete"` after this command returns — phase_restore restores the prior `evaluating` state, then sprint.md's own transition fires next. When invoked standalone, restore brings the manifest back to whatever it was before retrospective.

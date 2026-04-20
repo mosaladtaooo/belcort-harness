@@ -37,6 +37,17 @@ See [SKILL.md § File Ownership Contract](../skills/harness/SKILL.md) for the fu
 
 ## Procedure
 
+### Step 0: Phase guard (FR-2)
+
+Set the phase so the FR-2 spec-ownership hook authorizes the orchestrator's `Edit` calls in Step 4. Without this, the hook will block the patch application as an unauthorized orchestrator-side spec edit.
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
+phase_set "amending"
+```
+
+The phase persists in `manifest.yaml` across this command's tool calls. It's restored to the prior value at Step Final (success OR failure path).
+
 ### Step 1: Precondition check
 
 ```bash
@@ -168,6 +179,17 @@ Amendments are significant design changes — they belong in the ADR log so the 
 - Post-analyze: [PASS/WARN/CRITICAL]
 - Re-negotiate required: [yes/no]
 ```
+
+### Step Final: Restore phase (FR-2)
+
+Restore the previous phase so subsequent orchestrator activity reverts to the default hook posture (spec edits blocked).
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
+phase_restore
+```
+
+Run this even on early-exit paths (e.g., the user cancels in Step 3, the precondition check fails in Step 1). The guard is idempotent — calling it without a prior `phase_set` is a no-op.
 
 ## Anti-patterns
 

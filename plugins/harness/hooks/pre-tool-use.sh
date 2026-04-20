@@ -64,8 +64,61 @@ fi
 
 TOOL_NAME=$(parse_json_field '.tool_name')
 
-# Only Bash invocations are inspected — other tools have different schemas
-# and different risk profiles. Add per-tool checks here if needed later.
+# ─────────────────────────────────────────────────────────────
+# FR-2: Spec-file ownership guard (Edit / Write)
+# ─────────────────────────────────────────────────────────────
+# Enforces the SKILL.md File Ownership Contract: the orchestrator does NOT
+# edit spec files — only fresh subagents (with clean context) or one of the
+# dedicated spec-edit commands (which set state.phase first).
+#
+# Without this guard, the rule was prose-only and a future Claude could
+# violate it by Edit-ing .harness/spec/* directly from the orchestrator's
+# fat-context session, leaking conversational noise into spec files.
+#
+# Bypass conditions (any one allows):
+#   1. CLAUDE_SUBAGENT=1     — subagents are the canonical writers
+#   2. state.phase ∈ {amending, clarifying, editing, tuning, retrospective,
+#      constitution-amending} — the active command set the phase via
+#      phase_set in scripts/phase-guard.sh
+#   3. file is NOT under guarded paths
+if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
+  TARGET=$(parse_json_field '.tool_input.file_path')
+  case "$TARGET" in
+    */.harness/spec/*|*/.harness/features/*/contract.md|*/.harness/evaluator/criteria.md)
+      # Subagents bypass — they are the authorized writers per File Ownership
+      if [ "${CLAUDE_SUBAGENT:-0}" != "1" ]; then
+        # Orchestrator path: must be in an authorized spec-edit phase
+        ALLOWED_PHASES="amending clarifying editing tuning retrospective constitution-amending"
+        CURRENT_PHASE=""
+        if [ -f ".harness/manifest.yaml" ]; then
+          CURRENT_PHASE=$(grep '^[[:space:]]*phase:' .harness/manifest.yaml 2>/dev/null \
+                            | head -1 | awk -F: '{print $2}' | tr -d '" ' | head -c 30)
+        fi
+        AUTHORIZED=0
+        for p in $ALLOWED_PHASES; do
+          [ "$CURRENT_PHASE" = "$p" ] && { AUTHORIZED=1; break; }
+        done
+        if [ "$AUTHORIZED" = "0" ]; then
+          # Pretty-print the target path relative to PWD if possible
+          REL_TARGET="${TARGET#$PWD/}"
+          echo "BLOCKED: orchestrator may not edit ${REL_TARGET} during phase=${CURRENT_PHASE:-<unset>}." >&2
+          echo "Spec files have designated writers (see SKILL.md File Ownership Contract)." >&2
+          echo "To make a spec change, use one of:" >&2
+          echo "  /harness:amend \"<change>\"        — targeted spec amendment" >&2
+          echo "  /harness:clarify                   — surface ambiguities, batch-answer" >&2
+          echo "  /harness:edit \"<change>\"         — multi-file coordinated edit" >&2
+          echo "  /harness:tune-evaluator           — calibrate criteria/examples" >&2
+          echo "  /harness:retrospective            — sync spec with what was built" >&2
+          echo "  /harness:constitution-amend \"<reason>\" — high-ceremony constitution change" >&2
+          exit 1
+        fi
+      fi
+      ;;
+  esac
+fi
+
+# Only Bash invocations get the rest of the safety rails — other tools have
+# different schemas and different risk profiles.
 [ "$TOOL_NAME" = "Bash" ] || exit 0
 
 TOOL_CMD=$(parse_json_field '.tool_input.command')
