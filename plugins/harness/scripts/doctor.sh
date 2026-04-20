@@ -223,7 +223,39 @@ fi
 
 # CLAUDE.md rules (required for session-start behavior + 1% rule)
 if [ -f "$CLAUDE_HOME/CLAUDE.md" ] && grep -q "BELCORT-HARNESS BEGIN" "$CLAUDE_HOME/CLAUDE.md" 2>/dev/null; then
-  add_result "CRITICAL" "PASS" "Global harness rules" "installed in $CLAUDE_HOME/CLAUDE.md"
+  # Installed — check whether it's still in sync with the snippet this plugin ships.
+  # If the user installed an older version and we've since shipped updates to the
+  # snippet, the session-start behavior could diverge from what the commands expect.
+  SNIPPET_PATH=""
+  if [ -n "$PLUGIN_FOUND" ]; then
+    SNIPPET_PATH="$(dirname "$PLUGIN_FOUND")/../../CLAUDE.md.snippet.txt"
+  fi
+  # Also try the explicit plugin root if we have it
+  [ -z "$SNIPPET_PATH" ] || [ ! -f "$SNIPPET_PATH" ] && {
+    [ -n "$PLUGIN_ROOT" ] && SNIPPET_PATH="$PLUGIN_ROOT/CLAUDE.md.snippet.txt"
+  }
+  [ -f "$SNIPPET_PATH" ] || SNIPPET_PATH="$CLAUDE_HOME/plugins/harness/CLAUDE.md.snippet.txt"
+
+  if [ -f "$SNIPPET_PATH" ]; then
+    # Extract the installed block (between BEGIN and END markers) and compare to the
+    # shipped snippet. Hash-compare is enough — we don't need a full diff here.
+    INSTALLED_BLOCK=$(awk '/BELCORT-HARNESS BEGIN/,/BELCORT-HARNESS END/' "$CLAUDE_HOME/CLAUDE.md" | sed '1d;$d')
+    SHIPPED_HASH=$(shasum -a 256 "$SNIPPET_PATH" 2>/dev/null | awk '{print $1}' | head -c 12)
+    INSTALLED_HASH=$(printf '%s' "$INSTALLED_BLOCK" | shasum -a 256 2>/dev/null | awk '{print $1}' | head -c 12)
+    if [ -n "$SHIPPED_HASH" ] && [ -n "$INSTALLED_HASH" ] && [ "$SHIPPED_HASH" = "$INSTALLED_HASH" ]; then
+      add_result "CRITICAL" "PASS" "Global harness rules" "installed + in sync with plugin snippet"
+    elif [ -n "$SHIPPED_HASH" ] && [ -n "$INSTALLED_HASH" ]; then
+      add_result "RECOMMEND" "WARN" "Global harness rules sync" \
+        "installed block differs from shipped snippet (${INSTALLED_HASH} vs ${SHIPPED_HASH}) — your global rules are stale" \
+        "Run: /harness:setup  # re-install the current snippet"
+      add_result "CRITICAL" "PASS" "Global harness rules" "installed (but stale — see WARN above)"
+    else
+      # Hashing failed — shasum missing or unusual shell env. Fall through to present.
+      add_result "CRITICAL" "PASS" "Global harness rules" "installed in $CLAUDE_HOME/CLAUDE.md (sync check skipped — shasum unavailable)"
+    fi
+  else
+    add_result "CRITICAL" "PASS" "Global harness rules" "installed in $CLAUDE_HOME/CLAUDE.md (sync check skipped — snippet not found in plugin)"
+  fi
 else
   add_result "CRITICAL" "FAIL" "Global harness rules" \
     "BELCORT-HARNESS block not found in ~/.claude/CLAUDE.md" \

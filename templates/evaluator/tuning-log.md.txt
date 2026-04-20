@@ -12,37 +12,47 @@ When 3+ divergences of the same pattern accumulate, `/harness:tune-evaluator` su
 - Adding a calibration example to `examples.md` (for most patterns)
 - Updating `evaluator.md` prompt (for systematic behavioral issues)
 
----
+## Entry schema
 
-## Log entries
+Every entry MUST follow this shape. `/harness:tune-evaluator` reads these fields programmatically and will skip malformed entries — keep the field names and divergence-category vocabulary exact.
 
-<!-- Template for each entry:
-
-## YYYY-MM-DD — feature/NNN-name — [agree/disagree/partial]
+```markdown
+## YYYY-MM-DD — features/NNN-name — <agree | disagree | partial>
 
 ### Evaluator's judgment
-- Verdict: PASS/FAIL
+- Verdict: <PASS | FAIL>
 - Scores: F:X/10 Q:X/10 T:X/10 P:X/10
-- Key findings: [summary]
+- Key findings: <summary — one or two sentences>
 
 ### Human's judgment
-- Verdict: [what human thinks it should have been]
-- Scores: [what human would give]
-- Reasoning: [why human disagreed]
+- Verdict: <what human thinks it should have been>
+- Scores: <what human would give — same F/Q/T/P format>
+- Reasoning: <why human disagreed, one sentence>
 
 ### Divergence category
-[Leniency / Overclaim / Missed issue / Wrong severity / Out of scope / Other]
+<one of: Leniency | Overclaim | Missed issue | Wrong severity | Out of scope | Other>
 
 ### Specific diff
-- [Specific thing Evaluator got wrong]
-- [Specific thing Evaluator missed]
+- <concrete thing Evaluator got wrong — quote from eval-report.md>
+- <concrete thing Evaluator missed — what the human noticed instead>
 
 ### Action taken
-- [ ] Added example to examples.md (ID: F-NNN / Q-NNN / T-NNN / P-NNN)
+- [ ] Added example to examples.md (ID: F-NNN | Q-NNN | T-NNN | P-NNN)
 - [ ] Added note to spec/evaluator-notes.md
 - [ ] Flagged for evaluator.md prompt revision
 - [ ] No action (one-off, not a pattern)
+```
 
--->
+Divergence-category vocabulary (must be one of exactly these — `/harness:tune-evaluator` greps for them):
+- **Leniency** — Evaluator approved something the human thinks should have failed
+- **Overclaim** — Evaluator claimed a test passed or a criterion met when it didn't
+- **Missed issue** — Evaluator didn't notice a bug the human sees
+- **Wrong severity** — Evaluator graded Major when human says Critical (or vice versa)
+- **Out of scope** — Evaluator penalized for something outside the contract
+- **Other** — doesn't fit the above; explain in Reasoning
+
+---
+
+## Log entries
 
 _No entries yet._

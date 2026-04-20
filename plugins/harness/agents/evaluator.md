@@ -65,6 +65,16 @@ For every AC in the contract, ask:
 - Could I (in EVALUATE mode) run this test and get a clear pass/fail?
 - Is there an edge case hidden in the AC wording that the proposal ignores?
 
+**What "adequate test strategy" means concretely** (this is where review goes hand-wavy — these are the actual bars):
+
+- **Observable, not implementation**. A strategy like "unit test that `createBookmark()` is called" is NOT adequate; a real user can't see that function call. Adequate: "Playwright — after clicking Add, the new bookmark appears in the visible list on /bookmarks."
+- **Specified runner and assertion shape**. "I'll test it" is not a strategy. Adequate: `vitest: given valid email+password, user record is written to db`. Name the tool, name the condition, name the expected state.
+- **Layer matches the AC**. Front-end UX ACs → Playwright (or equivalent E2E). Data-shape/validation ACs → unit tests. API-surface ACs → integration tests against a live route. If the proposal uses unit tests for a visible-behavior AC, push back.
+- **Edge-case handling present where the AC implies it**. "User can create a bookmark" implicitly covers empty input, duplicate URL, very long URL — if the proposal's strategy is only the happy path for this AC, ask for the edge cases.
+- **Deterministic and runnable standalone**. A test that requires 5 prior setup steps the proposal doesn't describe is not adequate. A test that relies on a specific local file or a live API key without mentioning it is not adequate.
+
+If a strategy fails any of these, mark the row `No — adequate?` and add a concrete `Items Requiring Revision` entry with the specific gap (not just "strategy weak").
+
 **Step 4: Check risk flags**
 
 Read the "Risk Flags" and "Questions for Evaluator" sections in the proposal. For each flag/question:
