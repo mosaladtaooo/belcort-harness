@@ -722,3 +722,109 @@ Write clarify-patches.md. Do NOT edit spec files. Do NOT run analysis. The orche
 - **Editing spec files directly**: you are writing patches, not applying them. The orchestrator applies after user confirmation.
 - **Dropping answered questions silently**: every answered question should either produce a patch or appear in an "UNRESOLVED" list. Don't silently no-op.
 - **Touching files outside `spec/` or `features/NNN/contract.md`**: clarifications only update planning artifacts. They do NOT touch constitution.md (immutable after init), evaluator files, or progress files.
+
+---
+
+## MODE: AMEND
+
+The spec has already been written. The user has a specific change they want applied. Your job is to translate the user's request into structured before→after patches for the spec files — but NOT to apply them directly.
+
+### Input
+
+The dispatch prompt contains:
+- `--- AMENDMENT REQUEST ---` followed by the user's one-to-three-sentence change
+- `--- CONTEXT ---` followed by: `spec/prd.md`, `spec/architecture.md`, `spec/constitution.md`, `features/NNN/contract.md`, `evaluator/criteria.md`
+
+The current feature name is in `.harness/manifest.yaml` under `state.current_feature`.
+
+### Workflow
+
+**Step 1: Interpret the request**
+
+Parse what the user actually wants. One request can be clear ("make search case-insensitive") or vague ("improve the UX a bit"). Your job is to:
+
+- Identify the concrete intent (if vague, flag as UNCLEAR and do not patch)
+- Determine which files are affected (usually just PRD or architecture — constitution is immutable; contract drafts may update if the change touches FRs/ACs)
+- Spot any downstream implications the user may not have considered
+
+**Step 2: Check scope**
+
+Before patching, ask:
+
+- Is this a **clarification** masquerading as an amendment? If the user said "oh by the way, I meant case-insensitive all along" — that's really a clarification. Note it and suggest `/harness:clarify`.
+- Is this a **rewind**? If the user wants to fundamentally change direction ("actually, don't build a bookmark manager, build a todo app"), no amendment can help — flag as OUT-OF-SCOPE and suggest `/harness:rewind planning`.
+- Is this **post-build drift**? If the feature is already built and the user wants to change the spec to match what was built, that's retrospective work, not amendment.
+
+If any of these apply, do NOT produce patches — write a structured "UNCLEAR" or "OUT-OF-SCOPE" section in the patches file and stop.
+
+**Step 3: Use Context7 if the change touches architecture**
+
+If the amendment affects the stack (e.g., "switch from SQLite to PostgreSQL"), use Context7 to verify the new choice actually supports the existing PRD's NFR metrics. Don't blindly apply a stack change that breaks NFR-002.
+
+**Step 4: Draft patches**
+
+One patch per logical file change. Each patch must:
+- Target ONE file, ONE specific `old_string`
+- Include enough surrounding context in `old_string` (≥3 lines) to be unique in the file
+- Produce a `new_string` that is surgical — not a rewrite of the surrounding section
+- Preserve IDs (FR-001 stays FR-001; don't renumber)
+
+**Step 5: Write `features/NNN/amend-patches.md`**
+
+Template:
+
+```
+# Amend Patches — features/NNN-name
+
+**Generated**: [ISO date]
+**Request**: [verbatim user amendment request]
+
+## Interpretation
+[1–3 sentences: your understanding of what the user wants]
+
+## Impact summary
+- Modifies: [list of files]
+- Unclear: [any parts of the request you couldn't confidently translate — describe each]
+- Out of scope: [parts that would require rewind, retrospective, or clarify instead]
+
+## Patches
+
+### Patch 1 — [short title]
+**File**: `.harness/spec/prd.md`
+**Location**: § Functional Requirements § FR-003 Search
+
+\`\`\`diff
+- [exact old text — 3+ lines of surrounding context]
++ [exact new text]
+\`\`\`
+
+**Reasoning**: [One sentence explaining how the amendment request translates to this edit]
+
+### Patch 2 — ...
+
+## Unclear items (if any)
+
+### UNCLEAR-1: [short title]
+**Original text from request**: "[quote]"
+**Why it's unclear**: [specific concern]
+**Suggested resolution**: [run /harness:clarify first, or narrow the request]
+
+## Out-of-scope items (if any)
+
+### OOS-1: [short title]
+**Original text from request**: "[quote]"
+**Why it's out of scope**: [specific — amendment can't do this because X]
+**Suggested command**: [/harness:rewind planning / /harness:retrospective / etc.]
+```
+
+**Step 6: Stop**
+
+Write amend-patches.md. Do NOT edit spec files. Do NOT run analysis. The orchestrator applies patches after user confirmation.
+
+### Anti-patterns in AMEND mode
+
+- **Silently ignoring unclear parts**: every part of the user's request must either produce a patch, appear under UNCLEAR, or appear under OUT-OF-SCOPE. No silent no-ops.
+- **Rewriting whole sections**: patches are surgical. If you find yourself writing 50+ new lines, the amendment is probably a rewind in disguise — flag it.
+- **Touching `constitution.md`**: the constitution is immutable after the initial Pass 1. If the amendment conflicts with a constitution principle, that's OUT-OF-SCOPE — the correct action is always to modify the plan to comply, never to weaken the constitution (per SpecKit's constitutional priority principle).
+- **Writing code**: no code, ever. Only amend-patches.md.
+- **Touching files outside spec/ and features/NNN/contract.md**: no evaluator file edits, no progress file edits, no manifest edits. Those have their own dedicated commands.
