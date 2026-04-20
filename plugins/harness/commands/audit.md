@@ -17,7 +17,12 @@ Runs independently of sprints. Scans all completed features for deferred verific
    - Run the same reward-hacking patterns the Evaluator uses in EVALUATE mode (`.skip`, trivial assertions, same-commit test+impl modifications) against the current codebase. Accumulated drift since the feature merged → flag.
    - Check `git log --all --diff-filter=D --name-only` for test deletions that don't have a matching ADR in `progress/decisions.md`. Untracked deletions → flag.
 6. Cross-reference against current codebase (has anything been silently fixed?)
-7. Report:
+7. **Calibration metrics readout** (Trustworthy Agents Art.2). Read `manifest.yaml` → `config.calibration_metrics` and summarize the running interrupt-to-checkin ratio across completed sprints. Surface anomalies:
+   - `user_interrupts` much greater than `agent_checkins` → harness is too silent; agents are missing ambiguities the user has to correct manually. Suggest reviewing Planner + Generator red-flags and tightening `/harness:clarify` suggestions.
+   - `agent_checkins` much greater than `user_interrupts` on trivial tasks → harness is over-cautious, creating approval fatigue. Suggest relaxing the AskUserQuestions triggers in Planner.
+   - Either ratio trending worse over time → call out the trend; raw numbers without direction aren't actionable.
+   If counters are all zero, the orchestrator hasn't been incrementing them — flag as "calibration metrics not collected; see sprint.md §5b for increment points".
+8. Report:
    ```
    ═══════════════════════════════
      Harness — Verification Audit
@@ -34,10 +39,16 @@ Runs independently of sprints. Scans all completed features for deferred verific
      - features/002: 3 tests marked .skip() appeared post-merge (FR-006 coverage regressed)
      - global: 2 test files deleted with no ADR (src/lib/auth.test.ts, src/lib/token.test.ts)
 
+   Calibration (last N sprints):
+     user_interrupts : agent_checkins = 8 : 3  (ratio 2.67)
+     Assessment: agents trending silent — 3 course corrections vs 1 clarifying question per sprint
+     Suggestion: review /harness:clarify auto-suggest trigger in sprint.md step 2
+
    Recommendations:
      - Address M1 (old, may block shipping)
      - Close 3 items that are silently resolved
      - Investigate features/002 reward-hacking indicators — consider /harness:rewind + re-evaluate
+     - Calibration: tighten Planner's clarify-trigger heuristic
    ═══════════════════════════════
    ```
 8. Offer to promote high-priority items to new sprints via `/harness:sprint`

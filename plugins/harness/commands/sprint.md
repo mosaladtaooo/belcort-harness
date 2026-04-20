@@ -57,6 +57,23 @@ The Planner works in two passes:
 
 This ordering matters: architecture decisions shape how work decomposes, so PRD comes first.
 
+**Per-agent model resolution** (BMAD-inspired): the manifest at `config.models.{planner,generator,evaluator}` can override the default `harness.model` per agent. Planning is usually cheaper on Sonnet than Opus. Use this helper pattern before every dispatch:
+
+```bash
+# Resolve the model for a given agent — falls back to harness.model if override is blank.
+# Usage: MODEL_FLAG=$(resolve_model_flag planner)
+resolve_model_flag() {
+  local agent="$1"
+  local default_model per_agent
+  default_model=$(grep '^[[:space:]]*model:' .harness/manifest.yaml | head -1 | awk -F'"' '{print $2}')
+  per_agent=$(awk -v key="$agent" '/^[[:space:]]*models:/{in_m=1;next} in_m && $1==key":"{gsub(/"/,"",$2); print $2; exit}' .harness/manifest.yaml)
+  local chosen="${per_agent:-$default_model}"
+  [ -n "$chosen" ] && printf -- "--model %s" "$chosen"
+}
+```
+
+Call `resolve_model_flag planner` before the Planner dispatch, and add the returned flag (if any) to the `claude -p` invocation.
+
 ```bash
 # If a brainstorm file exists, append it as additional context
 BRAINSTORM_CONTEXT=""
@@ -66,10 +83,14 @@ if [ -f ".harness/brainstorm-current.md" ]; then
 $(cat .harness/brainstorm-current.md)"
 fi
 
+# shellcheck disable=SC2086  # MODEL_FLAG is intentionally unquoted to allow empty expansion
+MODEL_FLAG=$(resolve_model_flag planner)
+
 CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/planner.md)
 
 --- USER REQUEST ---
 $ARGUMENTS${BRAINSTORM_CONTEXT}" \
+  ${MODEL_FLAG} \
   --allowedTools "Read,Write,mcp__context7"
 
 # After Planner creates the feature folder, move brainstorm to it
@@ -145,6 +166,7 @@ Anthropic's original harness inserts a negotiation step here because the product
 FEATURE=$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')
 
 # Round 1: Generator writes implementation proposal
+GEN_MODEL_FLAG=$(resolve_model_flag generator)
 CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
 --- MODE: NEGOTIATE ---
 You are in NEGOTIATE mode, not BUILD mode. Do NOT write code yet.
@@ -162,9 +184,11 @@ $(cat .harness/spec/constitution.md)
 $(cat .harness/spec/architecture.md)
 $(cat .harness/features/${FEATURE}/contract.md)
 $(cat .harness/evaluator/criteria.md)" \
+  ${GEN_MODEL_FLAG} \
   --allowedTools "Read,Write,mcp__context7"
 
 # Round 2: Evaluator reviews the proposal
+EVAL_MODEL_FLAG=$(resolve_model_flag evaluator)
 CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/evaluator.md)
 --- MODE: REVIEW-PROPOSAL ---
 You are reviewing a Generator's implementation proposal BEFORE any code is written.
@@ -183,6 +207,7 @@ Write your review to .harness/features/${FEATURE}/review.md with:
 $(cat .harness/evaluator/criteria.md)
 $(cat .harness/features/${FEATURE}/contract.md)
 $(cat .harness/features/${FEATURE}/proposal.md)" \
+  ${EVAL_MODEL_FLAG} \
   --allowedTools "Read,Write"
 
 # Loop: if review says needs-revision, Generator revises proposal (append round to same files)
@@ -199,6 +224,7 @@ This is the source of truth for the Build phase.
 $(cat .harness/features/${FEATURE}/contract.md)
 $(cat .harness/features/${FEATURE}/proposal.md)
 $(cat .harness/features/${FEATURE}/review.md)" \
+  ${GEN_MODEL_FLAG} \
   --allowedTools "Read,Write"
 ```
 
@@ -224,9 +250,11 @@ $(cat .harness/evaluator/criteria.md)"
 --- EVALUATOR FEEDBACK (FIX THESE) ---
 $(cat .harness/features/${FEATURE}/eval-report.md)"
 
+BUILD_MODEL_FLAG=$(resolve_model_flag generator)
 CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/generator.md)
 --- PROJECT CONTEXT ---
 $CONTEXT" \
+  ${BUILD_MODEL_FLAG} \
   --allowedTools "Read,Write,Bash,mcp__context7"
 ```
 
@@ -235,12 +263,14 @@ Update `manifest.yaml`: phase → "evaluating"
 ### 4. EVALUATE — Dispatch Evaluator subagent (FRESH context, SEPARATE from Generator)
 
 ```bash
+EVAL_MODEL_FLAG=$(resolve_model_flag evaluator)
 CLAUDE_SUBAGENT=1 claude -p "$(cat ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/evaluator.md)
 --- EVALUATION CONTEXT ---
 $(cat .harness/evaluator/criteria.md)
 $(cat .harness/features/${FEATURE}/implementation-report.md)
 $(cat .harness/features/${FEATURE}/contract.md)
 $(cat .harness/spec/constitution.md)" \
+  ${EVAL_MODEL_FLAG} \
   --allowedTools "Read,Write,Bash,mcp__playwright"
 ```
 
@@ -338,6 +368,21 @@ git commit -m "[harness:merge] ${FEATURE}: [contract summary]"
 git worktree remove .worktrees/current 2>/dev/null
 # Update ROADMAP.md: move feature to "✅ Shipped"
 # Update manifest: features.completed += [${FEATURE}], features.in_progress = "", state.phase → "complete", retry_count → 0
+
+# Record calibration snapshot (Trustworthy Agents Art.2 §calibration).
+# Count this sprint's interrupts (course corrections from user) vs check-ins
+# (agents that asked clarifying questions). The audit command surfaces the
+# running ratio. Anomaly signals:
+#   - interrupts >> check-ins → agents are too silent, missing ambiguities
+#   - check-ins >> interrupts on trivial tasks → agents are over-cautious
+# Intended increment points:
+#   - agent_checkins: +1 each time any subagent invoked AskUserQuestions or
+#     ran /harness:clarify mid-sprint
+#   - user_interrupts: +1 each time the user ran /harness:amend, /harness:steer,
+#     /harness:edit, or typed a course-correction in a human gate
+# If you track these during the sprint (or can reconstruct from changelog.md),
+# update them here before writing last_sprint_ratio.
+#   last_sprint_ratio: "<user_interrupts>:<agent_checkins>" (e.g., "2:5")
 ```
 
 Print scores and completion message.

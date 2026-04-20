@@ -3,10 +3,14 @@
 # Agents read this first to know where they are in the pipeline.
 
 harness:
-  version: "1.3"           # Increment when harness design changes
-  model: "claude-opus-4-7" # Model these prompts were tuned for
+  version: "1.4"           # Increment when harness design changes
+  model: "claude-opus-4-7" # DEFAULT model (used by any agent without an override in config.models below)
   model_tuning_revision: 0    # incremented each time evaluator.md prompt is modified via /harness:tune-evaluator
   created: ""              # ISO date when harness was initialized
+  # Schema migration note: fields added in a newer version ALWAYS have safe defaults so older
+  # manifests read without modification. If a field is absent, treat it as its documented default
+  # rather than erroring. Breaking schema changes bump harness.version MAJOR and come with a
+  # migration path in CHANGELOG — never silently reshape an existing manifest.
 
 project:
   name: ""
@@ -20,6 +24,27 @@ config:
     unit: "vitest"
     e2e: "playwright"
   context_strategy: "fresh_subagent"  # fresh_subagent | single_session (Opus 4.6+)
+
+  # Per-agent model pinning (BMAD-inspired: planning and implementation don't need the same model).
+  # Each agent can override harness.model above. Leave as "" to use the default.
+  # Recommended splits:
+  #   - planner: claude-sonnet-4-6   (large context, cheaper, planning is mostly reading+writing docs)
+  #   - generator: claude-opus-4-7   (strongest coding model — default)
+  #   - evaluator: claude-opus-4-7   (adversarial reasoning benefits from strongest model — default)
+  # If you change any of these, /harness:doctor will verify the model IDs are valid.
+  models:
+    planner: ""     # e.g., "claude-sonnet-4-6" to run planning on a cheaper model
+    generator: ""   # typically left empty (uses harness.model)
+    evaluator: ""   # typically left empty (uses harness.model)
+
+  # Calibration metrics — quantitative signal for Trustworthy Agents Art.2 §calibration.
+  # The orchestrator increments these at appropriate points during the sprint. /harness:audit
+  # surfaces them. When user_interrupts >> agent_checkins, the harness is too silent.
+  # When agent_checkins >> user_interrupts on trivial tasks, it's being overly cautious.
+  calibration_metrics:
+    user_interrupts: 0          # user typed a course-correction mid-phase
+    agent_checkins: 0           # agent paused to ask a clarifying question
+    last_sprint_ratio: ""       # computed at sprint end: "interrupts:checkins — e.g., 2:5"
 
 state:
   phase: "planning"          # planning | analyzing | negotiating | building | evaluating | retrospective | complete

@@ -133,6 +133,24 @@ else
     "macOS: brew install jq  |  Debian/Ubuntu: apt install jq  |  or install python3"
 fi
 
+# Per-agent model overrides — if manifest pins a model, verify it looks like a
+# valid Claude model ID (not a typo). Does not check availability — that happens
+# at dispatch time. This is a sanity check against 'claude-ops-4.7' (typo) etc.
+if [ -f ".harness/manifest.yaml" ]; then
+  for agent in planner generator evaluator; do
+    model=$(awk -v key="$agent" '/^[[:space:]]*models:/{in_m=1;next} in_m && $1==key":"{gsub(/"/,"",$2); print $2; exit}' .harness/manifest.yaml 2>/dev/null || true)
+    # Skip if empty (default) or doesn't look set
+    [ -z "$model" ] && continue
+    if printf '%s' "$model" | grep -qE '^claude-(opus|sonnet|haiku)-[0-9]+(-[0-9]+)?(-[a-z0-9]+)?$'; then
+      add_result "RECOMMEND" "PASS" "Agent model pin: ${agent}" "pinned to ${model}"
+    else
+      add_result "RECOMMEND" "WARN" "Agent model pin: ${agent}" \
+        "pinned to '${model}' — does not match claude-<opus|sonnet|haiku>-N-M pattern (typo?)" \
+        "Edit .harness/manifest.yaml → config.models.${agent} or clear it to use the default"
+    fi
+  done
+fi
+
 # ─────────────────────────────────────────────────────────────
 # CRITICAL: MCP servers (the thing that burned the user last time)
 # ─────────────────────────────────────────────────────────────
