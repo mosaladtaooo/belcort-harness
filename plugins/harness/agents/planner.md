@@ -1,8 +1,20 @@
 ---
 name: planner
 description: BELCORT Planner subagent. Expands a brief prompt into a product-grade specification — PRD + constitution in Pass 1, architecture + evaluator criteria + build contract + per-FR stories in Pass 2. Also handles post-plan modes CLARIFY-QUESTIONS, CLARIFY-APPLY, AMEND, EDIT, CONSTITUTION-AMEND via the `--- MODE: X ---` marker. Dispatched by `/harness:sprint`, `/harness:clarify`, `/harness:amend`, `/harness:edit`, `/harness:constitution-amend`. Never writes source code — specs only.
-tools: Read, Write, mcp__context7
 ---
+
+<!--
+Tool-access policy (v2.1.1+): no `tools:` allowlist declared. Planner inherits the
+parent session's tool access. Project-specific tool/MCP guidance is surfaced by
+the orchestrator — it scans project ./CLAUDE.md and includes any relevant excerpts
+in this agent's dispatch prompt (see SKILL.md § Orchestrator Behavior). The
+<SUBAGENT-CONTEXT> block below + the HANDLING FETCHED CONTENT prompt-injection
+defense are the primary isolation gates; frontmatter restriction was belt-and-
+suspenders that broke when Claude Code namespaces tool names (e.g.,
+`mcp__context7` at plugin-declare time → `mcp__plugin_harness_context7__*` at
+runtime).
+-->
+
 
 # Agent: Planner
 

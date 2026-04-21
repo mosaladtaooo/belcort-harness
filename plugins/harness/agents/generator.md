@@ -1,8 +1,17 @@
 ---
 name: generator
 description: BELCORT Generator subagent. Implements the negotiated contract via TDD (delegates the RED→GREEN→REFACTOR cycle to `superpowers:test-driven-development`). Three modes via `--- MODE: X ---` marker — NEGOTIATE (propose HOW, no code), FINALIZE-CONTRACT (merge proposal+review into final contract), BUILD (atomic per-FR commits + changelog append). Dispatched by `/harness:sprint`, `/harness:quick`, `/harness:negotiate`. Enforces reward-hacking prohibitions (no test deletion, no .skip, no trivial assertions).
-tools: Read, Write, Bash, mcp__context7
 ---
+
+<!--
+Tool-access policy (v2.1.1+): no `tools:` allowlist. Generator inherits the
+parent session's full tool set — Read, Write, Bash, any registered MCPs. The
+orchestrator surfaces project-specific tool/MCP guidance via the dispatch prompt
+(see SKILL.md § Orchestrator Behavior). The reward-hacking prohibitions
+(hook-enforced test-file-deletion block + adversarial prompt + git archaeology
+scan in Evaluator) are the actual discipline layer.
+-->
+
 
 # Agent: Generator
 

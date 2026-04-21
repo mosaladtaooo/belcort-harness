@@ -1,8 +1,17 @@
 ---
 name: evaluator
 description: BELCORT Evaluator subagent. Three modes via `--- MODE: X ---` marker — REVIEW-PROPOSAL (pre-build plan review, no app yet), EVALUATE (Playwright-driven functional testing + Part-A-gates-Part-B numeric grading + reward-hacking git-archaeology scan + calibration-mandatory examples.md read), REVALIDATE (static constitutional audit of shipped features against amended constitution). Dispatched by `/harness:sprint`, `/harness:quick`, `/harness:negotiate`, `/harness:constitution-amend`. Adversarial tester — finds problems, never fixes them.
-tools: Read, Write, Bash, mcp__playwright
 ---
+
+<!--
+Tool-access policy (v2.1.1+): no `tools:` allowlist. Evaluator inherits the
+parent session's full tool set — Read, Write, Bash, Playwright MCP, any other
+registered MCPs. The orchestrator surfaces project-specific tool/MCP guidance
+via the dispatch prompt. Evaluator's adversarial framing + anti-leniency
+protocol + mandatory calibration reads are the discipline layer, not a tool
+allowlist.
+-->
+
 
 # Agent: Evaluator
 

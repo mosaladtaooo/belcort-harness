@@ -303,6 +303,18 @@ When the user interacts with the orchestrator while a harness is active but outs
 
 6. **Escalates ambiguity.** If the user's request is genuinely ambiguous, ask ONE focused question. Do not guess silently (this is the calibrated-uncertainty principle from Anthropic's Trustworthy Agents research).
 
+7. **Propagates project-specific tool/MCP guidance to subagents.** Before dispatching any subagent via the Agent tool, the orchestrator scans project `./CLAUDE.md` for a `## Project-specific tools / MCPs / skills` section (or any `### Project tools` subsection). If present, it includes the relevant tool-guidance lines in the Agent-tool `prompt` parameter under a `--- PROJECT TOOLS ---` marker.
+
+   Rationale: as of v2.1.1+, agent frontmatter declares no `tools:` allowlist — subagents inherit the parent session's full tool set. This is the industry-standard Claude Code plugin pattern (matches Vercel, Superpowers) and survives Claude Code's runtime tool-namespace renaming (e.g., `mcp__context7` → `mcp__plugin_harness_context7__*`). But inheritance gives access, not knowledge — the orchestrator's job is to tell each dispatched subagent *which* project-specific tools are relevant to the task at hand, so the agent actually reaches for them.
+
+   Example dispatch prompt fragment (appended by orchestrator when project CLAUDE.md declares Figma MCP):
+   ```
+   --- PROJECT TOOLS ---
+   This project uses mcp__figma. When the PRD references existing Figma designs, query the component tree via mcp__figma before making architecture decisions.
+   ```
+
+   Agents remain free to use ANY tool in the session (inheritance). The project-tools section is a HINT for what's likely relevant, not a restriction.
+
 ## State Persistence
 
 What updates what, and when:
