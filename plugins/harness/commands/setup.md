@@ -1,46 +1,45 @@
 ---
-description: Install BELCORT Harness behavioral rules into ~/.claude/CLAUDE.md (idempotent, upgradable, removable). Run this once after installing the plugin.
+description: Initialize BELCORT Harness in the current project. Creates .harness/ with templates and installs project-local activation rules into ./CLAUDE.md. Idempotent; safe to re-run.
 ---
 
 # `/harness:setup`
 
-One-time installer. Patches `~/.claude/CLAUDE.md` with the BELCORT Harness behavioral rules (the "1% rule", trigger-word detection, session-start behavior, pipeline docs). Rules load globally in every Claude Code session after install — CLAUDE.md-authority, survives context compaction.
+One-time per-project installer. Scaffolds `.harness/` from the bundled templates and writes a project-local `./CLAUDE.md` with the harness activation rules.
 
-Idempotent: running multiple times is safe. Upgrades in place when the plugin version changes.
+As of v2.0.0, installation is PROJECT-LOCAL. There is no longer a global `~/.claude/CLAUDE.md` write. This keeps harness-specific context out of unrelated projects.
 
 ## Procedure
 
-### Step 1 — Install the behavioral rules
+### Step 1: Run the setup script
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-rules.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh"
 ```
 
-Report the script's output to the user.
+The script:
+1. Creates `.harness/` with `spec/`, `evaluator/`, `features/`, `progress/` subdirectories.
+2. Copies baseline templates (manifest, ROADMAP, progress files, evaluator criteria + examples + tuning-log) into `.harness/`. Never overwrites existing user-customised files.
+3. Writes the project-local activation snippet into `./CLAUDE.md` (appending to existing content inside `<!-- BELCORT-HARNESS BEGIN v2 -->` … `<!-- BELCORT-HARNESS END -->` markers).
+4. Warns if a legacy global `~/.claude/CLAUDE.md` block from v1.x is detected — suggests the cleanup command.
 
-### Step 2 — Run the doctor (environment preflight)
+### Step 2: Run the doctor
 
-Immediately after installing rules, audit the environment so the user knows what else is needed before they can actually run a sprint. Missing MCPs or an old Node will show up here — not at 3am mid-build.
+After setup, verify the environment:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh"
 ```
 
-- If doctor exits `0`: tell the user "Environment ready. You can run `/harness:sprint \"<your prompt>\"` now."
-- If doctor exits non-zero: show the full report (it already includes the suggested install commands). Tell the user: "Fix the items above, then run `/harness:doctor` to re-verify before your first sprint."
+- On exit `0`: tell the user "Environment ready. Run `/harness:sprint \"<prompt>\"`."
+- On non-zero: show the doctor's full report (includes copy-paste fix commands) and stop. Tell the user: "Fix the items above, then run `/harness:doctor` to re-verify before your first sprint."
 
-See [doctor.md](doctor.md).
+### Step 3: Tell the user what happened
 
-### Step 3 — Confirm to the user
-
-1. Rules now live in `~/.claude/CLAUDE.md` wrapped in `<!-- BELCORT-HARNESS BEGIN v1.2 --> ... <!-- BELCORT-HARNESS END -->` markers.
-2. A fresh Claude Code session will pick them up automatically (no restart of existing sessions required, but they won't retroactively apply until reload).
-3. To re-check the environment any time: `/harness:doctor`
-4. To uninstall the rules later (keeping the plugin): `bash "${CLAUDE_PLUGIN_ROOT}/scripts/uninstall-rules.sh"`
-5. To remove the plugin entirely: `/plugin disable harness` then `/plugin uninstall harness`.
+Summarise: files created in `.harness/`, project CLAUDE.md patched, any legacy global block detected. Give the exact next-step command.
 
 ## Notes
 
-- This command does NOT auto-run on plugin install. Claude Code plugins can't inject into CLAUDE.md directly, which is why this explicit step exists.
-- The patch is idempotent and wrapped in markers, so it coexists safely with any existing content in your CLAUDE.md.
-- If you customize the snippet content locally, re-running setup will overwrite your customizations. Fork the plugin or edit the snippet in the plugin repo before installing.
+- Setup is per-project. If you work in multiple harness projects, run setup in each.
+- Re-running setup is safe: existing files in `.harness/` are preserved; only the `./CLAUDE.md` BELCORT-HARNESS block is refreshed.
+- To migrate from v1.x global install: run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/uninstall-rules.sh"` once to drop the legacy global block. Then `/harness:setup` in each project.
+- To uninstall from a project: remove `.harness/` and the BELCORT-HARNESS block from `./CLAUDE.md`. The plugin remains installed; other projects are unaffected.

@@ -6,6 +6,31 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## [2.0.0] — 2026-04-21
+
+### Removed
+- `/harness:steer` command + `features/NNN/steering.md`. Mid-build steering collapses into `/harness:amend` (spec change) or the evaluator retry loop (quality).
+- `/harness:assumption-test` + `scripts/assumption-test.sh` (287 lines). Never run in practice; manual A/B is a 5-minute task when needed.
+- `scripts/progress-poller.sh` + `agents/_progress-protocol.md` + heartbeat sections in all three agents. `claude -p` streams stdout natively; the poller solved a non-problem on Opus 4.7.
+- `scripts/phase-guard.sh` + FR-2 spec-file-edit enforcement in `hooks/pre-tool-use.sh`. Prose rule in SKILL.md suffices on Opus 4.7.
+- Per-agent model pinning (`config.models.{planner,generator,evaluator}`). Unused, undocumented.
+- Global CLAUDE.md installation. Rules now install project-local via `/harness:setup`.
+
+### Changed
+- `skills/harness/SKILL.md` promoted to auto-invoked skill (trigger-phrase matching). `/harness:*` slash commands remain as explicit entry points.
+- `SessionStart` hook reduced from ~50 lines of state injection to ~15 lines — one-line "harness detected, invoke skill" nudge. State reading moves into the skill.
+- Generator BUILD mode references `superpowers:test-driven-development` for RED/GREEN/REFACTOR; BELCORT-specific rules (atomic per-FR commits, reward-hacking prohibition) retained inline.
+- `/harness:rewind` simplified from 267 to ~80 lines.
+- All template content consolidated to `plugins/harness/templates/`. Root `templates/` deleted.
+- Command files rewritten as natural-language procedures. Bash retained only for `claude -p` dispatch, `git worktree`, and hook contents.
+
+### Migration
+- Users who installed v1.x rules globally: run `scripts/uninstall-rules.sh` once to remove the legacy `~/.claude/CLAUDE.md` block, then `/harness:setup` in each project to install the new project-local rules.
+
+### Architecture
+- ~45% LoC reduction. Pipeline and Anthropic-aligned core unchanged.
+- Full rationale: `docs/superpowers/specs/2026-04-21-belcort-v2-minimalist-refactor-design.md`.
+
 ## [1.5.2] — 2026-04-20
 
 **Theme:** Documentation-only release. The pipeline implementation is **unchanged** from v1.5.1 — same agents, same commands, same hooks, same manifest schema, same dispatch pattern. No code behavior changes.

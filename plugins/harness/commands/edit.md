@@ -1,132 +1,116 @@
 ---
-description: Cascade-aware spec edit via a fresh Planner subagent. User states a change; the Planner identifies every file it affects (architecture, init.sh, NFRs, contract) and produces a coordinated patch set; orchestrator shows diffs, user approves per-file, patches applied mechanically. Follows the same "orchestrator doesn't author spec content" rule as /harness:amend but emphasises cross-file cascade propagation.
+description: Cascade-aware spec edit via a fresh Planner subagent. User states a change; the Planner identifies every file it affects (architecture, init.sh, NFRs, contract) and produces a coordinated patch set; orchestrator shows diffs grouped by file, user approves, patches applied mechanically. Follows the same "orchestrator doesn't author spec content" rule as /harness:amend but emphasises cross-file cascade propagation.
 argument-hint: "<what to change, 1-3 sentences>"
 ---
 
 # `/harness:edit` — Cascade-aware spec edit
 
-For targeted spec changes that ripple across multiple files — e.g., swapping databases, changing a framework, tightening an NFR. The change request is `$ARGUMENTS`. If empty, ask what to change.
+For spec changes that ripple across multiple files — swapping a database, changing a framework, tightening an NFR. The request is `$ARGUMENTS`. If empty, ask what to change.
 
 ## How this differs from `/harness:amend`
 
 | | `/harness:amend` | `/harness:edit` |
 |---|---|---|
-| Intent | Change WHAT (FRs, ACs, product behaviour) | Change HOW the spec describes cross-file concerns |
+| Intent | Change WHAT (FRs, ACs, product behaviour) | Change cross-file concerns |
 | Typical use | "make search case-insensitive" | "swap SQLite for PostgreSQL" |
-| Files touched | Usually 1 (PRD or contract) | Typically 3+ (architecture + NFRs + init.sh + etc.) |
+| Files touched | Usually 1 | Typically 3+ |
 | Cascade awareness | Minimal | Primary concern |
 
-They share the same safety property: **the orchestrator does NOT author spec content**. Both commands dispatch a fresh Planner subagent to produce before→after patches; the orchestrator only shows diffs and mechanically applies on confirmation.
+Both share the safety property: **the orchestrator does NOT author spec content**. Both dispatch a fresh Planner subagent to produce before→after patches; the orchestrator only shows diffs and mechanically applies on confirmation.
 
-If in doubt, use `/harness:amend`. Use `/harness:edit` when you already know the change will touch multiple files and you want the Planner to be explicitly cascade-aware.
+If in doubt, use `/harness:amend`. Use `/harness:edit` when you know the change will touch multiple files and want the Planner explicitly cascade-aware.
 
-## Why this matters (the problem it fixes)
+## When NOT to use
 
-Previously, `/harness:edit` was documented as "apply the change surgically — only modify the affected sections", which the orchestrator carried out using its own `Edit` tool. This violated the File Ownership Contract introduced in v1.3 — the orchestrator's chat context leaked into spec edits, and cross-file consistency had no explicit mechanism.
-
-This PR rewrites `/harness:edit` to match the amend/clarify pattern: subagent-authored patches + orchestrator-applied + auto-analyzed.
+- Single-file tweak → `/harness:amend`.
+- Constitution change → `/harness:constitution-amend`.
+- Fundamental direction change → `/harness:rewind planning`.
+- Post-merge drift reconciliation → `/harness:retrospective`.
 
 ## Procedure
 
-### Step 0: Phase guard (FR-2)
-
-Set the phase so the FR-2 spec-ownership hook authorizes the orchestrator's mechanical `Edit` calls in Step 4. Without this, the hook blocks patch application across the multiple files that an edit typically touches.
-
-```bash
-source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
-phase_set "editing"
-```
-
-Restored at Step Final.
-
 ### Step 1: Precondition check
 
-```bash
-FEATURE=$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')
+The orchestrator reads `.harness/manifest.yaml` for `state.current_feature` (call this `${FEATURE}`; may be absent if editing between features). Also read `state.phase`. If `phase` is `building` or `evaluating`, warn: "Phase is ${PHASE}. Editing spec files now will diverge from what the Generator is building. Consider `/harness:rewind` first. Continue anyway?" Require explicit `yes` to proceed.
 
-# /harness:edit works even without an active feature (you may be editing the constitution or global spec between features).
-# Warn if there's a build in progress — edits to architecture mid-build are dangerous.
-PHASE=$(grep 'phase:' .harness/manifest.yaml | head -1 | awk '{print $2}' | tr -d '"')
-if [ "$PHASE" = "building" ] || [ "$PHASE" = "evaluating" ]; then
-  echo "⚠ Phase is $PHASE. Editing spec files now will diverge from what the Generator is building."
-  echo "  Consider /harness:rewind first. Continue anyway?"
-fi
-```
+### Step 2: Dispatch fresh Planner in EDIT mode
 
-### Step 2: Dispatch fresh Planner with the edit request
+Planner's EDIT mode (see `agents/planner.md § MODE: EDIT`) is the cascade-aware sibling of AMEND: same patch-generation discipline, but the user's intent is expected to touch ≥2 spec files. The Planner reads the full spec + contract + criteria + init.sh, identifies every affected file, and produces coordinated patches grouped by file.
 
-The dispatch is identical in shape to `/harness:amend`'s but the instruction emphasises cascade analysis:
+The orchestrator dispatches the Planner via the Agent tool:
 
-```bash
-CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in EDIT mode (cascade-aware spec edit; note: this mode is currently driven by instruction since planner.md does not yet have a dedicated MODE: EDIT section — treat it as an AMEND-like flow with explicit cascade emphasis).
+- **subagent_type**: `harness:planner`
+- **description**: `"Cascade edit: <short summary of $ARGUMENTS>"`
+- **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
 
-The user wants this change (expected to touch MULTIPLE files):
-$ARGUMENTS
+> You are being dispatched in EDIT mode (see your system prompt's MODE ROUTING table).
+>
+> --- EDIT REQUEST ---
+> $ARGUMENTS
+>
+> --- CONTEXT ---
+> Read via Read tool: .harness/spec/prd.md, .harness/spec/architecture.md, .harness/spec/constitution.md (read-only — NEVER patch this in EDIT mode), .harness/features/${FEATURE}/contract.md, .harness/evaluator/criteria.md, and .harness/init.sh if relevant.
+>
+> Identify every file the change affects — resist the pull to under-scope. Produce structured before→after patches, grouped by file, to .harness/features/${FEATURE}/edit-patches.md per your EDIT mode template. If state.current_feature is empty, use .harness/edit-patches.md (top-level) instead. Flag any UNCLEAR or OUT-OF-SCOPE items. Constitutional implications → flag as OUT-OF-SCOPE, suggest /harness:constitution-amend. Do NOT apply patches.
 
-Read the current spec via Read tool (paths to check: .harness/spec/prd.md, architecture.md, constitution.md; .harness/features/${FEATURE:-global}/contract.md if exists; .harness/evaluator/criteria.md; .harness/init.sh).
+If `state.current_feature` is empty (editing spec between features), the Planner writes patches to `.harness/edit-patches.md` (top-level) per its EDIT mode template. The orchestrator reads whichever path exists after the dispatch returns.
 
-Your job:
-1. Identify EVERY file affected by the requested change.
-2. For each file, draft a before→after patch.
-3. If a downstream file (e.g., init.sh, NFR metric, test criteria) exists only because of a choice the edit is reversing, flag that the downstream file may need to be rewritten entirely rather than patched — do NOT produce a patch for it yourself; flag it in an UNCLEAR section.
+### Step 3: Present patches grouped by file
 
-Write all patches to .harness/features/${FEATURE:-global}/edit-patches.md. Do NOT apply patches — the orchestrator applies after user confirmation." \
-  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/planner.md" \
-  --allowedTools "Read,Write,mcp__context7"
-```
-
-The Planner's default MODE is PLAN, so the `--- MODE: EDIT ---` marker here is interpreted by the instruction block rather than a dedicated mode section in `planner.md`. If a future PR promotes EDIT to a first-class mode in `planner.md` (parallel to AMEND), update this dispatch to match. For now the inline instruction is sufficient.
-
-### Step 3: Present the patches
-
-Read `edit-patches.md`. Unlike amend (which typically has 1–3 patches), edit outputs may have 5–10 patches across files. Present them grouped by file:
+The orchestrator reads `.harness/features/${FEATURE}/edit-patches.md`. Unlike amend (1–3 patches), cascade edits commonly produce 5–10 patches. Group by file:
 
 ```
 ═══════════════════════════════
-  Harness — Edit Preview
+  Harness — Cascade Edit Preview
 ═══════════════════════════════
 Request: ${ARGUMENTS}
 
-Planner's interpretation:
-  [1-2 sentence summary]
+Planner's interpretation: [1-3 sentences]
 
-Affected files ([N]):
-  • spec/architecture.md — [N patches]
-  • .harness/init.sh — [N patches]
-  • spec/prd.md (NFR-002) — [N patches]
-  • features/${FEATURE}/contract.md — [N patches]
+Affected files (N):
+  • spec/architecture.md          — [M patches]
+  • spec/prd.md (NFR-002)         — [M patches]
+  • features/${FEATURE}/contract.md — [M patches]
+  • .harness/init.sh              — [M patches]
 
-Unclear items ([N]):
-  • [each item — file, reason, suggested resolution]
-
-Out-of-scope items ([N]):
-  • [each item]
+UNCLEAR items (N):  [file + question]
+OUT-OF-SCOPE items (N):  [file + item]
 
 Commands:
-  all        — apply every patch (review first by 'diff all')
-  diff N     — show the Nth patch's diff
-  diff FILE  — show all patches targeting FILE
-  apply N    — apply only patch N
-  apply FILE — apply all patches for FILE
-  skip       — discard; patches remain in edit-patches.md for reference
-  cancel     — exit without applying anything
+  all          — apply every patch
+  diff N       — show patch N's before/after
+  diff FILE    — show all patches for FILE
+  apply N      — apply only patch N
+  apply FILE   — apply all patches for FILE
+  skip         — discard; patches remain on disk
+  cancel       — exit
 ═══════════════════════════════
 ```
 
 ### Step 4: Apply approved patches
 
-Same pattern as amend: use `Edit` tool mechanically. The orchestrator is executing a pre-computed plan written by the Planner in a clean context, not authoring.
+For each approved patch, the orchestrator uses the `Edit` tool with the patch's `old_string` and `new_string`. Mechanical apply — the Planner wrote the exact strings. If a patch is flagged UNCLEAR, do NOT improvise: either skip it or run `/harness:clarify` first.
 
-### Step 5: Run `/harness:analyze`
+### Step 5: Run analyze (consistency check)
 
-Automatic. Cascade edits are *exactly* the case where analyze earns its keep — a change to architecture.md might leave an NFR orphaned, an AC untestable, or a constitution principle violated. If analyze flags a CRITICAL finding, offer to rollback: `git checkout -- <affected files>`.
+Invoke `/harness:analyze`. Cascade edits are exactly where analyze earns its keep — a change in architecture.md might leave an NFR orphaned, an AC untestable, or a constitution principle violated. On CRITICAL findings, offer rollback via `git checkout --`.
 
-### Step 6: Log to ADR + changelog
+### Step 6: Run validate (completeness check)
 
-Append an ADR to `progress/decisions.md`:
+Invoke `/harness:validate` on the post-edit spec. Analyze catches *inconsistency* (files don't reference each other correctly); validate catches *incompleteness* (a section the edit gutted, a removed NFR that now lacks a measurable target, an AC that lost its verification path). Cascade edits are the specific risk scenario where both audits are proportional — single-file amendments don't warrant this second pass.
 
-```
-## ADR-NNN — Edit: [short title]
+On V-gate failures (V1–V16 from `agents/planner.md § SELF-VALIDATION`):
+- **Fix-now** (recommended if ≤2 failures): run `/harness:amend "<fix>"` or `/harness:edit "<fix>"` per failure, then re-run validate.
+- **Defer-to-sprint** (acceptable if failures are expected to be filled by an imminent sprint, e.g., adding a new FR that the next sprint will flesh out with ACs): note each deferred V-gate in `.harness/progress/known-issues.md` with a target feature/date. Do NOT defer silently — the gap is a ticking drift timer.
+
+Skip Step 6 only if the edit turned out to be single-file after all (rare — flag as "used /edit for an amend-scale change" in the ADR).
+
+### Step 7: Log ADR + changelog
+
+Orchestrator appends to `.harness/progress/decisions.md` (use the template at `@templates/progress/decisions.md`):
+
+```markdown
+## ADR-NNN — Cascade edit: [short title]
 **Date**: YYYY-MM-DD
 **Feature**: ${FEATURE:-global}
 **Status**: Accepted
@@ -135,50 +119,36 @@ Append an ADR to `progress/decisions.md`:
 User requested: "${ARGUMENTS}"
 
 ### Decision
-Edited [N] files; applied [N] of [proposed M] patches.
+Edited [N] files; applied [M] of [proposed K] patches.
 Affected files: [list]
 
 ### Consequences
-- [What changed]
-- [Downstream: which systems / phases are affected]
-- [If phase was building/evaluating: was a rewind needed?]
+- [What changed across files]
+- [Downstream: re-negotiate, rebuild, or none]
 ```
 
-Append to `progress/changelog.md`:
+Append to `.harness/progress/changelog.md`:
 
-```
-## YYYY-MM-DD — [features/NNN or global] — Edit applied
+```markdown
+## YYYY-MM-DD — [features/NNN or global] — Cascade edit applied
 - Request: "${ARGUMENTS}"
 - Files modified: [list]
-- Patches applied: [N] of [M]
-- Analyze result: [PASS / WARN / CRITICAL]
+- Patches applied: [M of K]
+- Post-analyze: [PASS/WARN/CRITICAL]
 ```
-
-### Step Final: Restore phase (FR-2)
-
-```bash
-source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
-phase_restore
-```
-
-Run on every exit path. Idempotent.
 
 ## Anti-patterns
 
-- **Using edit for one-file tweaks**: use `/harness:amend` — edit's machinery is overkill for a single-file change
-- **Using edit during active build**: the Generator is already building against the current spec. Spec edits now create divergence. Either `/harness:rewind` first, or wait until evaluation completes.
-- **Editing the constitution**: the constitution is effectively immutable after initial Pass 1. If you need to change it, the correct action is to rewind to planning and reinitialise the harness.
-- **Orchestrator-authored edits**: DO NOT take the "affected files" list from the preview and run `Edit` yourself with free-form new content. If the Planner's patch for a file is "UNCLEAR", treat that as a signal, not an invitation to improvise.
+- **Using edit for one-file tweaks**: overkill — use `/harness:amend`.
+- **Editing during active build**: creates divergence with the Generator. Rewind first or wait for evaluation.
+- **Orchestrator-authored "fixes"** for UNCLEAR items: skip or clarify, never improvise.
+- **Ignoring analyze**: cascades are the whole reason analyze exists.
 
 ## Files written
 
-| File | Writer | Lifetime |
-|---|---|---|
-| `features/NNN/edit-patches.md` (or `.harness/edit-patches.md` if no active feature) | Planner EDIT-mode dispatch | kept as record |
-| `spec/*.md`, `features/NNN/contract.md`, `init.sh` (whichever apply) | Orchestrator applies Planner-authored patches via `Edit` | updated in place |
-| `progress/decisions.md` | Orchestrator appends ADR | append-only |
-| `progress/changelog.md` | Orchestrator appends | append-only |
-
----
-
-**Historical note**: Before this PR, `/harness:edit` was a thin wrapper around the orchestrator's `Edit` tool and relied on the orchestrator to identify affected files and write the edits. That violated the File Ownership Contract (codified in SKILL.md as of v1.3) and had no explicit cascade coordination. This rewrite brings `/harness:edit` into alignment with `/harness:amend` and `/harness:clarify`: subagent-authored patches + orchestrator-applied + auto-analyzed. Backwards-compatible from the user's perspective (same command name, same argument shape); internally restructured.
+| File | Writer |
+|---|---|
+| `.harness/features/NNN/edit-patches.md` (or `.harness/edit-patches.md` if global) | Planner AMEND-mode cascade dispatch |
+| `spec/*.md`, `contract.md`, `init.sh` | Orchestrator applies Planner patches via Edit |
+| `progress/decisions.md` | Orchestrator appends ADR |
+| `progress/changelog.md` | Orchestrator appends |

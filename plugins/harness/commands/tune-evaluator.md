@@ -2,50 +2,47 @@
 description: Review Evaluator divergence patterns from tuning-log.md and propose calibration improvements (new few-shot examples or criteria prompt changes). Conservative by default — prefer examples over prompt edits.
 ---
 
-# `/harness:tune-evaluator` — Review divergence patterns and propose prompt improvements
+# `/harness:tune-evaluator` — Review divergences and propose calibration improvements
 
-Runs independently of sprints. Analyzes accumulated `tuning-log.md` entries to surface patterns and propose concrete changes to Evaluator calibration.
+Runs independently of sprints. Analyzes accumulated `.harness/evaluator/tuning-log.md` entries to surface patterns and propose concrete changes to Evaluator calibration.
 
-**When to invoke:**
-- The sprint pipeline suggests it after detecting ≥3 entries of the same divergence category
-- After a string of feels-wrong evaluations, to check if it's a pattern
-- Periodically (every 5-10 features) as a health check
+Like `/harness:retrospective`, this is an orchestrator-driven command — no subagent dispatch. The orchestrator reads the log, groups divergences, and proposes low-risk fixes first.
 
-## Why it exists
+## When to invoke
 
-Anthropic's documented tuning loop: "read the evaluator's logs, find examples where its judgment diverged from mine, and update the QAs prompt to solve for those issues." This command formalizes that loop.
+- The sprint pipeline suggests it after ≥3 entries in the same divergence category.
+- After a string of feels-wrong evaluations, to check if it's a pattern.
+- Periodically (every 5–10 features) as a health check.
 
-The default posture is CONSERVATIVE. Most divergences should result in adding an example to `examples.md`, not changing the Evaluator prompt. Prompt changes are only justified when a behavioral pattern is systematic and example calibration hasn't fixed it.
+## Default posture: CONSERVATIVE
+
+Most divergences should result in **adding a calibration example** to `examples.md`, not changing the Evaluator prompt. Prompt changes are justified ONLY when a behavioral pattern is systematic AND example calibration hasn't already fixed it. Prompt edits compound — every prompt edit affects every future evaluation. Start with examples.
 
 ## Procedure
 
-### Step 0: Phase guard (FR-2)
+### Step 1: Precondition check
 
-Set the phase so the FR-2 spec-ownership hook authorizes the orchestrator's `Edit` calls in step 5 (appending to `examples.md`) and step 6 (potentially editing `evaluator.md` prompt). `examples.md` is under `evaluator/` and `evaluator.md` lives in the plugin install path — only the former is hook-guarded, but setting the phase keeps the pattern consistent across all spec-edit commands.
+The orchestrator verifies `.harness/evaluator/tuning-log.md` exists and contains at least one entry. If empty or missing, tell the user "No tuning-log entries yet — nothing to tune" and exit.
 
-```bash
-source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
-phase_set "tuning"
-```
+### Step 2: Read and group divergences
 
-Restored at Step Final.
+Orchestrator reads the full tuning-log.md and groups entries by the `Divergence` category:
 
-1. Read `.harness/evaluator/tuning-log.md` entirely.
+- **Leniency** — Evaluator too soft (false PASS)
+- **Strictness** — Evaluator too harsh (false FAIL)
+- **Missed issue** — Evaluator didn't test an edge case that mattered
+- **Overclaim** — Evaluator flagged something that wasn't broken
+- **Scope confusion** — Evaluator graded outside the contract
+- **Other**
 
-2. Group entries by divergence category:
-   - Leniency (Evaluator too soft)
-   - Strictness (Evaluator too harsh — false FAILs)
-   - Missed issue (Evaluator didn't test edge case)
-   - Overclaim (Evaluator flagged something that wasn't actually broken)
-   - Scope confusion (Evaluator graded outside contract)
-   - Other
+### Step 3: Analyze patterns per category
 
-3. For each category with ≥3 entries, run pattern analysis:
-   - Read the specific divergences
-   - Check `examples.md` for calibration examples already covering this pattern
-   - Determine: is this a calibration gap, or a systematic behavioral issue?
+For each category with ≥3 entries (or explicit user invocation for <3), the orchestrator:
+1. Reads the specific divergences in that category.
+2. Reads `.harness/evaluator/examples.md` to check if calibration examples already cover the pattern.
+3. Assesses: calibration gap (example missing) vs. systematic behavioral issue (example present but not helping).
 
-4. Report:
+### Step 4: Present findings
 
 ```
 ═══════════════════════════════
@@ -54,47 +51,78 @@ Restored at Step Final.
 Log entries analyzed: [N]
 Patterns detected: [N]
 
-Pattern 1: Leniency on edge case testing
-  Entries: [list of log entries]
-  Root cause assessment: [calibration gap / behavioral / unclear]
-  Existing examples covering this: [N]
-
+Pattern 1: Leniency on edge-case testing  (6 entries)
+  Entries: [list]
+  Existing examples covering this: [M]
+  Assessment: calibration gap / systematic / unclear
   Proposed action:
-    [ ] Add calibration example to examples.md (preferred — low risk)
-    [ ] Update evaluator.md prompt (higher risk — only if examples insufficient)
-    [ ] Defer — not enough signal yet, revisit after more entries
+    [a] Add calibration example to examples.md (preferred, low risk)
+    [b] Edit evaluator.md prompt (higher risk, only if examples insufficient)
+    [c] Defer — insufficient signal, revisit later
 
-Pattern 2: [...]
+Pattern 2: ...
 
-Recommendations:
-  - Low-risk: [add N examples to examples.md]
-  - Higher-risk: [specific prompt tweaks, if any]
+For each pattern: choose [a], [b], [c], or [skip].
 ═══════════════════════════════
 ```
 
-5. Present recommendations to the user. For each:
-   - If user approves "add example" → draft the example, show it, append to `examples.md` on confirmation
-   - If user approves "update prompt" → draft the specific prompt diff (show before/after), apply to `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/agents/evaluator.md` on confirmation, and log the change as an ADR in `progress/decisions.md` for traceability
-   - If user defers → mark entries in tuning-log.md as "reviewed, deferred" so they don't resurface immediately
+### Step 5: Apply approved actions
 
-6. On any prompt change to `evaluator.md`:
-   - Update `manifest.yaml` → `harness.model_tuning_revision` field (new, integer counter)
-   - Note in the ADR: which feature's tuning log triggered this, what was changed, why
+For each pattern the user approves:
 
-### Step Final: Restore phase (FR-2)
+**Action [a] — Add calibration example**: The orchestrator drafts an entry following the format in `examples.md` (symptom → correct Evaluator response), shows it to the user for approval, then uses the `Edit` tool to append it to `.harness/evaluator/examples.md`.
 
-```bash
-source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
-phase_restore
+**Action [b] — Edit evaluator prompt**: The orchestrator drafts a specific before/after diff on `${CLAUDE_PLUGIN_ROOT}/agents/evaluator.md`, presents it, and requires typed confirmation (`I-AM-EDITING-THE-EVALUATOR-PROMPT`). On confirmation, uses the `Edit` tool on evaluator.md, then uses the `Edit` tool on `.harness/manifest.yaml` to bump `harness.model_tuning_revision` by 1 (create the field as integer 1 if missing).
+
+**Action [c] — Defer**: The orchestrator uses the `Edit` tool to mark each entry in tuning-log.md as `reviewed: deferred YYYY-MM-DD` so they don't resurface on the next run.
+
+### Step 6: Log ADR (mandatory if prompt edited)
+
+For any prompt edit to evaluator.md, the orchestrator appends to `.harness/progress/decisions.md`:
+
+```markdown
+## ADR-NNN — Evaluator prompt tuning: [short title]
+**Date**: YYYY-MM-DD
+**Status**: Accepted
+
+### Context
+Tuning review of [N] log entries surfaced a [Leniency / Strictness / ...] pattern.
+Existing examples did not correct it.
+
+### Decision
+Edited evaluator.md §[section]: [before → after]
+Bumped manifest → harness.model_tuning_revision to [N].
+
+### Consequences
+- All future evaluations use the updated prompt
+- [Any specific expected impact on divergences]
 ```
 
-Run on every exit path. Idempotent.
+### Step 7: Append to changelog
+
+```markdown
+## YYYY-MM-DD — Evaluator tuning
+- Log entries reviewed: [N]
+- Examples added: [N]
+- Prompt edits applied: [N]
+- Entries deferred: [N]
+- model_tuning_revision: [N]
+```
 
 ## Anti-patterns
 
-- **Over-eager prompt editing**: Every divergence becoming a prompt change. This leads to prompt bloat and overfitting. Default to examples; touch the prompt only for systematic issues.
-- **Single-case prompt changes**: Changing `evaluator.md` based on one divergence. Not enough signal. Wait for pattern.
-- **Silent prompt edits**: Changing the prompt without logging why. Impossible to audit later. Every prompt change must produce an ADR.
-- **Ignoring strictness divergences**: Only attending to leniency. False FAILs waste retry cycles just as badly as false PASSes ship bugs.
+- **Over-eager prompt editing**: every divergence becomes a prompt change. Leads to prompt bloat and overfitting. Default to examples.
+- **Single-case prompt changes**: editing based on one divergence. Wait for a pattern.
+- **Silent prompt edits**: any change to evaluator.md MUST log an ADR. Without it, the change is unauditable.
+- **Ignoring strictness divergences**: only attending to false PASSes. False FAILs waste retry cycles just as badly.
 
-If there are <3 divergences in any category, tell the user there's not enough signal yet and recommend revisiting after more sprints.
+## Files written
+
+| File | Writer |
+|---|---|
+| `.harness/evaluator/examples.md` | Orchestrator appends approved examples via Edit |
+| `agents/evaluator.md` | Orchestrator applies approved prompt diffs via Edit (rare) |
+| `.harness/evaluator/tuning-log.md` | Orchestrator marks deferred entries |
+| `manifest.yaml → harness.model_tuning_revision` | Orchestrator bumps on prompt edit |
+| `progress/decisions.md` | Orchestrator appends ADR on prompt edit |
+| `progress/changelog.md` | Orchestrator appends |

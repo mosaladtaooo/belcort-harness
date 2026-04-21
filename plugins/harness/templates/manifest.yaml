@@ -3,18 +3,10 @@
 # Agents read this first to know where they are in the pipeline.
 
 harness:
-  version: "1.5"           # Increment when harness design changes
-  model: "claude-opus-4-7" # DEFAULT model (used by any agent without an override in config.models below)
+  version: "2.0"           # Increment when harness design changes
+  model: "claude-opus-4-7" # Default model for all subagent dispatches
   model_tuning_revision: 0    # incremented each time evaluator.md prompt is modified via /harness:tune-evaluator
   created: ""              # ISO date when harness was initialized
-  # FR-5 Component-as-Assumption stress test (Rajasekaran 2026). /harness:assumption-test
-  # writes here. /harness:audit reads it to remind the user which components are due for
-  # quarterly retesting. Empty values = no test ever run.
-  last_assumption_test:
-    date: ""               # ISO date of last test
-    component: ""          # component tested (brainstorm|negotiation|two-stage-eval|red-flags|calibration-examples|reward-hacking-scan|analyze)
-    canary: ""             # path to the canary spec used
-    verdict: ""            # LOAD-BEARING | MARGINAL | OBSOLETE
   # Schema migration note: fields added in a newer version ALWAYS have safe defaults so older
   # manifests read without modification. If a field is absent, treat it as its documented default
   # rather than erroring. Breaking schema changes bump harness.version MAJOR and come with a
@@ -49,18 +41,6 @@ config:
     e2e: "playwright"
   context_strategy: "fresh_subagent"  # fresh_subagent | single_session (Opus 4.6+)
 
-  # Per-agent model pinning (BMAD-inspired: planning and implementation don't need the same model).
-  # Each agent can override harness.model above. Leave as "" to use the default.
-  # Recommended splits:
-  #   - planner: claude-sonnet-4-6   (large context, cheaper, planning is mostly reading+writing docs)
-  #   - generator: claude-opus-4-7   (strongest coding model — default)
-  #   - evaluator: claude-opus-4-7   (adversarial reasoning benefits from strongest model — default)
-  # If you change any of these, /harness:doctor will verify the model IDs are valid.
-  models:
-    planner: ""     # e.g., "claude-sonnet-4-6" to run planning on a cheaper model
-    generator: ""   # typically left empty (uses harness.model)
-    evaluator: ""   # typically left empty (uses harness.model)
-
   # Calibration metrics — quantitative signal for Trustworthy Agents Art.2 §calibration.
   # The orchestrator increments these at appropriate points during the sprint. /harness:audit
   # surfaces them. When user_interrupts >> agent_checkins, the harness is too silent.
@@ -70,27 +50,13 @@ config:
     agent_checkins: 0           # agent paused to ask a clarifying question
     last_sprint_ratio: ""       # computed at sprint end: "interrupts:checkins — e.g., 2:5"
 
-  # Subagent observability — closes Trustworthy Agents §opacity-at-scale.
-  # When true, each subagent appends one JSONL milestone per boundary event to
-  # .harness/features/${FEATURE}/_progress.jsonl, and the orchestrator polls and
-  # surfaces them as `[HH:MM AGENT] phase: msg` lines while the dispatch runs.
-  # Set to false for fully silent runs (e.g., CI batch jobs where no human is watching).
-  # Protocol details: plugins/harness/agents/_progress-protocol.md
-  observability:
-    heartbeat: true             # subagents emit milestones, orchestrator polls every 10s
-    poll_interval_seconds: 10   # orchestrator's reader cadence
-    rate_limit_seconds: 30      # max 1 non-boundary emission per agent per N seconds
-
 state:
-  # phase enum, two families:
+  # phase enum:
   #   pipeline:   planning | analyzing | negotiating | building | evaluating | retrospective | complete
   #   spec-edit:  amending | clarifying | editing | tuning | constitution-amending
-  # Spec-edit phases are set by /harness:amend|clarify|edit|tune-evaluator|constitution-amend at
-  # command entry (via scripts/phase-guard.sh) and restored at exit. The FR-2 hook in
-  # pre-tool-use.sh reads this field and only authorizes orchestrator-side Edit/Write to
-  # .harness/spec/*, features/*/contract.md, evaluator/criteria.md when phase is in the
-  # spec-edit set (or `retrospective`, which is both pipeline and spec-edit). Subagents
-  # bypass the check via CLAUDE_SUBAGENT=1 — they are the canonical writers.
+  # Spec-edit phases are informational as of v2.0 (prose rule in SKILL.md governs;
+  # no mechanical hook enforcement). Subagents are the canonical writers of spec/
+  # files via CLAUDE_SUBAGENT=1 dispatch.
   phase: "planning"
   current_feature: ""        # e.g., "001-bookmark-crud"
   current_task: ""           # e.g., "FR-005" — updated after each TDD cycle for mid-build recovery

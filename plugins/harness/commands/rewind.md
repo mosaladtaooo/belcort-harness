@@ -1,234 +1,90 @@
 ---
-description: Reset the harness to an earlier phase for the current feature. Archives everything produced after that phase (never deletes), resets manifest state, and leaves the project ready to resume. Requires explicit confirmation — destructive by default. Use when a phase went off-track and a clean restart from an earlier checkpoint is cheaper than surgical edits.
+description: Archive-based phase reset for the current feature. Moves files to .archive/, resets manifest state, optionally resets the build git branch. Requires typed confirmation.
 argument-hint: "<target phase: planning | analyzing | negotiating | building | evaluating>"
 ---
 
-# `/harness:rewind` — Reset to an earlier phase
+# `/harness:rewind`
 
-For when a phase went fundamentally wrong and you'd rather restart from an earlier checkpoint than patch forward. Target phase is `$ARGUMENTS`. If empty, ask which phase.
+Reset a feature to an earlier phase when something went fundamentally wrong and patching forward is more expensive than restarting from a clean checkpoint. Target phase is `$ARGUMENTS`. If empty, ask.
 
-**Rewind is archive-based, not delete-based.** Every file removed from the active state gets moved to `.harness/features/NNN/.archive/YYYYMMDD-HHMMSS/`. You can inspect the archive at any time, and copy files back if you decide the rewind was a mistake. Nothing is truly destroyed except (optionally) git commits during a build rewind, which the user must explicitly confirm.
+**Archive-based, not delete-based.** Every file removed from the active state is moved to `.harness/features/NNN/.archive/TIMESTAMP/`, never deleted. You can inspect and restore manually if needed.
 
-## When to use rewind
+## Valid targets
 
-- **Planner output is fundamentally wrong** → `/harness:rewind planning`. The PRD misunderstood the user's intent, or the architecture picked the wrong stack. Cheaper to re-plan than to patch with `/harness:amend`.
-- **Negotiation stuck in a loop and the contract draft is the problem** → `/harness:rewind planning` (to re-plan) or stay at `negotiating` and restart negotiation after editing the draft.
-- **Build went off-rails and multiple retries didn't help** → `/harness:rewind negotiating`. The contract probably needs refinement before another build.
-- **Evaluator disagreement is systemic** → NOT a rewind problem. Use `/harness:tune-evaluator` instead.
-- **You want to redo evaluation** → `/harness:rewind evaluating`. Keeps build artifacts, forces a fresh Evaluator dispatch.
+| Target | What gets archived | What survives |
+|---|---|---|
+| `planning` | whole feature folder | `.harness/spec/*` (from prior features), evaluator artifacts |
+| `analyzing` | `analysis-report.md` | spec, draft contract |
+| `negotiating` | `proposal.md`, `review.md`, final contract (draft kept) | spec, draft contract |
+| `building` | `implementation-report.md`, `eval-report.md`, `retrospective.md` | spec, final contract, proposal, review |
+| `evaluating` | `eval-report.md`, `retrospective.md` | all build artifacts + source |
 
-## When NOT to use rewind
-
-- Minor tweaks → use `/harness:amend`
-- Ambiguity resolution → use `/harness:clarify`
-- Implementation nudges → use `/harness:steer`
-- Post-merge spec sync → use `/harness:retrospective`
-- Fully shipped features → rewind won't help; start a new feature
-
-## Valid target phases
-
-| Target | What gets archived | What survives | Git impact |
-|---|---|---|---|
-| `planning` | whole feature folder | spec/ files you built up over prior features | none (no commits yet) |
-| `analyzing` | `analysis-report.md` | spec/, draft contract | none |
-| `negotiating` | `proposal.md`, `review.md`, final contract (keeps draft) | spec/, draft contract | none |
-| `building` | `implementation-report.md`, `eval-report.md` | spec/, final contract, proposal, review | WARN — commits on `harness/build/${FEATURE}` branch survive by default; orchestrator offers to reset |
-| `evaluating` | `eval-report.md`, `retrospective.md` | all build artifacts + source | none |
-
-`complete` is not a valid rewind target — that feature is done and merged. Start a new feature.
+`complete` is not a valid rewind target (feature is shipped; start a new one).
 
 ## Procedure
 
-### Step 1: Validate the target phase
+### Step 1: Validate target + feature exists
 
-```bash
-TARGET="$ARGUMENTS"
-FEATURE=$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')
+Orchestrator reads `$ARGUMENTS` and `.harness/manifest.yaml → state.current_feature`. Validate target is one of the five valid phases; validate a current feature exists. If either fails, print a concise error and exit.
 
-[ -n "$FEATURE" ] || {
-  echo "No active feature. Nothing to rewind."
-  exit 1
-}
+### Step 2: Preview
 
-case "$TARGET" in
-  planning|analyzing|negotiating|building|evaluating) ;;
-  "") echo "Usage: /harness:rewind <phase>. Valid phases: planning, analyzing, negotiating, building, evaluating."; exit 1 ;;
-  complete|retrospective)
-    echo "Cannot rewind to '$TARGET'. Rewind moves backward, not forward or sideways."
-    exit 1 ;;
-  *) echo "Unknown phase: $TARGET"; exit 1 ;;
-esac
-```
+Show the user what will be archived, what will survive, the manifest delta (phase, current_task, retry_count, negotiation_round), and — if rewinding to `building` or earlier and the `harness/build/${FEATURE}` branch has commits — a separate git warning (see Step 6).
 
-### Step 2: Identify what will be archived
+### Step 3: Require typed confirmation
 
-Based on the target phase, determine which files get moved to archive. Build a manifest of the planned archive:
+The user must type exactly `rewind to <target>` (e.g., `rewind to negotiating`). No fuzzy match — rewind is the most destructive command in the harness. On any other input, cancel with "rewind cancelled, nothing changed."
 
-```
-═══════════════════════════════
-  Harness — Rewind Preview
-═══════════════════════════════
-Feature: ${FEATURE}
-Current phase: [read from manifest]
-Target phase:  ${TARGET}
+### Step 4: Archive
 
-Files that will be archived to .harness/features/${FEATURE}/.archive/YYYYMMDD-HHMMSS/:
-  • features/${FEATURE}/proposal.md
-  • features/${FEATURE}/review.md
-  • features/${FEATURE}/implementation-report.md
-  • features/${FEATURE}/eval-report.md
+Orchestrator creates `.harness/features/${FEATURE}/.archive/TIMESTAMP/` (via Bash tool using `mkdir -p`). For each file in the archive set (per the table above), the orchestrator uses `mv` to move it into the archive directory.
 
-Files that survive:
-  • spec/prd.md           (kept)
-  • spec/architecture.md  (kept)
-  • spec/constitution.md  (kept)
-  • features/${FEATURE}/contract.md (draft kept; final archived)
+For `planning` target: archive the WHOLE feature folder (move `.harness/features/${FEATURE}/*` except `.archive/`), and set `state.current_feature = ""` so the next `/harness:sprint` creates a fresh numbered folder.
 
-Manifest changes:
-  state.phase:         building → ${TARGET}
-  state.current_task:  "FR-005" → ""
-  state.retry_count:   2 → 0
-  state.negotiation_round: N → 0 (if rewinding past negotiation)
-
-[If rewinding to 'building' or earlier and commits exist on harness/build/${FEATURE}]
-Git warning:
-  You have [N] commits on branch harness/build/${FEATURE}.
-  Rewinding to ${TARGET} does NOT automatically revert these commits.
-  After confirmation, you'll be asked separately whether to:
-    (a) keep commits on the branch (default — safe)
-    (b) reset the branch to the last 'pre-build' commit (destructive)
-═══════════════════════════════
-
-Type "rewind to ${TARGET}" to confirm, or anything else to cancel.
-```
-
-### Step 3: Require explicit confirmation
-
-The user must type the full phrase `rewind to <target>` to proceed. Fuzzy matching is dangerous here — rewind is the most destructive command in the harness.
-
-On cancel: exit with "rewind cancelled, nothing changed".
-
-### Step 4: Archive the files
-
-```bash
-TS=$(date +%Y%m%d-%H%M%S)
-ARCHIVE=".harness/features/${FEATURE}/.archive/${TS}"
-mkdir -p "$ARCHIVE"
-
-# Move files (mv preserves content, removes from active state)
-# Example for rewinding to 'negotiating':
-mv ".harness/features/${FEATURE}/implementation-report.md" "$ARCHIVE/" 2>/dev/null || true
-mv ".harness/features/${FEATURE}/eval-report.md" "$ARCHIVE/" 2>/dev/null || true
-mv ".harness/features/${FEATURE}/retrospective.md" "$ARCHIVE/" 2>/dev/null || true
-
-# Write a manifest of what was archived
-cat > "$ARCHIVE/REWIND-MANIFEST.md" <<EOF
-# Rewind — $(date +%Y-%m-%dT%H:%M:%S%z)
-
-**Feature**: ${FEATURE}
-**Rewound from**: [previous phase]
-**Rewound to**: ${TARGET}
-**Reason**: [user-provided or "not specified"]
-
-## Files archived
-[list]
-
-## Manifest delta
-[before/after snapshot of state.*]
-
-## Git state at time of rewind
-[output of 'git log --oneline -5']
-
-## How to revert this rewind
-Copy the archived files back to features/${FEATURE}/ and reset manifest.phase
-manually. No automatic revert — rewinds are recorded for forensics, not undo.
-EOF
-```
+Orchestrator writes a `REWIND-MANIFEST.md` inside the archive directory recording: which files moved, from which phase, git state at time of rewind, the user's reason (if provided).
 
 ### Step 5: Reset manifest state
 
-Update `.harness/manifest.yaml`:
+Using the Edit tool on `.harness/manifest.yaml`:
+- `state.phase` = target.
+- `state.current_task` = "" (if rewinding past building).
+- `state.retry_count` = 0.
+- `state.negotiation_round` = 0 (if rewinding past negotiating).
+- `state.last_session` = current ISO timestamp.
 
-```yaml
-state:
-  phase: "<target>"          # reset
-  current_task: ""           # if rewinding past building
-  retry_count: 0             # reset
-  negotiation_round: 0       # if rewinding past negotiating
-  last_session: "[now]"
-```
+### Step 6: Handle git (optional, separate confirmation)
 
-Leave `current_feature` alone UNLESS rewinding to `planning` — in that case, archive the whole feature folder and set `current_feature: ""` so the next `/harness:sprint` creates a fresh one.
-
-### Step 6: Handle git (if applicable)
-
-If the rewind target is `building` or earlier AND the branch `harness/build/${FEATURE}` exists with commits:
+If rewinding to `building` or earlier AND branch `harness/build/${FEATURE}` has commits, present:
 
 ```
-═══════════════════════════════
-  Git — Build commits detected
-═══════════════════════════════
-Branch: harness/build/${FEATURE}
-Commits on this branch: [N]
-
-Last 5 commits:
-  [git log --oneline | head -5]
-
 Options:
-  (a) Keep commits — branch survives, you can cherry-pick or discard manually later
-      Safe default. No git commands run.
-  (b) Reset branch to base — destroys [N] commits on harness/build/${FEATURE}
-      This is destructive. Type "reset build branch" to confirm.
-      The exact commands run will be:
-         git checkout harness/build/${FEATURE}
-         git reset --hard $(git merge-base main harness/build/${FEATURE})
-         git checkout -  # return to previous branch
-      Effect: branch still exists, pointing at the pre-build merge-base.
-      Staged changes and working-tree changes are NOT touched.
-      The [N] commits become unreachable but recoverable via reflog
-      for ~90 days (default git gc policy). If you want the branch
-      GONE entirely, run 'git branch -D harness/build/${FEATURE}'
-      manually after the rewind completes.
-
-Enter (a), (b), or "skip" to leave the branch alone:
+  (a) Keep commits — branch survives, manual cherry-pick/discard later [SAFE DEFAULT]
+  (b) Reset branch to base — destroys [N] commits. Type "reset build branch" to confirm.
+      Commands orchestrator will run:
+        git checkout harness/build/${FEATURE}
+        git reset --hard $(git merge-base main harness/build/${FEATURE})
+        git checkout -
+  Skip — don't touch the branch.
 ```
 
-Default to (a) if the user hesitates. Git resets are destructive and rarely necessary — in most cases, leaving the branch around is fine (the user can `git branch -D` it later).
+Default to (a) if the user hesitates. Never run (b) without the explicit `reset build branch` typed confirmation.
 
-**Why not offer `git branch -D`?** The rewind command is already destructive enough; chaining a branch deletion into the same prompt creates a footgun. Forcing the user to run `git branch -D` as a separate step means they see the branch one more time before deleting it, which catches typos (wrong feature name) and accidental invocations. Two intentional actions are safer than one automated one.
+**Why not offer `git branch -D`?** Too destructive to chain into the same prompt. Forcing the user to run it as a separate manual step catches typos and accidental invocations.
 
-### Step 7: Log the rewind
+### Step 7: Log
 
-Append to `.harness/progress/changelog.md`:
+Orchestrator appends to `.harness/progress/changelog.md` (via Edit):
 
-```
+```markdown
 ## YYYY-MM-DD — features/NNN — Rewind
 - From: [previous phase]
 - To: ${TARGET}
-- Archived: [N] files to features/NNN/.archive/YYYYMMDD-HHMMSS/
+- Archived: [N] files to .archive/TIMESTAMP/
 - Git action: [kept / reset branch / no branch]
-- Reason: [if provided]
+- Reason: [if user provided]
 ```
 
-Append ADR to `.harness/progress/decisions.md`:
-
-```
-## ADR-NNN — Rewind from [previous phase] to ${TARGET}
-**Date**: YYYY-MM-DD
-**Feature**: ${FEATURE}
-**Status**: Accepted
-
-### Context
-[Why the rewind was necessary — user's reason, or "not specified"]
-
-### Decision
-Rewound feature ${FEATURE} from [previous phase] to ${TARGET}. Archived
-[N] files to .archive/YYYYMMDD-HHMMSS/.
-
-### Consequences
-- [What phase will restart from, what work is lost, what survived]
-- [Downstream: next dispatch is [Planner/Generator/Evaluator/whatever]]
-```
+Orchestrator appends ADR to `.harness/progress/decisions.md` (ADR template at `@templates/progress/decisions.md`).
 
 ### Step 8: Tell the user what's next
 
@@ -236,31 +92,20 @@ Rewound feature ${FEATURE} from [previous phase] to ${TARGET}. Archived
 ═══════════════════════════════
   Harness — Rewind Complete
 ═══════════════════════════════
-Feature ${FEATURE} has been reset to phase: ${TARGET}
+Feature ${FEATURE} reset to phase: ${TARGET}
+Archive: .harness/features/${FEATURE}/.archive/TIMESTAMP/
+ADR logged:  progress/decisions.md
 
-Archived to: .harness/features/${FEATURE}/.archive/YYYYMMDD-HHMMSS/
-ADR logged:  progress/decisions.md (ADR-NNN)
-
-Next steps:
-  • Run /harness:resume to continue from ${TARGET}
-  • Or make adjustments first (e.g., /harness:edit for spec tweaks) then /harness:resume
-  • To abandon this feature entirely: delete .harness/features/${FEATURE}/ and update manifest
+Next:
+  • /harness:resume — continue from ${TARGET}
+  • Or make adjustments first (e.g., /harness:edit), then /harness:resume
+  • To abandon: delete features/${FEATURE}/ and reset manifest manually
 ═══════════════════════════════
 ```
 
 ## Anti-patterns
 
-- **Rewinding repeatedly without addressing root cause**: three rewinds of the same feature means the spec is wrong. Use `/harness:rewind planning` once and start fresh, or give up on the feature.
-- **Resetting git branches without backup**: the `(b)` option is destructive. Make sure the user understands.
-- **Using rewind as undo for a single file change**: rewind is big-hammer. For single-file changes, `git checkout -- <file>` is better.
-- **Rewinding after merge**: post-merge, the feature is shipped. Use `/harness:retrospective` instead.
-
-## Files written / moved
-
-| File | Action |
-|---|---|
-| Affected feature files | Moved to `.harness/features/NNN/.archive/YYYYMMDD-HHMMSS/` |
-| `.harness/manifest.yaml` | Phase + related state fields reset |
-| `progress/changelog.md` | Rewind entry appended |
-| `progress/decisions.md` | ADR appended |
-| `harness/build/${FEATURE}` git branch | Optionally reset on explicit user confirmation |
+- **Repeated rewinds without addressing root cause** — three rewinds of one feature means the spec is wrong. Use `/harness:rewind planning` once and restart OR abandon.
+- **Resetting git branches without backup** — option (b) is destructive. Make sure the user understands before confirming.
+- **Using rewind as undo for a single file** — `git checkout -- <file>` is better.
+- **Rewinding after merge** — use `/harness:retrospective` instead.

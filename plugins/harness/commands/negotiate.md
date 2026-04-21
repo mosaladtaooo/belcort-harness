@@ -42,7 +42,7 @@ The Planner stays at the "what & why" level on purpose. File paths, component bo
 
 ## Dispatch blocks
 
-Full shell-dispatch blocks (Round 1 Generator NEGOTIATE, Round 2 Evaluator REVIEW-PROPOSAL, final Generator FINALIZE-CONTRACT) live in [sprint.md § 2c. NEGOTIATE](sprint.md). Reuse them verbatim.
+Full Agent-tool dispatch specs (Round 1 Generator NEGOTIATE via `subagent_type: harness:generator`, Round 2 Evaluator REVIEW-PROPOSAL via `subagent_type: harness:evaluator`, final Generator FINALIZE-CONTRACT via `subagent_type: harness:generator`) live in [sprint.md § 2c. NEGOTIATE](sprint.md). Reuse them verbatim.
 
 ## Anti-patterns to watch for
 

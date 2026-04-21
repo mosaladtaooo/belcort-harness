@@ -25,15 +25,33 @@ set -u
 INPUT="$(cat)"
 
 # ─────────────────────────────────────────────────────────────
-# JSON parsing helpers — jq preferred, python3 fallback
+# JSON parser detection — pick the first one that ACTUALLY WORKS.
+#
+# On Windows, `python3.exe` is commonly a Microsoft Store stub that exists on
+# PATH but doesn't execute — `command -v python3` succeeds, yet `python3 -c ...`
+# returns empty. We must verify the interpreter actually runs Python, not just
+# that it's resolvable. Same consideration for `python` on macOS vs Linux.
+#
+# Preference order: jq → python3 (real) → python (real).
 # ─────────────────────────────────────────────────────────────
+JSON_PARSER=""
+if command -v jq >/dev/null 2>&1 && printf '{}' | jq -r '.' >/dev/null 2>&1; then
+  JSON_PARSER="jq"
+elif command -v python3 >/dev/null 2>&1 && python3 -c 'print(1)' >/dev/null 2>&1; then
+  JSON_PARSER="python3"
+elif command -v python >/dev/null 2>&1 && python -c 'import sys; sys.exit(0 if sys.version_info.major>=3 else 1)' 2>/dev/null; then
+  JSON_PARSER="python"
+fi
+
 parse_json_field() {
   local field_path="$1"
-  if command -v jq >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | jq -r "${field_path} // empty" 2>/dev/null
-  elif command -v python3 >/dev/null 2>&1; then
-    # Convert .a.b.c → ["a","b","c"]; walk the dict
-    printf '%s' "$INPUT" | python3 -c '
+  case "$JSON_PARSER" in
+    jq)
+      printf '%s' "$INPUT" | jq -r "${field_path} // empty" 2>/dev/null
+      ;;
+    python3|python)
+      # Convert .a.b.c → ["a","b","c"]; walk the dict
+      printf '%s' "$INPUT" | "$JSON_PARSER" -c '
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -49,73 +67,23 @@ try:
 except Exception:
     pass
 ' 2>/dev/null
-  else
-    # No JSON parser available — return empty so caller sees "no command"
-    return 0
-  fi
+      ;;
+    *)
+      # No usable parser — return empty so caller sees "no command"
+      return 0
+      ;;
+  esac
 }
 
-if ! command -v jq >/dev/null 2>&1 && ! command -v python3 >/dev/null 2>&1; then
-  echo "WARN: BELCORT pre-tool-use hook needs 'jq' or 'python3' to parse tool input." >&2
+if [ -z "$JSON_PARSER" ]; then
+  echo "WARN: BELCORT pre-tool-use hook needs a working 'jq', 'python3', or 'python' (3.x) to parse tool input." >&2
   echo "      Without one, harness safety rails (force-push block, sudo block, etc.)" >&2
   echo "      are inactive. Run /harness:doctor for install instructions." >&2
+  echo "      Windows note: a non-functional Microsoft Store python3.exe stub is the most common cause." >&2
   exit 0
 fi
 
 TOOL_NAME=$(parse_json_field '.tool_name')
-
-# ─────────────────────────────────────────────────────────────
-# FR-2: Spec-file ownership guard (Edit / Write)
-# ─────────────────────────────────────────────────────────────
-# Enforces the SKILL.md File Ownership Contract: the orchestrator does NOT
-# edit spec files — only fresh subagents (with clean context) or one of the
-# dedicated spec-edit commands (which set state.phase first).
-#
-# Without this guard, the rule was prose-only and a future Claude could
-# violate it by Edit-ing .harness/spec/* directly from the orchestrator's
-# fat-context session, leaking conversational noise into spec files.
-#
-# Bypass conditions (any one allows):
-#   1. CLAUDE_SUBAGENT=1     — subagents are the canonical writers
-#   2. state.phase ∈ {amending, clarifying, editing, tuning, retrospective,
-#      constitution-amending} — the active command set the phase via
-#      phase_set in scripts/phase-guard.sh
-#   3. file is NOT under guarded paths
-if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
-  TARGET=$(parse_json_field '.tool_input.file_path')
-  case "$TARGET" in
-    */.harness/spec/*|*/.harness/features/*/contract.md|*/.harness/evaluator/criteria.md)
-      # Subagents bypass — they are the authorized writers per File Ownership
-      if [ "${CLAUDE_SUBAGENT:-0}" != "1" ]; then
-        # Orchestrator path: must be in an authorized spec-edit phase
-        ALLOWED_PHASES="amending clarifying editing tuning retrospective constitution-amending"
-        CURRENT_PHASE=""
-        if [ -f ".harness/manifest.yaml" ]; then
-          CURRENT_PHASE=$(grep '^[[:space:]]*phase:' .harness/manifest.yaml 2>/dev/null \
-                            | head -1 | awk -F: '{print $2}' | tr -d '" ' | head -c 30)
-        fi
-        AUTHORIZED=0
-        for p in $ALLOWED_PHASES; do
-          [ "$CURRENT_PHASE" = "$p" ] && { AUTHORIZED=1; break; }
-        done
-        if [ "$AUTHORIZED" = "0" ]; then
-          # Pretty-print the target path relative to PWD if possible
-          REL_TARGET="${TARGET#$PWD/}"
-          echo "BLOCKED: orchestrator may not edit ${REL_TARGET} during phase=${CURRENT_PHASE:-<unset>}." >&2
-          echo "Spec files have designated writers (see SKILL.md File Ownership Contract)." >&2
-          echo "To make a spec change, use one of:" >&2
-          echo "  /harness:amend \"<change>\"        — targeted spec amendment" >&2
-          echo "  /harness:clarify                   — surface ambiguities, batch-answer" >&2
-          echo "  /harness:edit \"<change>\"         — multi-file coordinated edit" >&2
-          echo "  /harness:tune-evaluator           — calibrate criteria/examples" >&2
-          echo "  /harness:retrospective            — sync spec with what was built" >&2
-          echo "  /harness:constitution-amend \"<reason>\" — high-ceremony constitution change" >&2
-          exit 1
-        fi
-      fi
-      ;;
-  esac
-fi
 
 # Only Bash invocations get the rest of the safety rails — other tools have
 # different schemas and different risk profiles.

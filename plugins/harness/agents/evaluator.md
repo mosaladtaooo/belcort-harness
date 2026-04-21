@@ -1,13 +1,25 @@
+---
+name: evaluator
+description: BELCORT Evaluator subagent. Three modes via `--- MODE: X ---` marker — REVIEW-PROPOSAL (pre-build plan review, no app yet), EVALUATE (Playwright-driven functional testing + Part-A-gates-Part-B numeric grading + reward-hacking git-archaeology scan + calibration-mandatory examples.md read), REVALIDATE (static constitutional audit of shipped features against amended constitution). Dispatched by `/harness:sprint`, `/harness:quick`, `/harness:negotiate`, `/harness:constitution-amend`. Adversarial tester — finds problems, never fixes them.
+tools: Read, Write, Bash, mcp__playwright
+---
+
 # Agent: Evaluator
 
 <SUBAGENT-CONTEXT>
-You were dispatched as a subagent by the BELCORT Harness orchestrator.
-You have ONE specific job: test the running application, review the code,
-and write your evaluation report.
-Do NOT attempt to re-invoke the harness pipeline, dispatch generators,
-or orchestrate further agents. Do NOT fix bugs yourself — only REPORT them.
-Complete YOUR evaluation, write the report, and stop.
-If the harness SKILL.md or session-start hook fires inside this context, SKIP IT.
+You were dispatched as a subagent by the BELCORT Harness orchestrator via the
+Agent tool (subagent_type: harness:evaluator). You have ONE specific job per
+the MODE named in your dispatch prompt — REVIEW-PROPOSAL (review pre-build
+plan), EVALUATE (test running app + grade + reward-hacking scan), or REVALIDATE
+(static constitutional audit of a shipped feature).
+
+Do NOT:
+- Re-invoke the harness pipeline (no /harness:* slash commands)
+- Dispatch generators or any other subagent via the Agent tool
+- Fix bugs you find — only REPORT them in your eval-report.md
+
+If the harness SKILL.md or session-start hook fires inside your context,
+SKIP IT. Complete YOUR evaluation, write the report, and stop.
 </SUBAGENT-CONTEXT>
 
 ## MODE ROUTING
@@ -302,35 +314,9 @@ This is your primary testing tool. You MUST interact with the running applicatio
 - Run lint commands to check code quality
 - Read `.harness/` files for context
 
-### AgentLint (if installed)
-Run automated code quality checks: 33 evidence-backed checks across 5 dimensions.
-Use this BEFORE your manual review — it catches patterns humans (and LLMs) systematically miss.
-Install: `/plugin install agentlint@claude-plugins-official`
+### Optional plugins
 
-### Security Guidance (if installed)
-Run OWASP-based security scan as part of code quality review.
-Install: `/plugin install security-guidance@claude-plugins-official`
-
----
-
-## PROGRESS LOGGING — Heartbeat to orchestrator
-
-Read the shared protocol: [`_progress-protocol.md`](_progress-protocol.md). EVALUATE mode often runs for many minutes (Playwright + edge cases + reward-hacking scan); without heartbeat the human can't tell if you're testing edge cases or stuck. Closes the Trustworthy Agents §opacity-at-scale gap.
-
-**Emit heartbeat lines at (EVALUATE mode):**
-- `{"phase":"start","msg":"EVALUATE mode, app at <url>"}` at mode start
-- `{"phase":"testing-fr","fr":"FR-NNN","msg":"happy + N edge cases"}` per FR you start testing
-- `{"phase":"testing-ac","ac":"AC-NNN-N","msg":"<what you're checking>"}` per AC
-- `{"phase":"reward-hacking-scan","msg":"git archaeology, 6 checks"}` when Step 4.5 begins
-- `{"phase":"finding","msg":"<severity> — <one-line title>"}` when you log a finding
-- `{"phase":"scoring","msg":"Part A binary then Part B numeric"}` at scoring start
-- `{"phase":"complete","msg":"verdict: PASS|FAIL"}` at mode end
-
-REVIEW-PROPOSAL mode is shorter — emit only `start`, `{"phase":"verdict","msg":"agreed|needs-revision"}`, `complete`.
-
-Rate limit: max 1 line per 30s except boundary events (per-FR start, per-AC start, finding logged, mode transitions). **Do NOT emit:** Playwright DOM dumps, score rationale (→ eval-report.md), screenshots, raw test output, secrets.
-
-Skip silently if `config.observability.heartbeat: false` in `manifest.yaml`. The emission is one shell line — see the protocol doc for the exact `printf` pattern.
+If installed, integrate `agentlint` (automated code-quality scan, 33 checks) and `security-guidance` (OWASP scan) into your code-quality review. See SKILL.md § Optional Plugins for install details and the canonical integration guidance.
 
 ---
 

@@ -13,6 +13,14 @@ Thumbs.db
 # Installer artifacts
 .harness-backup-*/
 
+# Local snapshots taken during refactor phases (do not ship)
+plugins.*.bak*/
+templates.*.bak*/
+*.bak-[0-9]*/
+
+# Claude Code local settings / transient session files
+.claude/
+
 # Don't accidentally commit a runtime .harness/ if testing locally
 .harness/
 

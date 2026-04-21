@@ -6,64 +6,45 @@ description: Post-plan structured clarification — surface ambiguities the Plan
 
 Runs AFTER the Planner finishes and BEFORE the human approves. Surfaces ambiguities the Planner couldn't confidently resolve, captures user answers in `.harness/features/NNN/clarifications.md`, and applies them to the spec via a fresh Planner subagent — NEVER via orchestrator edits.
 
-## Why this exists
+## Why fresh-subagent Q&A?
 
-The Planner works from a 1–4 sentence prompt. It has to make dozens of implicit decisions: is search case-sensitive? should signup support social providers? what's the pagination default? If the Planner guesses silently, those guesses become spec reality and the Generator builds against them. If the Planner refuses to guess, it asks — but asking dozens of questions inline during planning bloats the planner's context and produces worse specs overall.
+The Planner works from a 1–4 sentence prompt; dozens of implicit decisions go unspoken (case-sensitivity, pagination defaults, provider choices). If the Planner guesses silently, those guesses become spec reality. If the Planner asks inline during planning, the context bloats and the spec degrades.
 
-`/harness:clarify` is the dedicated Q&A channel. The Planner batches its ambiguities into a structured file, the human answers once, answers flow back through files into spec patches. **Critically, the orchestrator never edits the spec directly** — the Planner does it with clean context. This is the file-ownership contract from [SKILL.md § File Ownership Contract](../skills/harness/SKILL.md).
+`/harness:clarify` is the dedicated Q&A channel. One fresh Planner collects ambiguities into a file; the human answers once; a second fresh Planner turns answers into surgical patches. The orchestrator never authors spec content — it only appends user answers and mechanically applies approved patches.
 
-## When it runs
+See SKILL.md § File Ownership Contract.
 
-- **Manually**: you read the Planner's output, feel unsure about something, run `/harness:clarify` to surface everything the Planner was also unsure about.
-- **Automatically suggested**: at the human approval gate in [sprint.md](sprint.md), if the Planner self-reports ≥3 ambiguities, the orchestrator suggests running clarify before approval.
+## When to use
+
+- Manually: after reading the draft contract, when something feels unresolved.
+- Automatically suggested: the sprint flow proposes clarify when the Planner self-reports ≥3 ambiguities.
+
+## When NOT to use
+
+- Single targeted wording change → `/harness:amend`.
+- Fundamental direction change → `/harness:rewind planning`.
+- Multi-file cascade change → `/harness:edit`.
+- Constitution change → `/harness:constitution-amend`.
 
 ## Procedure
 
-### Step 0: Phase guard (FR-2)
-
-Set the phase so the FR-2 spec-ownership hook authorizes the orchestrator's `Edit` calls in Step 6. Without this, the hook blocks patch application as an unauthorized orchestrator-side spec edit.
-
-```bash
-source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
-phase_set "clarifying"
-```
-
-The phase persists across tool calls via `manifest.yaml`. Restored at Step Final.
-
 ### Step 1: Precondition check
 
-```bash
-FEATURE=$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')
+The orchestrator reads `.harness/manifest.yaml` to get `state.current_feature` (call this `${FEATURE}`). Verify `.harness/features/${FEATURE}/contract.md` exists. If not, tell the user "No draft contract for ${FEATURE}. Run /harness:sprint first." and exit.
 
-# Must have a draft contract — clarify only makes sense post-planning
-[ -f ".harness/features/${FEATURE}/contract.md" ] || {
-  echo "No draft contract for ${FEATURE}. Run /harness:sprint first."
-  exit 1
-}
-```
+### Step 2: Dispatch fresh Planner in CLARIFY-QUESTIONS mode
 
-If no feature is active, tell the user to run `/harness:sprint` first.
+The orchestrator dispatches the Planner via the Agent tool:
 
-### Step 2: Dispatch Planner in CLARIFY-QUESTIONS mode
+- **subagent_type**: `harness:planner`
+- **description**: `"Surface ambiguities for ${FEATURE}"`
+- **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
 
-```bash
-CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in CLARIFY-QUESTIONS mode (see your system prompt's MODE ROUTING table).
+> You are being dispatched in CLARIFY-QUESTIONS mode. Read spec/prd.md, spec/architecture.md, .harness/features/${FEATURE}/contract.md via Read tool. Identify 3-10 genuine ambiguities in the current spec. Write structured questions to .harness/features/${FEATURE}/clarifications.md per your CLARIFY-QUESTIONS mode template (each Q with target, location, question, context, suggested default, why it matters). Cap at 10 — if more, flag as spec-fundamentally-under-determined.
 
-You have already written the spec. Now identify ambiguities — places where you made an implicit decision the user might want to override, or gaps where you had to pick a default without enough information.
+### Step 3: Present questions to user, collect answers
 
-Read via Read tool:
-- .harness/spec/prd.md
-- .harness/spec/architecture.md
-- .harness/features/${FEATURE}/contract.md
-
-Write 3–10 structured questions to .harness/features/${FEATURE}/clarifications.md using the template defined in your MODE: CLARIFY-QUESTIONS section. Do NOT edit any spec file. Do NOT write code. Only clarifications.md." \
-  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/planner.md" \
-  --allowedTools "Read,Write"
-```
-
-### Step 3: Read the questions, present to the user
-
-Read `.harness/features/${FEATURE}/clarifications.md`. Present the questions interactively — one at a time, with the Planner's suggested default for each. Format:
+The orchestrator reads `.harness/features/${FEATURE}/clarifications.md` and presents the questions one at a time:
 
 ```
 ═══════════════════════════════
@@ -71,106 +52,83 @@ Read `.harness/features/${FEATURE}/clarifications.md`. Present the questions int
 ═══════════════════════════════
 Planner identified N ambiguities in the spec.
 
-Q1/N: [Question]
-  Context: [Why this is ambiguous]
-  Suggested default: [What the Planner would pick]
+Q1/N: [question text]
+  Context: [why this is ambiguous]
+  Suggested default: [what the Planner would pick]
+  Why it matters: [downstream impact]
 
 Your answer (or "accept" for the suggested default, or "skip" to leave ambiguous):
 _
 ```
 
-After each answer, append to `clarifications.md` under the relevant question:
+For each question answered, the orchestrator uses the `Edit` tool to append a `**User answer:**` block under that question in `clarifications.md`. Verbatim answers only — no orchestrator paraphrasing. If the user says `skip` on every question, abort with "No answers collected; nothing to apply."
+
+### Step 4: Dispatch fresh Planner in CLARIFY-APPLY mode
+
+Only if at least one question has a non-skipped user answer, the orchestrator dispatches the Planner via the Agent tool:
+
+- **subagent_type**: `harness:planner`
+- **description**: `"Apply clarifications for ${FEATURE}"`
+- **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
+
+> You are being dispatched in CLARIFY-APPLY mode. Read .harness/features/${FEATURE}/clarifications.md — the user has filled in **User answer:** for each question. Produce surgical before→after patches to .harness/features/${FEATURE}/clarify-patches.md per your CLARIFY-APPLY mode template. Do NOT apply — orchestrator does that after user confirmation.
+
+### Step 5: Read patches, present to user
+
+Orchestrator reads `.harness/features/${FEATURE}/clarify-patches.md` and shows each patch as a before/after diff:
 
 ```
-### Q1 — [question title]
-**Asked**: [original question text]
-**Context**: [why it mattered]
-**Suggested default**: [what Planner proposed]
-**User answer**: [verbatim answer, or "accepted default", or "skipped"]
+═══════════════════════════════
+  Harness — Clarification Patches
+═══════════════════════════════
+Questions answered: N
+Patches proposed: M
+
+Patches:
+  [1] spec/prd.md § FR-003 — [short title]
+  [2] spec/architecture.md § ... — [short title]
+  [3] features/${FEATURE}/contract.md § ... — [short title]
+
+Apply all / Apply some (list numbers) / Apply none / Show diff N / Cancel?
+═══════════════════════════════
 ```
-
-If user says `skip` on all → abort with "no changes to apply".
-
-### Step 4: Dispatch Planner in CLARIFY-APPLY mode
-
-Only if at least one question was answered (not all skipped):
-
-```bash
-CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in CLARIFY-APPLY mode (see your system prompt's MODE ROUTING table).
-
-Read via Read tool:
-- .harness/features/${FEATURE}/clarifications.md (contains user answers)
-- .harness/spec/prd.md
-- .harness/spec/architecture.md
-- .harness/features/${FEATURE}/contract.md
-
-For every question that has a user answer (not 'skipped', not 'accepted default' unless the default requires spec text you didn't write before), produce a patch that updates the spec file to reflect the answer. Write all patches to .harness/features/${FEATURE}/clarify-patches.md per your MODE: CLARIFY-APPLY template. Do NOT write to spec files directly in this mode. Only clarify-patches.md." \
-  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/planner.md" \
-  --allowedTools "Read,Write"
-```
-
-### Step 5: Present the patches to the user
-
-Read `clarify-patches.md`. Show each patch as a diff (before/after) with context. Ask: "Apply these N patches?" User can:
-- `yes` → apply all
-- `no` → discard, patches stay on disk for record
-- Select specific patches by number (`yes 1,3,4`) — apply only those
 
 ### Step 6: Apply approved patches
 
-For each approved patch, apply the before→after edit using the `Edit` tool. The orchestrator is performing a mechanical apply, not authoring — the Planner wrote the exact before/after strings, the orchestrator just executes them.
+For each approved patch, the orchestrator uses the `Edit` tool with the patch's `old_string` and `new_string`. The patch content was authored by the fresh Planner subagent; the orchestrator is performing a mechanical apply, not authoring.
 
-This is the ONE exception to the "orchestrator does not edit spec files" rule, and it's safe specifically because:
-1. The patch content came from a fresh Planner subagent with clean context
-2. Each patch is a pre-computed before→after pair with no interpretation
-3. The user approved the patches explicitly
+### Step 7: Run analyze
 
-### Step 7: Run `/harness:analyze`
+Invoke `/harness:analyze`. Clarifications can introduce inconsistency (e.g., a Q&A tightens an AC but architecture no longer supports it). CRITICAL findings → report + offer rollback or follow-up amendment.
 
-After applying, automatically invoke the [analyze.md](analyze.md) procedure. If CRITICAL findings appear (e.g., the clarifications broke constitution compliance), report them and offer to rollback via `git checkout spec/`.
+### Step 8: Mark clarifications resolved + log changelog
 
-### Step 8: Update the feature folder and manifest
+Orchestrator uses `Edit` tool to add `Resolved: YYYY-MM-DD` at the top of `clarifications.md`, then appends to `.harness/progress/changelog.md`:
 
-- Mark clarifications.md with a "Resolved: YYYY-MM-DD" line at the top
-- Append a changelog entry:
-  ```
-  ## YYYY-MM-DD — features/NNN — Clarifications applied
-  - Questions answered: [N]
-  - Patches applied: [N]
-  - Files modified: [list]
-  ```
+```markdown
+## YYYY-MM-DD — features/NNN — Clarifications applied
+- Questions answered: [N]
+- Patches applied: [N of M]
+- Files modified: [list]
+- Post-analyze: [PASS/WARN/CRITICAL]
+```
 
 ### Step 9: Back to the human gate
 
-Tell the user the spec has been updated. They can now:
-- Review the updated spec files and approve to continue to negotiate
-- Run `/harness:clarify` again if the clarifications revealed new ambiguities
-- Run `/harness:amend "<specific change>"` if they want to make a targeted tweak
-- Run `/harness:rewind planning` if clarifications revealed a fundamentally wrong direction
-
-### Step Final: Restore phase (FR-2)
-
-Restore the previous phase so subsequent orchestrator activity reverts to the default hook posture.
-
-```bash
-source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
-phase_restore
-```
-
-Run on every exit path (early skip-all, no-changes-to-apply, post-apply success). The guard is idempotent.
+Tell the user the spec has been updated. They can now review and approve to continue to negotiate, run clarify again if new ambiguities surfaced, run `/harness:amend "<tweak>"` for a targeted change, or `/harness:rewind planning` if clarifications revealed a wrong direction.
 
 ## Anti-patterns
 
-- **Skipping step 7 (analyze)** — clarifications can introduce inconsistency (e.g., a Q&A tightens an AC but the architecture no longer supports it). Always re-analyze.
-- **Clicking "yes" without reading the diff** — the whole point is human approval. If the diff is long, ask the user to take their time.
-- **Editing clarifications.md directly as the orchestrator** — the questions and suggested defaults are the Planner's work product. The orchestrator only *appends user answers*.
-- **Running clarify multiple times without applying** — each run overwrites the previous questions file. If the user answers Q1-Q5 then re-runs clarify, those answers are gone. Warn the user before re-running.
+- **Skipping analyze**: step 7 isn't optional. Clarifications propagate in unexpected ways.
+- **Orchestrator paraphrasing user answers**: append verbatim. Paraphrasing is authoring.
+- **Re-running clarify without applying**: each CLARIFY-QUESTIONS dispatch overwrites the questions file. Unapplied answers are lost. Warn the user before re-running.
+- **Clicking "yes" on diffs without reading**: the whole point is human approval.
 
 ## Files written
 
-| File | Writer | Lifetime |
-|---|---|---|
-| `.harness/features/NNN/clarifications.md` | Planner CLARIFY-QUESTIONS (questions) + orchestrator (user answers appended) | feature-scoped, kept as record |
-| `.harness/features/NNN/clarify-patches.md` | Planner CLARIFY-APPLY | feature-scoped, kept as record of what was proposed |
-| `spec/*.md` | Orchestrator applies Planner-authored patches via Edit | updated in place |
-| `progress/changelog.md` | Orchestrator append | append-only |
+| File | Writer |
+|---|---|
+| `.harness/features/NNN/clarifications.md` | Planner CLARIFY-QUESTIONS writes questions; orchestrator appends `**User answer:**` blocks |
+| `.harness/features/NNN/clarify-patches.md` | Planner CLARIFY-APPLY |
+| `spec/*.md` / `contract.md` | Orchestrator applies Planner patches via Edit |
+| `progress/changelog.md` | Orchestrator appends |

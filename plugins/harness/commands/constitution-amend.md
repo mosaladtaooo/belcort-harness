@@ -1,301 +1,163 @@
 ---
-description: High-ceremony constitution amendment (FR-6). Constitution is immutable post-init by default — this command is the ONE authorized path to change it. Requires typed confirmation, ≥50-char reason, in-progress feature handling, mandatory ADR, AND a re-validation pass against every completed feature. Use when a real need arises (post-incident security rule, scope drift, regulatory change). Adopted from SpecKit's explicit constitutional governance pattern.
+description: High-ceremony constitution amendment (FR-6). Constitution is immutable post-init by default — this command is the ONE authorized path. Requires typed confirmation, ≥50-char reason, in-progress feature handling, mandatory ADR, AND a re-validation pass against every completed feature.
 argument-hint: "<reason for the amendment, ≥50 chars>"
 ---
 
 # `/harness:constitution-amend` — High-ceremony constitution change
 
-The constitution (`spec/constitution.md`) is the architectural DNA of the project — every Generator decision, every Evaluator score, every refactor traces back to it. The harness's default is `immutable post-init` because casual amendments cascade into spec drift across every feature ever shipped.
+The constitution (`spec/constitution.md`) is the architectural DNA of the project. The default is `immutable post-init` because casual amendments cascade into drift across every shipped feature. This command is the ONE authorized path. The friction IS the feature.
 
-But "immutable" is too rigid for real projects. Sometimes you need to:
-- Add a security principle after a real incident (e.g., "all PII fields MUST be encrypted at rest")
-- Adjust to a regulatory change (e.g., "all data exports MUST log the requesting user")
-- Resolve a scope drift the original constitution couldn't anticipate (e.g., constitution forbade websockets but PRD now requires real-time)
+## The five ceremony gates
 
-This command is the ONE authorized path. It's deliberately ceremonious — the friction is the feature, not the bug. Every gate exists to make sure you're amending for a real reason and propagating the change correctly.
+1. **≥50-char reason** — becomes the ADR.
+2. **Typed confirmation** — deliberate intent.
+3. **In-progress handling** — surfaces the cost (current feature halts or ships under old rules).
+4. **Re-validation** against every completed feature — catches past-work non-compliance.
+5. **Final apply confirmation** — last chance to back out.
 
-## Why so much ceremony
-
-SpecKit calls the constitution *"the architectural DNA of the system, ensuring that every generated implementation maintains consistency, simplicity, and quality."* Casual edits break that property. The five ceremony stages exist because:
-
-1. **Typed confirmation** — forces deliberate intent (no auto-pilot)
-2. **≥50-char reason** — forces explanation that becomes the ADR
-3. **In-progress handling** — surfaces the cost (current feature halts or ships under old rules)
-4. **Mandatory ADR** — leaves an audit trail; future contributors can read why
-5. **Re-validation against completed features** — catches the case where past work no longer complies
-
-Without all five, the constitution becomes prose-immutable but practically mutable, which is the worst of both worlds.
+A mandatory ADR and an amendments log complete the audit trail.
 
 ## Procedure
 
-### Step 0: Pre-flight gates (CEREMONY)
+### Step 1: Gates 1 + 2 — reason length, typed confirmation
 
-```bash
-REASON="$ARGUMENTS"
+Orchestrator examines `$ARGUMENTS`. If under 50 characters, reject with "Amendment reason must be ≥50 chars — explain WHY, not just WHAT" and exit. Otherwise, print the ceremony banner + the reason, then ask the user to type EXACTLY `I-AM-AMENDING-THE-CONSTITUTION`. On mismatch, abort.
 
-# Gate 1: reason length (forces explanation)
-if [ ${#REASON} -lt 50 ]; then
-  echo "❌ Amendment reason must be ≥50 chars (got ${#REASON})."
-  echo "   The reason becomes the ADR — it must explain *why*, not just *what*."
-  echo "   Try again with: /harness:constitution-amend \"<longer explanation of why>\""
-  exit 1
-fi
+### Step 2: Gate 3 — in-progress feature handling
 
-# Gate 2: typed confirmation (forces deliberate intent)
-echo ""
-echo "═══════════════════════════════"
-echo "  CONSTITUTION AMENDMENT — high ceremony"
-echo "═══════════════════════════════"
-echo ""
-echo "You are about to amend .harness/spec/constitution.md — the architectural"
-echo "DNA of this project. Every prior feature was built against the current"
-echo "constitution. Amending it requires re-validating each completed feature."
-echo ""
-echo "Reason (will become the ADR):"
-echo "  ${REASON}"
-echo ""
-echo "To proceed, type the following EXACTLY (case-sensitive):"
-echo ""
-echo "  I-AM-AMENDING-THE-CONSTITUTION"
-echo ""
-read -r CONFIRM
-if [ "$CONFIRM" != "I-AM-AMENDING-THE-CONSTITUTION" ]; then
-  echo "❌ Confirmation string did not match. Aborted."
-  exit 1
-fi
+Orchestrator reads `.harness/manifest.yaml`. If `features.in_progress` is non-empty (`${IN_PROGRESS}`), present three choices:
 
-# Gate 3: in-progress feature handling
-IN_PROGRESS=$(grep -A1 '^features:' .harness/manifest.yaml | grep 'in_progress:' | awk -F: '{print $2}' | tr -d '" ')
-if [ -n "$IN_PROGRESS" ]; then
-  echo ""
-  echo "⚠ Feature in progress: ${IN_PROGRESS}"
-  echo ""
-  echo "The current feature was negotiated against the EXISTING constitution."
-  echo "Amending mid-feature creates divergence between the contract the"
-  echo "Generator agreed to and the constitution it must comply with."
-  echo ""
-  echo "Choose one:"
-  echo "  1. Finish ${IN_PROGRESS} under the OLD constitution, then apply"
-  echo "     amendment + re-validate (recommended)"
-  echo "  2. Halt ${IN_PROGRESS} now, apply amendment + re-validate, then"
-  echo "     restart the feature against the NEW constitution"
-  echo "  3. Abandon the amendment"
-  echo ""
-  read -r CHOICE
-  case "$CHOICE" in
-    1) echo "Acknowledged. /harness:constitution-amend will finish current feature first then resume."; exit 0 ;;
-    3) echo "Amendment abandoned."; exit 0 ;;
-    2) ;;  # continue to phase guard + dispatch
-    *)  echo "Invalid choice. Aborted."; exit 1 ;;
-  esac
-fi
-```
+1. Finish `${IN_PROGRESS}` under the OLD constitution, then amend + re-validate (recommended).
+2. Halt now, amend + re-validate, restart feature against the NEW constitution.
+3. Abandon the amendment.
 
-### Step 1: Phase guard (FR-2)
+On `1` or `3`: exit with appropriate message. On `2`: require a second typed confirmation `PROCEED-ANYWAY` before continuing.
 
-```bash
-source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
-phase_set "constitution-amending"
-```
+### Step 3: Dispatch Planner in CONSTITUTION-AMEND mode
 
-The FR-2 spec-ownership hook authorizes constitution.md edits only during this phase. Restored at Step Final.
+The orchestrator dispatches the Planner via the Agent tool:
 
-### Step 2: Dispatch Planner in CONSTITUTION-AMEND mode
+- **subagent_type**: `harness:planner`
+- **description**: `"Amend constitution: <short summary of $ARGUMENTS>"`
+- **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
 
-The Planner reads the current constitution + the proposed change, identifies which principle is being added/changed/removed, and produces structured before→after patches. **It does NOT auto-apply.**
+> You are being dispatched in CONSTITUTION-AMEND mode. Read .harness/spec/constitution.md, prd.md, architecture.md, and (via Read tool) sampled completed features' contract.md files.
+>
+> Amendment reason from user:
+> $ARGUMENTS
+>
+> Produce structured patches to .harness/constitution-amend-patches.md per your CONSTITUTION-AMEND mode procedure. Do NOT apply. Do NOT renumber principles (§-numbers are stable references).
 
-```bash
-CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in CONSTITUTION-AMEND mode (see your system prompt's MODE ROUTING table).
+### Step 4: Present patches + conflict check
 
-The user wants to amend the constitution for this documented reason:
-${REASON}
-
-Read via Read tool:
-- .harness/spec/prd.md
-- .harness/spec/architecture.md
-- .harness/spec/constitution.md (the current version — what you'll patch)
-- Up to 10 completed features' contract.md under .harness/features/*/contract.md (ls them first; sample the most recent)
-
-Produce before→after patches to .harness/constitution-amend-patches.md per your MODE: CONSTITUTION-AMEND procedure. Identify which principle(s) add/change/remove, flag conflicts, refuse non-testable principles, refuse §-renumbering. Do NOT apply patches — the orchestrator runs revalidation + applies after user confirmation." \
-  --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/planner.md" \
-  --allowedTools "Read,Write,mcp__context7"
-```
-
-The Planner writes to `.harness/constitution-amend-patches.md` (top-level, not per-feature — constitution amendments are global).
-
-### Step 3: Read patches, present to user
+Orchestrator reads `.harness/constitution-amend-patches.md` and shows:
 
 ```
 ═══════════════════════════════
   Harness — Constitution Amendment Preview
 ═══════════════════════════════
-Reason: ${REASON}
+Reason: ${ARGUMENTS}
+Planner's interpretation: [1-3 sentence summary]
+Principle amended: §N — [added | changed | removed]
+Impact: affects principles [§s], completed [N features]
+Conflicts flagged: [list or "none"]
+Patches (no §-renumbering): [1] spec/constitution.md § N — [summary]
 
-Planner's interpretation:
-  [1-3 sentence summary]
-
-Principle being amended:
-  • [§N: principle name — added | changed | removed]
-
-Impact assessment:
-  • Affects principles: [list of §-numbers]
-  • Affects completed features (count): [N]
-  • Affects in-progress feature: [yes/no]
-
-Patches:
-  [1] spec/constitution.md § N — [diff preview]
-
-Apply / Cancel?
-═══════════════════════════════
+Proceed to re-validation / Cancel?
 ```
 
-If user cancels: phase_restore + exit, leaving patches on disk for record.
+On cancel: exit; patches remain on disk.
 
-### Step 4: Mandatory ADR
+### Step 5: Apply patches to a TEMP proposed file
 
-Even if the user proceeds, append the ADR to `progress/decisions.md` BEFORE applying. The ADR documents the *intent* — even if the user backs out at Step 5 or 6, we have the record.
+Orchestrator copies `.harness/spec/constitution.md` to `.harness/spec/constitution.md.proposed` and applies the patches to the TEMP via `Edit` tool. Revalidation runs against the proposed state; the real constitution stays untouched until Step 10.
 
-```
-## ADR-NNN — Constitution amendment: [short title]
-**Date**: YYYY-MM-DD
-**Status**: Proposed (will become Accepted on apply)
+### Step 6: Analyze the NEW constitution against the current spec
 
-### Context
-${REASON}
+REVALIDATE (Step 7) checks the new constitution against previously-shipped features. It does NOT check the new constitution against the CURRENT `prd.md` / `architecture.md` / in-progress `contract.md`. That's this step's job. If the new principle implicitly invalidates part of the current spec (e.g., new principle "all user data MUST be server-side only" contradicts an existing FR "user preferences stored in localStorage"), this gate catches it before the amendment ships.
 
-### Decision
-Constitution amended:
-- Principle §N: [added | changed | removed]
-- Before: [quote from current constitution]
-- After: [quote from new text]
+Procedure:
 
-### Consequences
-- All FUTURE features negotiated against the new constitution
-- Completed features re-validated (see revalidation reports below)
-- In-progress feature: [policy chosen at Step 0 Gate 3]
-```
+1. Orchestrator runs `/harness:analyze` with an override: instead of reading `.harness/spec/constitution.md`, it reads `.harness/spec/constitution.md.proposed` (the Step-5 TEMP). All other spec files (prd.md, architecture.md, current feature's contract.md if any, evaluator/criteria.md) are read as-is.
+2. Analyze produces `.harness/features/${FEATURE:-_global}/analysis-report.md` with findings.
+3. Review findings:
+   - **No CRITICAL findings** → proceed to Step 7.
+   - **CRITICAL findings** → the proposed constitution contradicts the current spec. Present findings to user with three options:
+     - **Revise amendment** — abort now, user narrows the amendment reason and re-runs `/harness:constitution-amend`.
+     - **Edit current spec first** — user runs `/harness:edit` to bring prd.md/architecture.md into compliance with the proposed constitution, then re-runs this command.
+     - **Proceed anyway** — accept the contradiction knowingly (rare — typed confirmation `CONTRADICTION-ACKNOWLEDGED` required); the contradiction gets flagged in the final ADR as a known debt.
 
-### Step 5: Re-validation pass — Evaluator REVALIDATE mode per completed feature
+Why this comes before REVALIDATE: catching contradictions with the current spec is cheaper (no subagent dispatches per feature) and usually resolves by narrowing the amendment, which avoids expensive revalidation work that would have been wasted.
 
-For EACH completed feature in `manifest.features.completed`, dispatch the Evaluator in REVALIDATE mode against the new constitution. The Evaluator reads the feature's source code + contract + the new constitution, and produces a per-principle compliance report.
+### Step 7: Gate 4 — re-validation per completed feature
 
-```bash
-NEW_CONSTITUTION_PATH=".harness/spec/constitution.md.proposed"   # patches not yet applied
-# Apply the patches to a TEMP copy first so revalidation tests the proposed state
-cp .harness/spec/constitution.md "$NEW_CONSTITUTION_PATH"
-# (orchestrator applies the proposed patches to the temp copy via Edit)
+Orchestrator reads `features.completed[]` (sample up to 10 most recent). Picks timestamp `${TS}` (YYYYMMDDHHMMSS); output goes to `.harness/.revalidation-${TS}/`. For EACH sampled feature `${FEATURE_N}`, the orchestrator dispatches the Evaluator via the Agent tool:
 
-REVALIDATION_DIR=".harness/.revalidation-$(date +%Y%m%d%H%M%S)"
-mkdir -p "$REVALIDATION_DIR"
+- **subagent_type**: `harness:evaluator`
+- **description**: `"Revalidate ${FEATURE_N} vs proposed constitution"`
+- **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
 
-COMPLETED=$(awk '/^features:/{f=1} f && /completed:/,/^[a-z]/' .harness/manifest.yaml \
-              | grep -E '^[[:space:]]*-' | sed 's/^[[:space:]]*-[[:space:]]*//' | tr -d '"')
+> You are being dispatched in REVALIDATE mode for a constitution amendment.
+>
+> Audit the completed feature ${FEATURE_N} against the proposed new constitution. Per-principle compliance report: PASS / FAIL / N/A with audit method + finding. Do NOT run Playwright — static audit only. Write to .harness/.revalidation-${TS}/${FEATURE_N}.md.
 
-for FEATURE in $COMPLETED; do
-  echo "Re-validating ${FEATURE}..."
+The Evaluator reads `.harness/spec/constitution.md.proposed`, the feature's contract + eval-report + source.
 
-  CLAUDE_SUBAGENT=1 claude -p "You are being dispatched in REVALIDATE mode (see your system prompt's MODE ROUTING table).
+### Step 8: Summarise revalidation, collect per-feature decisions
 
-You are NOT running EVALUATE. You are checking whether the previously-shipped feature '${FEATURE}' still complies with the NEWLY AMENDED constitution. Static audit only — do NOT run Playwright, do NOT run the test suite.
-
-Read via Read tool:
-- ${NEW_CONSTITUTION_PATH} (proposed new constitution — patched but not yet applied)
-- .harness/features/${FEATURE}/contract.md (what the feature promised)
-- .harness/features/${FEATURE}/eval-report.md (what the original Evaluator found)
-- src/ (use Read + Bash grep/find to inspect actual code)
-
-Output per-principle compliance to .harness/.revalidation-<timestamp>/${FEATURE}.md:
-- Each principle § from the NEW constitution: PASS | FAIL | N/A
-- For FAIL: which file/line violates, what would need to change
-- Summary: how many principles fail, are any blocking?" \
-    --append-system-prompt-file "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/agents/evaluator.md" \
-    --allowedTools "Read,Write,Bash"
-
-  cp ".harness/.revalidation-*/${FEATURE}.md" "$REVALIDATION_DIR/${FEATURE}.md" 2>/dev/null
-done
-```
-
-### Step 6: Present revalidation summary, per-feature decision
+After all revalidation subagents return, orchestrator reads each per-feature report and summarises:
 
 ```
-═══════════════════════════════
-  Harness — Re-validation Summary
-═══════════════════════════════
-Constitution amendment under review (not yet applied).
-
 Completed features evaluated: [N]
+  PASS — FEATURE-001 — fully compliant
+  WARN — FEATURE-002 — 1 principle FAIL: [§N]
+  FAIL — FEATURE-003 — 3 principle FAILs: [list]
+Totals: compliant [N] / backport [N] / grandfather [N]
 
-Compliance results:
-  ✓ FEATURE-001 — fully compliant with new constitution
-  ⚠ FEATURE-002 — 1 principle FAIL: [§N description]
-                  → Decision needed: backport (add to ROADMAP) | grandfather (document exception)
-  ✗ FEATURE-003 — 3 principle FAILs: [list]
-                  → Decision needed: backport | grandfather (3 exceptions)
-
-For each feature with FAILs:
-  - Backport → Adds tasks to ROADMAP.md under "Constitutional debt"
-  - Grandfather → Adds an explicit exception to progress/decisions.md
-                  (audit trail: "FEATURE-X exempt from §N because <reason>")
-
+For each non-compliant feature:
+  - Backport     → adds task to ROADMAP.md under "Constitutional debt"
+  - Grandfather  → adds explicit exception to progress/decisions.md
 Per-feature decision (1=backport, 2=grandfather, 3=re-evaluate):
-═══════════════════════════════
 ```
 
-After collecting decisions, write them to `progress/decisions.md` as ADR follow-ups (each decision is its own line item under the parent amendment ADR).
+Collect decisions. Choice `3` re-runs Step 7 (REVALIDATE dispatch) for that feature only.
 
-### Step 7: Apply patches
+### Step 9: Gate 5 — final apply confirmation
 
-Only NOW does the orchestrator apply the patches to the real `spec/constitution.md`.
+Orchestrator presents the full apply summary and requires `APPLY-AMENDMENT` typed confirmation. On mismatch, exit (patches + proposed temp file retained for recovery).
 
-```bash
-# Apply each patch from constitution-amend-patches.md to spec/constitution.md
-# (mechanical Edit tool calls, same pattern as /harness:amend Step 4)
+### Step 10: Apply, wire backports/grandfathers, log everything
 
-# Update manifest amendment history
-# (orchestrator appends to constitution.amendments list in manifest.yaml)
+Orchestrator applies each patch from `constitution-amend-patches.md` to `.harness/spec/constitution.md` via `Edit` (mechanical — Planner authored the strings). Then via `Edit` tool:
 
-# Mark the parent ADR as Accepted (was Proposed)
+- **Per backport feature** → append a task to `ROADMAP.md` under `Constitutional debt` (feature + failing principle(s)).
+- **Per grandfather feature** → append a follow-up ADR to `progress/decisions.md` documenting the exception.
+- **manifest.yaml** → append under `constitution.amendments` an entry with `date`, `reason`, `principles_affected`, `adr`, `revalidation_dir`, `backport_needed[]`, `grandfathered[]`.
+- **progress/decisions.md** → append the mandatory parent ADR (title, date, Accepted status, Context = `${ARGUMENTS}`, Decision = principle §N added/changed/removed with before/after quotes, Consequences = future features build against new constitution, revalidation dir, backport tasks added, grandfathered list, in-progress policy chosen at gate 3).
+- **progress/changelog.md** → append `## YYYY-MM-DD — Global — Constitution amended` with reason/ADR/principles/re-validation totals.
 
-# Clean up the proposed-state temp file
-rm -f "$NEW_CONSTITUTION_PATH"
-```
-
-### Step 8: Update changelog
-
-```
-## YYYY-MM-DD — Global — Constitution amended
-- Reason: "${REASON}"
-- ADR: ADR-NNN
-- Affected principles: [§-numbers]
-- Re-validation results: [N compliant, N backport, N grandfather]
-```
-
-### Step Final: Restore phase
-
-```bash
-source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/scripts/phase-guard.sh"
-phase_restore
-```
+Finally delete `.harness/spec/constitution.md.proposed` and the per-feature analysis-report.md if it was written to `_global`.
 
 ## Anti-patterns
 
-- **Treating ceremony as obstacle**. The ceremony IS the feature. If you find it annoying, that's a signal you might be amending too casually — let the friction do its job.
-- **Skipping re-validation** "because the change is small." Even a small principle change can invalidate past features. The whole point is to catch that systematically.
-- **Grandfathering everything to avoid backport work**. Grandfathering is for genuine exceptions (e.g., a feature shipped before the new principle existed and rewriting it would be churn). Routine grandfathering hollows out the constitution — at some point your amendment doesn't actually apply to anything.
-- **Amending the constitution to match what the Generator already built**. That's a retrospective concern, not a constitution amendment. Use `/harness:retrospective` to capture *positive drift* into the spec, then re-evaluate whether a constitutional change is justified.
-- **Making the constitution looser**. The constitution is supposed to TIGHTEN over time as the project learns. Amendments that loosen a principle should require an even higher bar — explicitly justify why the principle was wrong, not just inconvenient.
+- **Ceremony as obstacle**: the ceremony IS the feature. Annoyance signals you may be amending too casually.
+- **Skipping re-validation** "because the change is small": even a small principle change can invalidate past features.
+- **Grandfathering everything** to dodge backport work: routine grandfathering hollows out the constitution.
+- **Amending to match what was already built**: that's a retrospective concern. Use `/harness:retrospective` first.
+- **Loosening principles casually**: loosening should require a higher bar of justification.
 
 ## Files written
 
-| File | Writer | Lifetime |
-|---|---|---|
-| `.harness/constitution-amend-patches.md` | Planner CONSTITUTION-AMEND mode | global, kept as record of proposed change |
-| `.harness/.revalidation-<ts>/` | Evaluator REVALIDATE mode (one file per completed feature) | kept as audit trail |
-| `spec/constitution.md` | Orchestrator applies patches (Step 7) | updated in place |
-| `progress/decisions.md` | Orchestrator appends ADR + per-feature decisions | append-only |
-| `progress/changelog.md` | Orchestrator appends | append-only |
-| `manifest.yaml → constitution.amendments` | Orchestrator | history appended |
+| File | Writer |
+|---|---|
+| `.harness/constitution-amend-patches.md` | Planner CONSTITUTION-AMEND mode |
+| `.harness/spec/constitution.md.proposed` | Orchestrator TEMP copy (deleted at Step 10) |
+| `.harness/features/${FEATURE:-_global}/analysis-report.md` | Orchestrator (Step 6 — new-constitution vs current-spec analyze) |
+| `.harness/.revalidation-${TS}/${FEATURE}.md` | Evaluator REVALIDATE mode (one per sampled feature) |
+| `spec/constitution.md` | Orchestrator applies patches (Step 10) |
+| `ROADMAP.md` | Orchestrator appends backport tasks |
+| `manifest.yaml → constitution.amendments` | Orchestrator appends entry |
+| `progress/decisions.md` | Orchestrator appends ADR + per-feature follow-ups |
+| `progress/changelog.md` | Orchestrator appends |
 
-## Why this is the SECOND writer of constitution.md
-
-Per SKILL.md File Ownership Contract, the original writer is "Planner Pass 1 only — immutable thereafter." This command is the ONE authorized exception, behind the ceremony gates above. The hook (FR-2) enforces this: writes to `spec/constitution.md` outside `phase=constitution-amending` are blocked.
+This command is the authorized SECOND writer of `spec/constitution.md` — the original Planner Pass 1 is the only other writer per SKILL.md File Ownership Contract. The write-blocking hook recognises this command by the active phase marker.

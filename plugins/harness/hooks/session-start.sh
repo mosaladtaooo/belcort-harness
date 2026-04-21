@@ -1,51 +1,38 @@
 #!/bin/bash
-# BELCORT Harness — SessionStart Hook
-# Fires on session start, resume, clear, and compact.
-# Injects DYNAMIC per-directory state only. Static behavioral rules live in
-# ~/.claude/CLAUDE.md (installed by /harness:setup) so they survive compaction.
+# BELCORT Harness — SessionStart Hook (v2.1)
+# Minimal: detect harness, nudge the skill. State reading is done by the skill
+# itself — this hook is only a 1-line trigger.
+#
+# Dispatch note: v2.1.0 migrated subagent dispatch from `claude -p` subprocesses
+# to native Agent-tool dispatch (plugin-declared subagent_types: harness:planner,
+# harness:generator, harness:evaluator). Agent-tool subagents do NOT set
+# CLAUDE_SUBAGENT=1 — they rely on Claude Code's own context isolation plus the
+# <SUBAGENT-CONTEXT> block in each agent.md.
+#
+# The CLAUDE_SUBAGENT=1 check below is retained as a backward-compat shim for
+# users who still invoke `claude -p` externally (rare). Within the harness
+# pipeline, no command sets it.
 
 set -u
 
-# ─────────────────────────────────────────────────────────────
-# SUBAGENT GUARD — hard gate, must come BEFORE any state injection
-# ─────────────────────────────────────────────────────────────
-# The orchestrator dispatches Planner/Generator/Evaluator via `claude -p` with
-# CLAUDE_SUBAGENT=1 set. Without this guard, the hook fires inside those
-# subagents too and injects <harness-state>, which:
-#   1. bloats the subagent's context (the whole point of subagent isolation)
-#   2. can trigger the subagent to re-read SKILL.md and try to orchestrate
-#      its own pipeline — the self-orchestration loop we explicitly prevent
-# The SUBAGENT-CONTEXT block in each agent's prompt is the backup safety net.
-# This env-var check is the primary gate — cheaper, earlier, no tokens wasted.
+# Legacy shim: skip injection if an external caller explicitly marked this as a
+# subagent invocation via CLAUDE_SUBAGENT=1. Harmless for Agent-tool dispatches
+# (which don't set the var).
 if [ "${CLAUDE_SUBAGENT:-0}" = "1" ]; then
   exit 0
 fi
 
 # Only act if there's an active harness in this directory.
-# Otherwise stay silent — CLAUDE.md already tells Claude how to recognize
-# trigger phrases and suggest /harness:sprint.
 [ -f ".harness/manifest.yaml" ] || exit 0
 
-PHASE=$(grep 'phase:' .harness/manifest.yaml 2>/dev/null | head -1 | awk -F: '{print $2}' | tr -d '" ' | head -c 20)
-PROJECT=$(grep -A2 '^project:' .harness/manifest.yaml 2>/dev/null | grep 'name:' | head -1 | awk -F: '{print $2}' | tr -d '" ' | head -c 50)
-CURRENT_FEATURE=$(grep 'current_feature:' .harness/manifest.yaml 2>/dev/null | head -1 | awk -F: '{print $2}' | tr -d '" ' | head -c 50)
-RETRIES=$(grep 'retry_count:' .harness/manifest.yaml 2>/dev/null | head -1 | awk -F: '{print $2}' | tr -d '" ' | head -c 5)
-
-cat <<EOF
+cat <<'EOF'
 <harness-state>
-BELCORT Harness is ACTIVE in this project.
-- Project: ${PROJECT:-unnamed}
-- Current feature: ${CURRENT_FEATURE:-none}
-- Phase: ${PHASE:-unknown}
-- Retry count: ${RETRIES:-0}
+BELCORT Harness detected in this project (.harness/manifest.yaml present).
 
-Read .harness/manifest.yaml before doing anything else. The harness skill is registered — invoke it via the Skill tool when needed.
-
-If phase is not "complete": tell the user "Active harness found (feature: ${CURRENT_FEATURE:-none}, phase: ${PHASE:-unknown}). Run /harness:resume to continue, or ask me anything else."
-
-If phase is "complete": tell the user "Last feature (${CURRENT_FEATURE:-none}) shipped. Run /harness:sprint to start a new feature, or check ROADMAP.md for planned work."
-
-Do NOT start coding or answer technical questions about this project until you've acknowledged the harness state.
+Invoke the harness skill via the Skill tool before acting. The skill reads
+manifest.yaml, progress/changelog.md, and git log to figure out the current
+phase and recommend next steps. Do not answer technical questions or start
+coding about this project until the skill has run.
 </harness-state>
 EOF
 

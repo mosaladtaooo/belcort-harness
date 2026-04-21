@@ -116,39 +116,33 @@ else
     "Comes with Node.js — if missing, reinstall node"
 fi
 
-# JSON parser — pre-tool-use.sh needs jq OR python3 to parse tool input. Without
-# either, the hook fails open and every safety rail (force-push block, .harness/
-# deletion block, test-file deletion guard) is silently inactive. Catch it here
-# so the user knows before the sprint runs.
-if command -v jq >/dev/null 2>&1; then
+# JSON parser — pre-tool-use.sh needs a working jq OR python (3.x) to parse tool
+# input. Without one, the hook fails open and every safety rail (force-push
+# block, .harness/ deletion block, test-file deletion guard) is silently inactive.
+#
+# MUST test actual execution, not just PATH existence. On Windows, python3.exe
+# is often a Microsoft Store stub — command -v succeeds but running it does
+# nothing. Hence the `-c 'print(1)'` probe below.
+if command -v jq >/dev/null 2>&1 && printf '{}' | jq -r '.' >/dev/null 2>&1; then
   JQ_VER=$(jq --version 2>/dev/null)
   add_result "CRITICAL" "PASS" "JSON parser (jq)" "${JQ_VER:-jq available}"
-elif command -v python3 >/dev/null 2>&1; then
+elif command -v python3 >/dev/null 2>&1 && python3 -c 'print(1)' >/dev/null 2>&1; then
   PY_VER=$(python3 --version 2>/dev/null | awk '{print $2}')
   add_result "CRITICAL" "PASS" "JSON parser (python3 fallback)" \
     "python3 ${PY_VER:-available} — jq preferred but not required"
+elif command -v python >/dev/null 2>&1 && python -c 'import sys; sys.exit(0 if sys.version_info.major>=3 else 1)' 2>/dev/null; then
+  PY_VER=$(python --version 2>&1 | awk '{print $2}')
+  add_result "CRITICAL" "PASS" "JSON parser (python fallback)" \
+    "python ${PY_VER:-available} — 3.x detected (Windows-common naming); jq preferred but not required"
 else
-  add_result "CRITICAL" "FAIL" "JSON parser (jq or python3)" \
-    "neither jq nor python3 found — pre-tool-use.sh cannot parse tool input, so force-push / .harness/ deletion / test-file deletion guards silently fail open" \
-    "macOS: brew install jq  |  Debian/Ubuntu: apt install jq  |  or install python3"
-fi
-
-# Per-agent model overrides — if manifest pins a model, verify it looks like a
-# valid Claude model ID (not a typo). Does not check availability — that happens
-# at dispatch time. This is a sanity check against 'claude-ops-4.7' (typo) etc.
-if [ -f ".harness/manifest.yaml" ]; then
-  for agent in planner generator evaluator; do
-    model=$(awk -v key="$agent" '/^[[:space:]]*models:/{in_m=1;next} in_m && $1==key":"{gsub(/"/,"",$2); print $2; exit}' .harness/manifest.yaml 2>/dev/null || true)
-    # Skip if empty (default) or doesn't look set
-    [ -z "$model" ] && continue
-    if printf '%s' "$model" | grep -qE '^claude-(opus|sonnet|haiku)-[0-9]+(-[0-9]+)?(-[a-z0-9]+)?$'; then
-      add_result "RECOMMEND" "PASS" "Agent model pin: ${agent}" "pinned to ${model}"
-    else
-      add_result "RECOMMEND" "WARN" "Agent model pin: ${agent}" \
-        "pinned to '${model}' — does not match claude-<opus|sonnet|haiku>-N-M pattern (typo?)" \
-        "Edit .harness/manifest.yaml → config.models.${agent} or clear it to use the default"
-    fi
-  done
+  # Detect the specific failure mode so the fix suggestion is accurate
+  WIN_STUB_NOTE=""
+  if command -v python3 >/dev/null 2>&1 && ! python3 -c 'print(1)' >/dev/null 2>&1; then
+    WIN_STUB_NOTE=" (NOTE: python3 was found on PATH but does not execute — likely a Microsoft Store stub on Windows; install a real Python 3 from python.org or use jq instead)"
+  fi
+  add_result "CRITICAL" "FAIL" "JSON parser (jq or python 3.x)" \
+    "no working jq/python3/python(3.x) detected — pre-tool-use.sh safety rails silently fail open${WIN_STUB_NOTE}" \
+    "macOS: brew install jq  |  Debian/Ubuntu: apt install jq  |  Windows: winget install jqlang.jq  |  or install Python 3.x from python.org"
 fi
 
 # ─────────────────────────────────────────────────────────────
@@ -221,45 +215,32 @@ else
     "/plugin marketplace add mosaladtaooo/belcort-harness && /plugin install harness@belcort-harness"
 fi
 
-# CLAUDE.md rules (required for session-start behavior + 1% rule)
-if [ -f "$CLAUDE_HOME/CLAUDE.md" ] && grep -q "BELCORT-HARNESS BEGIN" "$CLAUDE_HOME/CLAUDE.md" 2>/dev/null; then
-  # Installed — check whether it's still in sync with the snippet this plugin ships.
-  # If the user installed an older version and we've since shipped updates to the
-  # snippet, the session-start behavior could diverge from what the commands expect.
-  SNIPPET_PATH=""
-  if [ -n "$PLUGIN_FOUND" ]; then
-    SNIPPET_PATH="$(dirname "$PLUGIN_FOUND")/../../CLAUDE.md.snippet.txt"
-  fi
-  # Also try the explicit plugin root if we have it
-  [ -z "$SNIPPET_PATH" ] || [ ! -f "$SNIPPET_PATH" ] && {
-    [ -n "$PLUGIN_ROOT" ] && SNIPPET_PATH="$PLUGIN_ROOT/CLAUDE.md.snippet.txt"
-  }
-  [ -f "$SNIPPET_PATH" ] || SNIPPET_PATH="$CLAUDE_HOME/plugins/harness/CLAUDE.md.snippet.txt"
-
-  if [ -f "$SNIPPET_PATH" ]; then
-    # Extract the installed block (between BEGIN and END markers) and compare to the
-    # shipped snippet. Hash-compare is enough — we don't need a full diff here.
-    INSTALLED_BLOCK=$(awk '/BELCORT-HARNESS BEGIN/,/BELCORT-HARNESS END/' "$CLAUDE_HOME/CLAUDE.md" | sed '1d;$d')
-    SHIPPED_HASH=$(shasum -a 256 "$SNIPPET_PATH" 2>/dev/null | awk '{print $1}' | head -c 12)
-    INSTALLED_HASH=$(printf '%s' "$INSTALLED_BLOCK" | shasum -a 256 2>/dev/null | awk '{print $1}' | head -c 12)
-    if [ -n "$SHIPPED_HASH" ] && [ -n "$INSTALLED_HASH" ] && [ "$SHIPPED_HASH" = "$INSTALLED_HASH" ]; then
-      add_result "CRITICAL" "PASS" "Global harness rules" "installed + in sync with plugin snippet"
-    elif [ -n "$SHIPPED_HASH" ] && [ -n "$INSTALLED_HASH" ]; then
-      add_result "RECOMMEND" "WARN" "Global harness rules sync" \
-        "installed block differs from shipped snippet (${INSTALLED_HASH} vs ${SHIPPED_HASH}) — your global rules are stale" \
-        "Run: /harness:setup  # re-install the current snippet"
-      add_result "CRITICAL" "PASS" "Global harness rules" "installed (but stale — see WARN above)"
-    else
-      # Hashing failed — shasum missing or unusual shell env. Fall through to present.
-      add_result "CRITICAL" "PASS" "Global harness rules" "installed in $CLAUDE_HOME/CLAUDE.md (sync check skipped — shasum unavailable)"
-    fi
+# Project-local CLAUDE.md check (v2+): verify ./CLAUDE.md has a BELCORT-HARNESS block
+# if a .harness/ is present. Global ~/.claude/CLAUDE.md check was removed in v2 —
+# harness rules install project-local now. If a legacy global block still exists,
+# setup.sh warns the user about cleanup; doctor doesn't flag it as a failure.
+if [ -d ".harness" ]; then
+  if [ -f "./CLAUDE.md" ] && grep -q "BELCORT-HARNESS BEGIN" "./CLAUDE.md" 2>/dev/null; then
+    add_result "CRITICAL" "PASS" "Project CLAUDE.md" "harness activation block present in ./CLAUDE.md"
   else
-    add_result "CRITICAL" "PASS" "Global harness rules" "installed in $CLAUDE_HOME/CLAUDE.md (sync check skipped — snippet not found in plugin)"
+    add_result "CRITICAL" "FAIL" "Project CLAUDE.md" \
+      ".harness/ exists but ./CLAUDE.md has no BELCORT-HARNESS activation block" \
+      "Run: /harness:setup  (creates or patches ./CLAUDE.md)"
   fi
-else
-  add_result "CRITICAL" "FAIL" "Global harness rules" \
-    "BELCORT-HARNESS block not found in ~/.claude/CLAUDE.md" \
-    "Run: /harness:setup"
+fi
+
+# Agent file integrity — if plugin is corrupt, catch it before sprint
+if [ -n "$PLUGIN_FOUND" ]; then
+  PLUGIN_AGENTS_DIR="$(dirname "$PLUGIN_FOUND")/../../agents"
+  for agent in planner generator evaluator; do
+    if [ -f "$PLUGIN_AGENTS_DIR/${agent}.md" ] && [ -r "$PLUGIN_AGENTS_DIR/${agent}.md" ]; then
+      add_result "CRITICAL" "PASS" "Agent file: ${agent}.md" "readable"
+    else
+      add_result "CRITICAL" "FAIL" "Agent file: ${agent}.md" \
+        "not found or not readable at $PLUGIN_AGENTS_DIR/${agent}.md — plugin may be corrupt" \
+        "Reinstall plugin: /plugin uninstall harness && /plugin install harness@belcort-harness"
+    fi
+  done
 fi
 
 # ─────────────────────────────────────────────────────────────
