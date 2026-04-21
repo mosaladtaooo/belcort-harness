@@ -19,5 +19,9 @@
     "orchestration",
     "pipeline"
   ],
-  "agents": "./agents/"
+  "agents": [
+    "./agents/planner.md",
+    "./agents/generator.md",
+    "./agents/evaluator.md"
+  ]
 }
