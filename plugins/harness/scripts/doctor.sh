@@ -296,12 +296,41 @@ optional_plugin_check() {
   fi
 }
 
+optional_plugin_check "superpowers"       "Generator BUILD delegates TDD cycle to superpowers:test-driven-development — strongly recommended" \
+  "/plugin install superpowers@claude-plugins-official"
 optional_plugin_check "frontend-design"   "Generator uses this for UI quality" \
   "/plugin install frontend-design@claude-plugins-official"
 optional_plugin_check "security-guidance" "Generator+Evaluator OWASP checks" \
   "/plugin install security-guidance@claude-plugins-official"
 optional_plugin_check "agentlint"         "Evaluator automated code quality scan (33 checks)" \
   "/plugin install agentlint@claude-plugins-official"
+
+# ─────────────────────────────────────────────────────────────
+# RECOMMENDED: Bash permission pre-allows for npm-family commands
+# ─────────────────────────────────────────────────────────────
+# Generator BUILD runs `npm install`, `npx vitest run`, etc. If Claude Code's
+# Bash-permission system hasn't pre-allowed these, the Generator will either
+# (a) prompt interactively, breaking autonomy, or (b) get blocked, causing
+# the pause-protocol to fire. Better to pre-allow at setup time.
+# Detect by grepping the project's and user's .claude/settings.json for
+# "Bash(npm *)"-style entries. Absence triggers a RECOMMEND warning with
+# the exact fix command.
+NPM_ALLOW_FOUND=0
+for settings_path in ".claude/settings.json" "$CLAUDE_HOME/settings.json"; do
+  if [ -f "$settings_path" ]; then
+    if grep -qE '"Bash\(npm [*]\)"|"Bash\(npx [*]\)"|"Bash\(pnpm [*]\)"' "$settings_path" 2>/dev/null; then
+      NPM_ALLOW_FOUND=1
+      break
+    fi
+  fi
+done
+if [ "$NPM_ALLOW_FOUND" = "1" ]; then
+  add_result "RECOMMEND" "PASS" "Bash npm/npx/pnpm pre-allow" "Claude Code settings allow npm-family commands without interactive approval"
+else
+  add_result "RECOMMEND" "WARN" "Bash npm/npx/pnpm pre-allow" \
+    "Generator BUILD will likely prompt-or-block on npm/npx/pnpm — the pause protocol handles this gracefully, but it interrupts autonomous runs" \
+    "Run in Claude Code: /allow Bash(npm *) Bash(npx *) Bash(pnpm *) Bash(node *)  — or edit .claude/settings.json → permissions.allow"
+fi
 
 # ─────────────────────────────────────────────────────────────
 # OUTPUT

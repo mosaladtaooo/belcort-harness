@@ -314,6 +314,20 @@ You're on an older tag. v2.1.0+ uses the correct array format. Update: `/plugin 
 
 Windows ships a `python3.exe` Microsoft Store PATH stub that resolves via `command -v python3` but doesn't execute. v2.1.1+ probes actual execution and falls back to `python` (3.x). Upgrade or install jq: `winget install jqlang.jq`.
 
+### AgentLint hook errors look like mangled paths on Windows
+
+If you see errors like `/usr/bin/bash: line 1: C:UserszhantAppDataLocalProgramsPythonPython312Scriptsagentlint.EXE: command not found`, the backslashes in the Windows path are being stripped inside MSYS/Git-Bash (the `\U`, `\A`, `\L` sequences eat themselves). This is an **AgentLint bug**, not belcort-harness — report upstream or uninstall agentlint if the noise bothers you. The error is tagged `non-blocking` and doesn't affect the harness pipeline.
+
+### Generator paused because npm / npx / pnpm is blocked
+
+Claude Code's default Bash-permission system may prompt or block npm-family commands. Generator BUILD can't run tests without them, so it pauses gracefully (pause-protocol working as designed). Fix by pre-allowing in Claude Code:
+
+```
+/allow Bash(npm *) Bash(npx *) Bash(pnpm *) Bash(node *)
+```
+
+Or add to `.claude/settings.json` → `permissions.allow`. Then `/harness:resume` — Generator picks up where it paused. `/harness:doctor` (v2.1.2+) warns if your settings don't pre-allow these commands.
+
 ### Evaluator can't find Playwright / Planner can't find Context7
 
 Run `/harness:doctor`. It checks MCP registration. If missing:

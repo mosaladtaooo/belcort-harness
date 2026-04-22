@@ -114,7 +114,7 @@ Every file under `.harness/` has exactly one writer per phase. If you're not the
 | `.harness/.revalidation-<ts>/<FEATURE>.md` | Evaluator REVALIDATE (per completed feature) | Orchestrator aggregates into backport/grandfather decisions |
 | `progress/changelog.md` | All agents append | All agents |
 | `progress/decisions.md` | Orchestrator (ADR on any spec/prompt change) | All agents |
-| `progress/known-issues.md` | Orchestrator (`/harness:retrospective`) | All agents |
+| `progress/known-issues.md` | Orchestrator — **three writers**: (a) `/harness:retrospective` on post-merge drift capture (primary); (b) `/harness:edit` Step 6 when a cascade-edit defers a V-gate failure ("defer-to-sprint"); (c) `/harness:audit` when the user chooses "record as debt" for a finding. Append-only; entries persist across sprints. | Retrospective (dedup against existing entries); Audit (verification-debt scan starts here); Planner CLARIFY-QUESTIONS (skip ambiguities already recorded); human |
 
 ### The "orchestrator does not edit spec files" rule
 

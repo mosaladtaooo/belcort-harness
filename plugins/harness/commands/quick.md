@@ -81,14 +81,28 @@ Same Agent-tool dispatch pattern as [sprint.md § 4. Evaluate](sprint.md) — `s
 
 ### 4. Result
 
-- **PASS**: orchestrator merges directly (no retrospective on quick). Updates manifest + ROADMAP.
+- **PASS**: before merging, orchestrator asks the user ONE spec-drift question (see Step 4.5 below); then merges, updates manifest + ROADMAP.
 - **FAIL**: present eval-report.md to user with two options:
   1. Manually fix and re-run `/harness:quick` with the same prompt.
   2. Escalate to `/harness:sprint` for full pipeline treatment.
 
+### 4.5 Spec-drift check (v2.1.2+, PASS path only, single question)
+
+`/quick` skips the full `/harness:retrospective` by design — there's no rich spec to reconcile against. But a quick fix CAN still reveal a spec-level issue (e.g., "while fixing this bug I realized the PRD says X but users actually need Y"). Without a reconciliation step, such drift never propagates back into `spec/prd.md` or `spec/architecture.md`, and future sprints build on an inaccurate spec.
+
+The simplest Anthropic-aligned closure: one question.
+
+Orchestrator asks the user (before the merge in Step 5):
+
+> Did this fix change any behavior documented in `spec/prd.md`, `spec/architecture.md`, or the constitution?
+> - **No** — proceed to merge.
+> - **Yes — one-line summary** — orchestrator runs `/harness:amend "<the summary>"` FIRST (so spec catches up), then merges this quick feature against the updated spec.
+
+No new machinery, no new file, no flag. Prose discipline. User has agency. Simplest gap-closer that keeps spec-sync optional per quick's fast-path philosophy while giving the user a one-click path to keep spec current when it matters.
+
 ## Notes
 
 - No tuning check on quick (single-pass, insufficient calibration signal).
-- No retrospective on quick (no spec to reconcile against).
+- No automatic retrospective on quick (no rich spec); Step 4.5 is the lightweight substitute.
 - No per-FR stories, no negotiation, no multi-round iteration.
 - If the task turned out larger than estimated, next time run `/harness:sprint` for similar work — the heuristic was wrong.

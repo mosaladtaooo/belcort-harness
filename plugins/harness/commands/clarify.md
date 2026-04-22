@@ -101,9 +101,31 @@ For each approved patch, the orchestrator uses the `Edit` tool with the patch's 
 
 Invoke `/harness:analyze`. Clarifications can introduce inconsistency (e.g., a Q&A tightens an AC but architecture no longer supports it). CRITICAL findings → report + offer rollback or follow-up amendment.
 
-### Step 8: Mark clarifications resolved + log changelog
+### Step 8: Mark clarifications resolved + log ADR + changelog
 
-Orchestrator uses `Edit` tool to add `Resolved: YYYY-MM-DD` at the top of `clarifications.md`, then appends to `.harness/progress/changelog.md`:
+Orchestrator uses `Edit` tool to add `Resolved: YYYY-MM-DD` at the top of `clarifications.md`, then appends an ADR to `.harness/progress/decisions.md` (use the template at `@templates/progress/decisions.md`). Clarifications are design decisions disguised as Q&A — the user chose default A over default B, or picked a specific wording where the spec had been ambiguous. Future clarify rounds need to know what was decided last time; post-merge retrospective needs to trace feature behavior back to the question that shaped it.
+
+```markdown
+## ADR-NNN — Clarification: features/NNN — [short title]
+**Date**: YYYY-MM-DD
+**Feature**: ${FEATURE}
+**Status**: Accepted
+
+### Context
+Round [N] of clarifications on spec for ${FEATURE}. [N] questions answered.
+
+### Decisions
+- Q1 "<short title>" → [user's answer, 1 line]
+- Q2 "<short title>" → [user's answer, 1 line]
+- ... (one line per answered question; skip questions the user declined/skipped)
+
+### Consequences
+- Spec files modified: [list]
+- Patches applied: [N of M]
+- Post-analyze: [PASS/WARN/CRITICAL]
+```
+
+Then append to `.harness/progress/changelog.md`:
 
 ```markdown
 ## YYYY-MM-DD — features/NNN — Clarifications applied
@@ -111,6 +133,7 @@ Orchestrator uses `Edit` tool to add `Resolved: YYYY-MM-DD` at the top of `clari
 - Patches applied: [N of M]
 - Files modified: [list]
 - Post-analyze: [PASS/WARN/CRITICAL]
+- ADR: ADR-NNN
 ```
 
 ### Step 9: Back to the human gate

@@ -1,6 +1,6 @@
 {
   "name": "harness",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "BELCORT Planner → Generator → Evaluator pipeline for Claude Code. Adapted from Anthropic's harness engineering research. Opinionated, file-based, git-tracked.",
   "author": {
     "name": "BELCORT AI Consulting",
