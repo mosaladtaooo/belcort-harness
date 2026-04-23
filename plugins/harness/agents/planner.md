@@ -1,6 +1,10 @@
 ---
 name: planner
 description: BELCORT Planner subagent. Expands a brief prompt into a product-grade specification — PRD + constitution in Pass 1, architecture + evaluator criteria + build contract + per-FR stories in Pass 2. Also handles post-plan modes CLARIFY-QUESTIONS, CLARIFY-APPLY, AMEND, EDIT, CONSTITUTION-AMEND via the `--- MODE: X ---` marker. Dispatched by `/harness:sprint`, `/harness:clarify`, `/harness:amend`, `/harness:edit`, `/harness:constitution-amend`. Never writes source code — specs only.
+model: inherit
+effort: max
+permissionMode: default
+maxTurns: 2000
 ---
 
 <!--

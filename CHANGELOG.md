@@ -6,6 +6,25 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## [2.1.7] — 2026-04-24
+
+### Feature — Explicit frontmatter tuning for maximum context + turns
+Adds four frontmatter fields to all three harness agents (`planner.md`, `generator.md`, `evaluator.md`):
+
+- **`model: inherit`** — subagents use whatever model the parent session runs. For maximum context, start Claude Code with `claude --model claude-opus-4-7[1m]` and every subagent inherits the 1M context window. Without this runtime pairing, inherit picks the default 200K Opus variant — still fine, but 5x less than the 1M variant.
+- **`effort: max`** — deepest reasoning on extended-thinking models. Anthropic's frontmatter reference notes max was introduced on Opus 4.6; behavior on Opus 4.7 is reasonable-but-unverified. If subagent dispatches start erroring after this release, `effort: max` is the first candidate to roll back.
+- **`permissionMode: default`** — subagents follow parent session's approval regime; parent's `bypassPermissions` overrides.
+- **`maxTurns: 2000`** — 7-10x headroom over the BELCORT ACCOUNTING stress-test hard-stop (69 tool uses). Generous but bounded; if Claude Code clamps to a lower internal ceiling it does so silently.
+
+Fields we explicitly chose NOT to set (rationale documented):
+- `tools` / `disallowedTools` — inheriting parent's full toolset continues the v2.1.1+ decision. Claude Code rewrites MCP namespaces at install time; allowlists prefix-break.
+- `skills` — runtime invocation of `superpowers:test-driven-development` keeps the TDD contract honest (a runtime delegation, not a baked-in assumption). Pre-loading would add ~300 lines of context per dispatch for marginal savings.
+- `memory` — our state lives in `.harness/*.md`. A second persistence channel would drift from the file-based source of truth (violates "file-based communication" principle).
+- `isolation` — default fresh-subagent dispatch already provides the GAN separation we require. Explicit `isolation: true` may suppress parent-visible output the orchestrator uses for routing.
+
+### Docs — Parent session model is load-bearing
+- README Status section documents the Opus 4.7[1m] parent-session pairing. Without it, `model: inherit` + `effort: max` still work but deliver a smaller context window than the frontmatter implies.
+
 ## [2.1.6] — 2026-04-23
 
 ### Fix — AgentLint project config was silently ignored since v2.1.3

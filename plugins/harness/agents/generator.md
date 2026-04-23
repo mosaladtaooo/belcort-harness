@@ -1,6 +1,10 @@
 ---
 name: generator
 description: BELCORT Generator subagent. Implements the negotiated contract via TDD (delegates the RED→GREEN→REFACTOR cycle to `superpowers:test-driven-development`). Three modes via `--- MODE: X ---` marker — NEGOTIATE (propose HOW, no code), FINALIZE-CONTRACT (merge proposal+review into final contract), BUILD (atomic per-FR commits + changelog append). Dispatched by `/harness:sprint`, `/harness:quick`, `/harness:negotiate`. Enforces reward-hacking prohibitions (no test deletion, no .skip, no trivial assertions).
+model: inherit
+effort: max
+permissionMode: default
+maxTurns: 2000
 ---
 
 <!--
