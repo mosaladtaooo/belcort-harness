@@ -6,6 +6,71 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## [2.1.3] — 2026-04-23
+
+### Refactor
+- Removed 5 inline templates across `agents/evaluator.md` + `agents/generator.md` that duplicated canonical `.txt` files under `templates/features/`. Replaced each with an `@templates/features/<name>.md.txt` reference + a tight list of pipeline invariants (VERDICT line, `**Negotiated**:` marker, Part-A-before-B, C1/M1/m1 finding IDs, etc.) — the invariants are what downstream consumers actually depend on; the structural template lives in one place. Net: ~−413 lines of inline duplication, consistent with Task-19/Task-20 pattern from the original v2 refactor. (Miss from Phase 1-2.)
+- File sizes after dedup: `evaluator.md` 784 → 657 lines, `generator.md` 638 → 487 lines.
+
+### Feature — REVIEW-PROPOSAL context expansion
+- Evaluator REVIEW-PROPOSAL mode now reads `spec/constitution.md` + `spec/architecture.md` in addition to criteria + contract + proposal. The proposal introduces new HOW-level content (component breakdown, file structure, test strategy) that the contract never specified; those HOW decisions can violate constitution or architecture independently of contract-level consistency.
+- Workflow Step 3 (test-strategy adequacy) now references constitution for project-specific test-layer requirements.
+- Workflow Step 5 (missing ACs) expanded with explicit architecture-consistency + constitution-compliance checks — red flags become `R-NN` items in the review.
+- `sprint.md` REVIEW-PROPOSAL dispatch prompt updated to enumerate the expanded Input file set.
+- PRD intentionally excluded — contract already contains the NFR targets from Planner Pass 2; reading PRD again is redundant for this review.
+
+### Chore
+- Added `.agentlint.toml` at repo root with scoped `max-file-size` suppressions for `agents/*.md`, `skills/harness/SKILL.md`, `scripts/doctor.sh`. Each suppression documents the rationale (comprehensive by design per Anthropic harness-engineering; plugin system doesn't support splitting agent prompts; single-pass output formats users rely on).
+
+## [2.1.2] — 2026-04-22
+
+### Fix — surfaced during v2-beta live stress test
+- Documented AgentLint Windows-path hook noise in README troubleshooting (MSYS bash eats `\U`, `\A`, `\L` escape sequences in the invoked path — not a harness bug).
+- Added README guidance for the npm/npx/pnpm permission-block scenario: the Generator pauses gracefully via the pause protocol (working as designed); user pre-allows via `/allow Bash(npm *)` or `.claude/settings.json`.
+- `scripts/doctor.sh` now detects when `.claude/settings.json` hasn't pre-allowed npm-family commands and warns with the exact fix command — saves users from mid-build surprises.
+- `scripts/doctor.sh` added `superpowers` to the RECOMMEND plugin list (Generator BUILD delegates TDD to `superpowers:test-driven-development`).
+
+### Refactor — known-issues.md ownership documentation
+- `SKILL.md § File Ownership Contract` updated: `progress/known-issues.md` has **three** writers, not just retrospective. Primary: `/harness:retrospective` post-merge drift capture. Also: `/harness:edit` Step 6 V-gate defer ("defer-to-sprint"), and `/harness:audit` when the user chooses "record as debt". Append-only; entries persist across sprints. Readers: retrospective (dedup), audit (verification-debt scan), Planner CLARIFY-QUESTIONS (skip ambiguities already recorded), human.
+
+### Feature — /quick spec-drift check
+- `/harness:quick` Step 4.5 added on the PASS path: one question to the user — *"Did this fix change any behavior in prd.md / architecture.md / constitution?"* Yes routes through `/harness:amend "<summary>"` before merge. Simplest Anthropic-aligned gap closure (no new file, no new flag, no new machinery) for the "quick fix that happens to touch spec" scenario.
+
+### Fix — /clarify ADR gap
+- `SKILL.md § State Persistence` documented `/clarify` as an ADR writer but `clarify.md` Step 8 never actually appended one — doc-vs-code inconsistency. Fixed: Step 8 now writes an ADR to `progress/decisions.md` recording the Q→answer pairs as design decisions. Future clarify rounds + retrospective can now trace feature behavior back to the specific ambiguity that shaped it.
+- Pipeline gap scan now shows all 7 spec-mutating commands (clarify, amend, edit, constitution-amend, retrospective, tune-evaluator, rewind) symmetric: each writes changelog + ADR.
+
+## [2.1.1] — 2026-04-22
+
+### Refactor — drop `tools:` frontmatter allowlist
+- Removed the `tools:` field from `agents/{planner,generator,evaluator}.md` frontmatter. Subagents now inherit the parent Claude Code session's full tool set. Matches the industry-standard plugin format (Vercel declares no `tools:` on its 3 agents either).
+- Rationale: the `tools:` allowlist encoded the assumption *"subagents might misbehave with unrestricted tool access"* — stale on Opus 4.7 with the `<SUBAGENT-CONTEXT>` prose rule + HANDLING FETCHED CONTENT prompt-injection defense + RED FLAGS tables + hook-enforced reward-hacking guards already in place. Additionally, Claude Code rewrites tool namespaces at install time (`.mcp.json`'s `context7` → runtime `mcp__plugin_harness_context7__*`), which prefix-broke our frontmatter allowlist — subagents were silently denied MCP access they were intended to have.
+
+### Feature — project-tools propagation
+- Added `## Project-specific tools / MCPs / skills` section to `templates/CLAUDE.md.project.txt` — the canonical place for users to declare project-level tool usage guidance.
+- Added `SKILL.md § Orchestrator Behavior` item 7: before every subagent dispatch, orchestrator scans project CLAUDE.md for project-tool hints and includes them in the Agent-tool `prompt` under a `--- PROJECT TOOLS ---` marker. Inheritance grants access; the hint tells the agent when to reach for it.
+
+### Fix — marketplace.json + plugin.json version strings
+- `marketplace.json` metadata/version + plugins[0].version both bumped to match `plugin.json`. Earlier release-automation miss.
+
+## [2.1.0] — 2026-04-21
+
+### Refactor — native Agent-tool subagent dispatch
+- Migrated from `claude -p` subprocess dispatch to native Claude Code Agent tool via plugin-declared subagent types.
+- `plugin.json` declares `agents: ["./agents/planner.md", "./agents/generator.md", "./agents/evaluator.md"]` (array format — NOT the Cursor-plugin `"./agents/"` string form, which fails Claude Code's validator with `agents: Invalid input`).
+- Agent md files gained YAML frontmatter (`name:`, `description:`) registering them as `harness:planner`, `harness:generator`, `harness:evaluator` subagent types.
+- Every dispatch across 6 commands rewritten: `CLAUDE_SUBAGENT=1 claude -p ... --append-system-prompt-file ... --allowedTools "..."` → natural-language "dispatch via Agent tool with subagent_type=harness:X, prompt=..." prose. 13 dispatch sites migrated.
+- Benefits: no subprocess startup, no env-var isolation tricks, no stdout parsing, parallel-dispatch capability, structured return values.
+
+### Infrastructure
+- `SKILL.md § Subagent Isolation Protocol` rewritten for v2.1 mechanism.
+- `hooks/session-start.sh` `CLAUDE_SUBAGENT=1` check reclassified as backward-compat shim (no longer primary isolation gate — Agent-tool handles context isolation natively).
+- `<SUBAGENT-CONTEXT>` blocks in all 3 agents explicitly forbid nested Agent-tool dispatches while permitting non-harness skill invocation (e.g., Generator BUILD using `superpowers:test-driven-development`).
+
+### Fix — Windows python3 stub detection
+- Discovered during v2.1.0 canary: on Windows, `python3.exe` is commonly a Microsoft Store PATH stub that resolves via `command -v python3` but doesn't execute, causing `pre-tool-use.sh` to silently fail-open on all safety rails (force-push / sudo / .harness-deletion / test-file-deletion blocks returned exit 0).
+- Fixed: hook + doctor now probe actual execution (`python3 -c 'print(1)'`) and fall back to `python` (Windows naming) with 3.x version check. Detection message explicitly calls out the MS-Store-stub gotcha.
+
 ## [2.0.0] — 2026-04-21
 
 ### Removed
