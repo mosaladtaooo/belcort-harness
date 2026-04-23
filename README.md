@@ -381,7 +381,13 @@ For full rationale behind every v2 change:
 
 ## Status
 
-**v2.1.1 on `v2-beta` branch** — minimalist rewrite + native Agent-tool dispatch + project-tool propagation. Shipping-ready pending live stress-test.
+**v2.1.3 on `v2-beta` branch** (current) — iterating through live stress-test findings:
+- v2.1.0 — native Agent-tool dispatch (plugin-declared `harness:planner/generator/evaluator` subagent types), migrated from `claude -p` subprocess pattern
+- v2.1.1 — dropped `tools:` frontmatter allowlist (subagents inherit parent session's tool set); project-tools propagation via `./CLAUDE.md`
+- v2.1.2 — stress-test patches: Windows python3-stub detection, `/quick` spec-drift check, `/clarify` ADR gap closed, doctor.sh checks for pre-allowed npm permissions + superpowers plugin
+- v2.1.3 — removed ~413 lines of inline template duplication (5 templates → `@`-references + invariants); REVIEW-PROPOSAL now reads constitution.md + architecture.md to catch HOW-level violations the contract doesn't constrain
+
+See `CHANGELOG.md` for per-release detail.
 
 **v1.5.2 on `main`** — prior stable. Migration notes above. For existing installs, run `scripts/uninstall-rules.sh` once to remove the legacy global `~/.claude/CLAUDE.md` block, then `/harness:setup` in each project.
 
