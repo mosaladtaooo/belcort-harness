@@ -6,6 +6,20 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## [2.1.5] — 2026-04-23
+
+### Feature — Planner feature-size gate (prevent oversized dispatches)
+- `agents/planner.md` Pass 2 adds a "Feature-size sanity check" gate before finalizing contract.md output. If a single feature folder matches any of four oversized-feature signals (>10 FRs, mixes Phase-0 bootstrap + Phase-1 data layer + Phase-2+ behavior, >30 expected files, touches >2 architectural strata), Planner MUST propose a split via a `## Split recommended` section and surface it at the `/harness:analyze` gate for human approval. Silent splitting is forbidden — a split affects ROADMAP.md and build-branch structure, so the human must see it.
+- Why: Generator subagents have finite Claude Code budgets (token + tool-turn caps per dispatch). A 20-FR foundation feature or mixed bootstrap+schema+behavior blob exhausts that budget mid-build and hard-stops with an uncommitted worktree. Catching oversize at the Planner stage is cheaper than recovering from a truncated build — spec correctness once vs paying repeatedly in failed dispatches. Surfaced by live stress-test on BELCORT ACCOUNTING's `001-document-pipeline-foundation` feature (13 schema files + RLS + audit grants in one dispatch; Generator hard-stopped mid-work).
+
+### Feature — Pre-TDD scaffolding commit rule (clean mid-scaffolding recovery)
+- `agents/generator.md` Phase 2 adds a "Pre-TDD scaffolding commit rule" above the existing numbered TDD rules. Scaffolding work (deps, config, schema, RLS, migrations, type-only modules) is non-behavioral — there's no RED test to write first — but it still needs per-checkpoint commits. Rule: commit at logical group boundaries, never accumulate >10 files without a commit. Message format: `[harness:scaffold] <group> (checkpoint)`. Companion `scaffold-checkpoint` changelog entry mirrors the per-FR log schema (commit hash, files, next group).
+- Why: before this rule, Generator had ONE commit trigger (after RED→GREEN→REFACTOR complete per FR). Scaffolding work NEVER crosses that trigger, so a 15-file scaffolding burst sat uncommitted until the first behavioral FR finished. Hard-stop before reaching behavioral FRs = 15+ uncommitted files with no audit trail, recovery meant manual `git add -A` and lossy intent-guessing. With this rule, `git log` + the scaffold-checkpoint changelog entries make recovery mechanical instead of judgment-heavy.
+
+### Docs — SKILL.md Recovery section expanded for hard-stop scenarios
+- `skills/harness/SKILL.md § Recovery` step 4 `building` bullet now distinguishes graceful pause (`pause-questions.md` exists) from hard-stop (subagent returned truncated, no pause file). Hard-stop branch further splits into mid-TDD (per-FR commits available → resume by FR) vs mid-scaffolding (scaffold-checkpoint commits available → resume by checkpoint group; if none exist from a legacy Generator, manual checkpoint first).
+- Why: v2.1.4 Recovery docs only covered "read state.current_task, resume from last FR" — which assumes the Generator reached behavioral work. The real live-testing failure mode is hard-stop during Phase-0/Phase-1 scaffolding BEFORE any FR work begins. This entry makes recovery mechanical for that case.
+
 ## [2.1.4] — 2026-04-23
 
 ### Fix — Evaluator tuning category vocabulary mismatch

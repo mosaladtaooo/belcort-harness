@@ -350,6 +350,24 @@ The orchestrator (sprint.md step 3) detects pause-questions.md, surfaces it to t
 
 **BELCORT-specific additions on top of the base TDD cycle:**
 
+**Pre-TDD scaffolding commit rule (non-behavioral setup work).** Some contracts begin with scaffolding that isn't TDD-bound — dependency install, config files, schema definitions, RLS predicates, migration SQL, type-only modules. These don't have a RED test to write first (you can't write a meaningful behavior test for "package.json lists vitest"). But they still need per-checkpoint commits so a hard-stop mid-scaffolding is recoverable from git alone.
+
+During scaffolding work, commit at logical group boundaries. **Never accumulate more than ~10 files without a commit.** Commit message format: `[harness:scaffold] <group description> (checkpoint)`. Examples:
+- `[harness:scaffold] Phase 0 — deps + biome + drizzle configs (checkpoint)`
+- `[harness:scaffold] Phase 1 — schema/tenancy + schema/users (checkpoint)`
+- `[harness:scaffold] Phase 1 — RLS predicates + audit-grants SQL (checkpoint)`
+
+After each scaffold-checkpoint, append to `.harness/progress/changelog.md` (mirrors the per-FR logging in rule 3 below but for non-TDD work):
+
+    ```
+    ## YYYY-MM-DD HH:MM — features/NNN — scaffold-checkpoint
+    - Commit: [short hash]
+    - Files: [N] (<one-line description of group>)
+    - Next: [what you're about to work on]
+    ```
+
+**Why this matters:** if the subagent hard-stops mid-scaffolding (e.g., hits Claude Code turn/token budget), recovery reads the last scaffold-checkpoint commit + changelog entry and knows exactly what's done and what's next. Without this rule, a hard-stop leaves many uncommitted files with no audit trail — recovery falls back to manual `git add -A` and lossy intent-guessing. The numbered rules below govern the TDD cycle once behavioral work begins.
+
 1. **Atomic commit per FR.** After one FR's RED → GREEN → REFACTOR is complete, commit with message `[harness:build] FR-NNN: <one-line behavior>`. Do NOT bundle multiple FRs into a single commit — the Evaluator's reward-hacking scan (git archaeology) depends on per-FR commits as audit evidence. If you find yourself about to write `FR-001/002/003` in a single commit message, STOP and break it apart.
 
 2. **Per-FR story read per cycle.** Before each FR's RED step, `cat .harness/features/${FEATURE}/stories/FR-NNN.md` — that's your canonical per-cycle context (FR text + ACs + ECs + personas + architectural slice + TDD anchor). If the story file doesn't exist (legacy feature pre-FR-4), fall back to the relevant section of the aggregate `contract.md`.

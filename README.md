@@ -381,12 +381,13 @@ For full rationale behind every v2 change:
 
 ## Status
 
-**v2.1.4 on `v2-beta` branch** (current) — iterating through live stress-test findings:
+**v2.1.5 on `v2-beta` branch** (current) — iterating through live stress-test findings:
 - v2.1.0 — native Agent-tool dispatch (plugin-declared `harness:planner/generator/evaluator` subagent types), migrated from `claude -p` subprocess pattern
 - v2.1.1 — dropped `tools:` frontmatter allowlist (subagents inherit parent session's tool set); project-tools propagation via `./CLAUDE.md`
 - v2.1.2 — stress-test patches: Windows python3-stub detection, `/quick` spec-drift check, `/clarify` ADR gap closed, doctor.sh checks for pre-allowed npm permissions + superpowers plugin
 - v2.1.3 — removed ~413 lines of inline template duplication (5 templates → `@`-references + invariants); REVIEW-PROPOSAL now reads constitution.md + architecture.md to catch HOW-level violations the contract doesn't constrain
 - v2.1.4 — aligned Evaluator tuning category vocabulary (fixes silent drop of `Wrong severity` / `Out of scope` entries); added watch-list for 1-2-entry categories in `/harness:tune-evaluator`; promoted 3-round negotiation rationale into `negotiate.md` Procedure with sharper escalation UX; added retrospective-vs-tuning clarifier to `SKILL.md`
+- v2.1.5 — Planner feature-size gate (prevent oversized dispatches that exhaust Claude Code subagent budgets mid-build); pre-TDD scaffolding commit rule in `generator.md` (non-behavioral work now commits at logical group boundaries, not just post-FR); SKILL.md Recovery section expanded with hard-stop-mid-scaffolding case
 
 See `CHANGELOG.md` for per-release detail.
 

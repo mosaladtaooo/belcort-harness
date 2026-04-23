@@ -538,6 +538,30 @@ For epic-decomposed projects with multiple feature folders, each folder gets its
 
 **For now (Pass 2 initial emission)** — populate the FR / persona / architectural slice / constitution / TDD-anchor sections from your Pass 1 + Pass 2 outputs. Leave the "Dev guidance (from negotiation)" section as `{{populated by negotiate phase}}`. The negotiate phase backfills it.
 
+## Feature-size sanity check (Pass 2 gate)
+
+Before finalizing Pass 2 output, count what you've decomposed. **If a single feature folder matches any oversized-feature signal below, flag it for split** — one feature folder = one Generator dispatch, and Generator subagents have finite Claude Code budgets (token + tool-turn caps per dispatch).
+
+Oversized-feature signals (any one triggers the gate):
+- **>10 FRs in one folder** — one Generator subagent cannot reliably carry that many TDD cycles through context without hitting Claude Code runtime limits
+- **Mixes Phase-0 bootstrap + Phase-1 data layer + Phase-2+ behavior in one folder** — three body-of-work types in one dispatch will exhaust budget before FRs are done
+- **>30 expected files** (estimate from FR count × average files-per-FR) — hard-stop risk climbs steeply past 30 file writes
+- **Touches >2 architectural strata** (e.g., DB schema + API + UI + workers) — split horizontally by stratum
+
+When a split is needed, propose it in a `## Split recommended` section at the top of contract.md:
+
+    ```
+    ## Split recommended
+    Size: [N] FRs / ~[M] files. Recommended split:
+      - 001a-<slice> — FR-1..FR-k (describe scope)
+      - 001b-<slice> — FR-k+1..FR-n
+    Dependency: 001a ships before 001b.
+    ```
+
+Then stop — surface the split to the human at the `/harness:analyze` gate for approval or override. Do NOT silently split; a split is a structural decision that affects ROADMAP.md, build branches, and dispatch planning, so the human must see it.
+
+**Why this gate exists:** a Generator dispatched to build a 20-FR foundation feature (or a mixed bootstrap+schema+behavior blob) will exhaust its Claude Code budget mid-work and hard-stop with an uncommitted working tree. Recovery is possible (see generator.md pre-TDD scaffolding checkpoint rule), but preventing oversize at the Planner stage is the cheaper fix — correct once in spec, avoid paying repeatedly in failed dispatches.
+
 ## Also Create:
 - `.harness/init.sh` — project health check. **Start from the template** at `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/templates/init.sh.txt`, then customise for THIS project's stack: replace `npm` with `pnpm`/`yarn`/`bun`, add framework-specific checks (e.g., `next build`, `vite build`, `cargo test`), and add a project-specific smoke test (HTTP `/health`, CLI `--version`, etc.). The template ships a generic baseline (git clean, Node ≥20, npm install, lint, test, tsc) — your customisation should make it *true* for this project, not generic. **Note (v1.5.1+):** you do NOT have Bash access, so you cannot `chmod +x` the file. The orchestrator runs `chmod +x .harness/init.sh` after your dispatch returns — see sprint.md step 1.
 - `.harness/evaluator/examples.md` — copy from `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/templates/evaluator/examples.md.txt`. The template ships **seeded with 12 calibration examples** (3 per criterion + cross-cutting patterns) so the Evaluator has a real scoring scale on its first run instead of drifting wildly across the first N evaluations. Project-specific examples are added by `/harness:tune-evaluator` over time.
