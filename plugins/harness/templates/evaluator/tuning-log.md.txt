@@ -30,7 +30,7 @@ Every entry MUST follow this shape. `/harness:tune-evaluator` reads these fields
 - Reasoning: <why human disagreed, one sentence>
 
 ### Divergence category
-<one of: Leniency | Overclaim | Missed issue | Wrong severity | Out of scope | Other>
+<one of: Leniency | Strictness | Missed issue | Overclaim | Wrong severity | Scope confusion | Other>
 
 ### Specific diff
 - <concrete thing Evaluator got wrong — quote from eval-report.md>
@@ -44,11 +44,12 @@ Every entry MUST follow this shape. `/harness:tune-evaluator` reads these fields
 ```
 
 Divergence-category vocabulary (must be one of exactly these — `/harness:tune-evaluator` greps for them):
-- **Leniency** — Evaluator approved something the human thinks should have failed
-- **Overclaim** — Evaluator claimed a test passed or a criterion met when it didn't
+- **Leniency** — Evaluator approved something the human thinks should have failed (false PASS)
+- **Strictness** — Evaluator failed something the human thinks should have passed (false FAIL)
 - **Missed issue** — Evaluator didn't notice a bug the human sees
+- **Overclaim** — Evaluator claimed a test passed or a criterion met when it didn't
 - **Wrong severity** — Evaluator graded Major when human says Critical (or vice versa)
-- **Out of scope** — Evaluator penalized for something outside the contract
+- **Scope confusion** — Evaluator penalized for or graded something outside the contract
 - **Other** — doesn't fit the above; explain in Reasoning
 
 ---

@@ -31,12 +31,12 @@ The Planner stays at the "what & why" level on purpose. File paths, component bo
    - Writes: verdict (`agreed` / `needs-revision`) + specific asks
    - Does NOT run Playwright — there's no app yet
 
-3. **If `needs-revision`:** Generator revises proposal (append new round to `proposal.md`), Evaluator re-reviews. Max 3 rounds.
+3. **If `needs-revision`:** Generator revises proposal (append new round to `proposal.md`), Evaluator re-reviews. Max 3 rounds — by round 3, continued disagreement signals an unclear upstream contract (the Planner's what/why is ambiguous), not a negotiation problem. More agent rounds won't resolve a values or clarity gap; human judgment will.
 
-4. **If no agreement after 3 rounds:** Escalate to human with:
-   - Diff of what Generator wants vs what Evaluator wants
-   - The core disagreement summarized
-   - Options: force one side, rewrite the draft contract, abandon feature
+4. **If no agreement after 3 rounds:** Escalate to human. Present:
+   - **The blocker** (one sentence): what Generator wants vs what Evaluator wants, at the narrowest point of disagreement.
+   - **Why it's stuck** (one sentence): which upstream artifact is ambiguous — usually the draft contract, sometimes the architecture or constitution.
+   - **The decision being asked of you**: pick (a) force Generator's proposal as-is, (b) force Evaluator's asks as-is, (c) rewrite the draft contract to resolve the ambiguity, (d) abandon the feature.
 
 5. **On agreement:** Generator writes final `contract.md` (overwrites Planner's draft) merging the original deliverables + negotiated implementation details + any Evaluator-added ACs.
 
@@ -48,6 +48,6 @@ Full Agent-tool dispatch specs (Round 1 Generator NEGOTIATE via `subagent_type: 
 
 - **Generator proposing every detail (over-specifying)** → Evaluator should push back on anything not needed to test the AC
 - **Evaluator rubber-stamping without reading** → check `review.md` — if it's 3 lines, the Evaluator didn't actually engage
-- **Negotiation loop going 3+ rounds** → the draft contract itself is probably unclear; escalate to human rather than letting agents thrash
+- **Negotiation loop going 3+ rounds** → escalate per Procedure Step 4 (the rationale for 3 lives there; do not silently extend the limit)
 
 Generator and Evaluator MUST be separate subagents with fresh context. Do NOT self-evaluate.

@@ -193,6 +193,17 @@ Orchestrator → reads  → .harness/evaluator/tuning-log.md
                       → .harness/progress/decisions.md (ADR for any prompt change)
 ```
 
+### Retrospective vs tuning — two different loops
+
+These run back-to-back after every sprint and are easy to confuse. They measure different axes and write different artifacts:
+
+| Loop | Question it answers | Inputs | Outputs |
+|---|---|---|---|
+| **Retrospective** (Step 5a in sprint.md) | "Does what we built match what we said we'd build? Has reality drifted from the spec?" | `contract.md`, `implementation-report.md`, actual code | `retrospective.md`, spec updates (via /amend), `known-issues.md` |
+| **Tuning** (Step 5a-pre in sprint.md, and `/harness:tune-evaluator`) | "Did the Evaluator's judgment match human judgment? Is the grader calibrated?" | `eval-report.md`, human verdict on it | `tuning-log.md`, `examples.md`, rarely `evaluator.md` prompt edits |
+
+Retrospective audits the **work product** (did we build the right thing?). Tuning audits the **judge** (is the grader grading correctly?). A sprint can pass retrospective and fail tuning (we built what we said, but the Evaluator approved a broken feature), or pass tuning and fail retrospective (Evaluator graded correctly, but what we built drifted from the spec). Both checks are required to keep the pipeline honest — the Evaluator keeps the Generator honest; the tuning loop keeps the Evaluator honest.
+
 ## TDD Protocol (Generator enforces)
 
 Every FR/AC in the contract follows this cycle:

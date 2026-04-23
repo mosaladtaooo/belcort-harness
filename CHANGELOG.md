@@ -6,6 +6,25 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## [2.1.4] — 2026-04-23
+
+### Fix — Evaluator tuning category vocabulary mismatch
+- `templates/evaluator/tuning-log.md.txt` schema listed `Leniency | Overclaim | Missed issue | Wrong severity | Out of scope | Other`. `commands/tune-evaluator.md` grouped by `Leniency | Strictness | Missed issue | Overclaim | Scope confusion | Other`. **Strictness** (false FAIL) and **Scope confusion** existed in the tuner but not in the log schema; **Wrong severity** and **Out of scope** existed in the log but not in the tuner's grouping vocabulary. The tuner greps for these exact strings, so mismatched entries were silently dropped from pattern analysis.
+- Both files now use the canonical 7-category vocabulary: `Leniency | Strictness | Missed issue | Overclaim | Wrong severity | Scope confusion | Other`. Each category definition is now identical across the log schema and the tuner grouping step.
+- tune-evaluator.md explicitly documents the vocabulary-must-match-exactly contract at Step 2 so future edits don't re-diverge.
+
+### Feature — Tuning-review watch-list for insufficient-signal categories
+- `/harness:tune-evaluator` Step 4 output now shows a "Watch-list" section below the detected patterns: categories with 1-2 entries (below the ≥3 pattern-threshold) are surfaced for visibility without triggering action proposals. Rationale: a third entry on the next run promotes it into a pattern, so seeing accumulating signal early avoids surprise.
+
+### Refactor — Promote 3-round negotiation rationale into Procedure
+- `commands/negotiate.md` Step 3 previously read "Max 3 rounds" with no inline rationale; the why-it's-3 reasoning lived in the Anti-patterns section at the bottom of the file. Readers making the escalation decision saw the limit but not the principle behind it.
+- Step 3 now inlines: "by round 3, continued disagreement signals an unclear upstream contract (the Planner's what/why is ambiguous), not a negotiation problem. More agent rounds won't resolve a values or clarity gap; human judgment will."
+- Step 4 (escalation) expanded with sharper human-decision UX: the blocker, why it's stuck, and the specific decision being asked (a/b/c/d).
+- Anti-patterns section now cross-references Step 4 instead of restating the rationale.
+
+### Docs — Sharpen retrospective vs tuning distinction
+- `SKILL.md § Pipeline Timing` expanded with a new sub-section "Retrospective vs tuning — two different loops" and a side-by-side table. Retrospective audits the work product (did we build the right thing?). Tuning audits the judge (is the grader grading correctly?). They run back-to-back after every sprint and were easy to confuse; the table makes the distinct axes and distinct artifacts explicit.
+
 ## [2.1.3] — 2026-04-23
 
 ### Refactor

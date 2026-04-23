@@ -26,12 +26,13 @@ The orchestrator verifies `.harness/evaluator/tuning-log.md` exists and contains
 
 ### Step 2: Read and group divergences
 
-Orchestrator reads the full tuning-log.md and groups entries by the `Divergence` category:
+Orchestrator reads the full tuning-log.md and groups entries by the `Divergence` category. The vocabulary below is the canonical list — it MUST match `templates/evaluator/tuning-log.md.txt` exactly, because the tuner greps for these exact strings.
 
 - **Leniency** — Evaluator too soft (false PASS)
 - **Strictness** — Evaluator too harsh (false FAIL)
-- **Missed issue** — Evaluator didn't test an edge case that mattered
+- **Missed issue** — Evaluator didn't notice a bug the human sees
 - **Overclaim** — Evaluator flagged something that wasn't broken
+- **Wrong severity** — Evaluator graded Major when human says Critical (or vice versa)
 - **Scope confusion** — Evaluator graded outside the contract
 - **Other**
 
@@ -62,9 +63,15 @@ Pattern 1: Leniency on edge-case testing  (6 entries)
 
 Pattern 2: ...
 
+Watch-list (1-2 entries — insufficient signal for action, shown for visibility):
+  - Strictness (2 entries): [entry refs]
+  - Wrong severity (1 entry): [entry refs]
+
 For each pattern: choose [a], [b], [c], or [skip].
 ═══════════════════════════════
 ```
+
+**Watch-list rationale**: categories with 1-2 entries don't clear the pattern threshold yet, but surfacing them keeps the user aware of what's accumulating. A third entry in the same category on the next run promotes it into a pattern — seeing it early avoids surprise.
 
 ### Step 5: Apply approved actions
 
