@@ -1,0 +1,42 @@
+# AgentLint project-level config for belcort-harness.
+# Suppressions are scoped as narrowly as possible.
+
+[[suppress]]
+rule = "max-file-size"
+path = "plugins/harness/agents/*.md"
+reason = """
+Agent system prompts are intentionally comprehensive per Anthropic's harness-
+engineering research (Rajasekaran 2026). They contain MODE routing tables,
+input/output contracts, workflow steps, RED FLAGS tables (adversarial prompting
+against known failure modes), handling-fetched-content (prompt-injection defense),
+and full per-mode procedures for 3-6 modes each. Splitting a multi-mode agent
+prompt across multiple files is not supported by Claude Code's plugin system —
+each agent in plugin.json's agents[] resolves to ONE md file used as the
+subagent's system prompt verbatim. The 500-line generic limit produces false
+positives here; the real discipline for these files is per-MODE deduplication
+and @-reference to canonical templates (both actively maintained — see v2.1.3
+refactor removing ~413 lines of inline template duplication).
+"""
+
+[[suppress]]
+rule = "max-file-size"
+path = "plugins/harness/skills/harness/SKILL.md"
+reason = """
+Main skill file is the canonical shared-contract document for the harness
+pipeline. Covers activation rules, agent comm protocol, TDD contract, file
+ownership, pipeline timing, orchestrator behavior, state persistence, state
+awareness, recovery, optional plugins, template index, audit matrix. Splitting
+loses the single-source-of-truth property that justified its existence in
+the v2 refactor.
+"""
+
+[[suppress]]
+rule = "max-file-size"
+path = "plugins/harness/scripts/doctor.sh"
+reason = """
+Environment preflight script covers every dependency the harness needs
+(Claude CLI, git, Node, npx, JSON parser, MCP registrations, plugin presence,
+per-agent file readability, project CLAUDE.md, optional plugins, Bash
+permission pre-allows). Each check is 5-15 lines; total is structural, not
+bloat. Splitting would fragment the single-pass output format users rely on.
+"""

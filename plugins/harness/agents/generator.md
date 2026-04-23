@@ -214,67 +214,13 @@ Write the proposal file. Do not write code. Do not modify any spec files. Exit.
 
 ### Proposal Template
 
-**Canonical source**: [`templates/features/proposal.md.txt`](../../../templates/features/proposal.md.txt) — the plugin ships this as the source of truth. If you're on a fresh project that has the template file available at `{{CLAUDE_PLUGIN_ROOT}}/../templates/features/proposal.md.txt` or alongside the plugin checkout, copy from there. If not available, use the inline structure below (kept in sync with the template).
+Write your proposal to `.harness/features/{current-feature}/proposal.md` using the canonical template at `@templates/features/proposal.md.txt`. Copy the structure; fill Component/Module Breakdown, Directory Structure, Data Model, API Surface, FR→Implementation Mapping, AC→Test Approach.
 
-```
-# Implementation Proposal — Round {N}
-
-**Date**: [ISO date]
-**Round**: {N} of max 3
-
-## Component/Module Breakdown
-- [component-name] — [one-line responsibility]
-- [component-name] — [one-line responsibility]
-
-## Directory Structure
-src/
-├── features/
-│   ├── [feature-1]/
-│   └── [feature-2]/
-├── lib/
-└── api/
-
-## Data Model Proposal
-
-| Entity | Fields | Serves FR |
-|--------|--------|-----------|
-| User | id, email, passwordHash, createdAt | FR-001 |
-| Bookmark | id, userId, url, title, createdAt | FR-002, FR-003 |
-
-## API Surface Proposal
-
-| Endpoint | Method | Purpose | Serves FR |
-|----------|--------|---------|-----------|
-| /api/auth/signup | POST | Create account | FR-001 |
-| /api/bookmarks | GET | List user bookmarks | FR-002 |
-
-## FR → Implementation Mapping
-
-| FR | Components touched | Files (planned) | Test strategy |
-|----|-------------------|-----------------|---------------|
-| FR-001 | auth | auth/signup.ts, api/auth/route.ts | unit: signup logic; E2E: signup flow |
-
-## AC → Test Approach
-
-| AC | How I'll verify it in BUILD mode |
-|----|----------------------------------|
-| AC-001-1 | Vitest: given valid email+password, user record created |
-| AC-001-2 | Vitest + Playwright: given existing email, 409 + UI error shown |
-
-## Risk Flags (things I'm uncertain about)
-- [Specific area where I'm unsure the approach is correct]
-- [Edge case that the draft contract didn't address]
-- [Dependency or API I couldn't fully verify with Context7]
-
-## Questions for Evaluator
-- [Any clarifying question about ACs, edge cases, or scope]
-
-## If Round 2+: Response to Previous Review
-
-| Evaluator ask | How I addressed it |
-|---------------|--------------------|
-| [from review.md] | [change to proposal] |
-```
+**Invariants the pipeline depends on** (do NOT break these):
+- Round number in the header — orchestrator increments per iteration up to `max_negotiation_rounds` (default 3).
+- `## Risk Flags` section — Evaluator REVIEW-PROPOSAL addresses each in the review. Don't hide risks; list them so the review cycle surfaces decisions.
+- `## Questions for Evaluator` section — each question gets a direct answer in the Evaluator's review. Leaving questions implicit wastes a round.
+- If Round 2+: `## If Round 2+: Response to Previous Review` table — one row per previous R-ID from review.md showing how each ask was addressed. Missing a prior R-ID means the Evaluator will re-flag it.
 
 ### Anti-patterns in NEGOTIATE mode
 
@@ -307,66 +253,14 @@ you shouldn't be in FINALIZE mode yet. Report back to orchestrator.
 
 **Step 2: Write final contract**
 
-**Canonical template**: [`templates/features/contract.md.txt`](../../../templates/features/contract.md.txt). Use it as your skeleton. The Evaluator's Step 1 setup grep's for the `**Negotiated**:` marker — it MUST be present.
+**Canonical template**: [`templates/features/contract.md.txt`](../../../templates/features/contract.md.txt). Use it as your skeleton for the final contract. Overwrite `.harness/features/{current-feature}/contract.md` with the merged result.
 
-Overwrite `.harness/features/{current-feature}/contract.md` with:
-
-```markdown
-# Build Contract — Final (Negotiated)
-
-**Negotiated**: [ISO date]
-**Rounds**: [N]
-**Agreement**: Generator proposal + Evaluator review
-
-## Scope
-[From original draft — FRs in this build]
-
-## Component/Module Breakdown
-[From your proposal]
-
-## Directory Structure
-[From your proposal]
-
-## Data Model
-[From your proposal, updated if Evaluator requested changes]
-
-## API Surface
-[From your proposal, updated if Evaluator requested changes]
-
-## FR → Implementation Mapping
-[From your proposal]
-
-## Deliverables
-### D1: [FR-001] [Description]
-- AC-001-1: [original from draft]
-- AC-001-2: [original from draft]
-- AC-001-3: [NEW — added by Evaluator review]
-- EC-001-1: [original]
-
-### D2: ...
-
-## Test Criteria (flat list for Evaluator in EVALUATE mode)
-- [ ] AC-001-1
-- [ ] AC-001-2
-- [ ] AC-001-3 [new]
-...
-
-## Build Order
-[From your proposal — technical order, not Planner's logical order]
-1. [most dependency-free first]
-2. ...
-
-## NFRs to Verify
-[From original draft]
-
-## Definition of Done
-- All ACs pass via Playwright (in EVALUATE mode)
-- All unit tests pass
-- E2E tests cover all UJs in scope
-- No lint errors
-- Constitution followed
-- TDD evidence in git log
-```
+**Invariants the pipeline depends on** (MUST be present):
+- `**Negotiated**:` marker in the header — Evaluator Step 1 setup greps for this; absence means the contract is still a draft and EVALUATE refuses to proceed.
+- Component/Module Breakdown, Directory Structure, Data Model, API Surface — all from your proposal.md (you agreed to them during negotiation).
+- Build Order — your proposal's technical dependency order, NOT Planner's original logical order. (Planner's order was informed by product logic; yours is informed by dependency resolution.)
+- Test Criteria (flat list) — every AC from the draft contract PLUS any new ACs the Evaluator added in review.md. Don't silently drop ACs.
+- Definition of Done — the original from draft contract, unchanged.
 
 **Step 3: Stop**
 
@@ -515,69 +409,15 @@ IF RETRY — ADDITIONAL CHECKS
 
 This is the CRITICAL handoff artifact. The Evaluator reads this to know what was built, where to find it, and what to test.
 
-**Canonical template**: [`templates/features/implementation-report.md.txt`](../../../templates/features/implementation-report.md.txt). Copy its structure exactly — the Evaluator's workflow in Step 1 setup `cat`s this file and expects the sections in a specific order (FR→Implementation Map first, then AC→Test Map).
+**Canonical template**: [`templates/features/implementation-report.md.txt`](../../../templates/features/implementation-report.md.txt). Copy its structure exactly — the Evaluator's EVALUATE workflow Step 1 setup `cat`s this file and expects sections in a specific order.
 
-Write it to `.harness/features/{current-feature}/implementation-report.md` (where `{current-feature}` is read from `manifest.yaml` → `state.current_feature`):
-
-```markdown
-# Implementation Report
-
-**Date**: [ISO date]
-**Attempt**: [N] (1 = first build, 2+ = retry)
-**Generator self-eval**: PASS / PARTIAL
-
-## FR → Implementation Map
-
-| FR | Status | Key Files | Test Files |
-|----|--------|-----------|------------|
-| FR-001 | ✅ Done | src/features/auth/login.ts, src/api/auth/route.ts | src/features/auth/login.test.ts |
-| FR-002 | ✅ Done | src/features/bookmarks/list.tsx | src/features/bookmarks/list.test.tsx |
-| FR-003 | ⚠️ Partial | src/features/search/index.ts | src/features/search/search.test.ts |
-[Every FR from the contract must appear in this table]
-
-## AC → Test Map
-
-| Acceptance Criterion | Test File | Test Name | Status |
-|---------------------|-----------|-----------|--------|
-| AC-001-1 | auth.test.ts | "user can log in with valid credentials" | ✅ Pass |
-| AC-001-2 | auth.test.ts | "user sees error with invalid password" | ✅ Pass |
-| AC-002-1 | bookmarks.test.tsx | "user can create bookmark with URL" | ✅ Pass |
-| AC-003-1 | search.test.ts | "partial search returns matching results" | ✅ Pass |
-[Every AC from the contract must appear — this is what the Evaluator grades against]
-
-## Test Results Summary
-
-```
-Unit tests:  [N] passed, [N] failed, [N] skipped
-E2E tests:   [N] passed, [N] failed, [N] skipped
-Lint:        [N] errors, [N] warnings
-```
-
-## NFR Compliance
-
-| NFR | Target | Actual | Status |
-|-----|--------|--------|--------|
-| NFR-001: Page load | ≤ 2s | [measured or estimated] | ✅/⚠️/❌ |
-| NFR-002: API response | ≤ 200ms p95 | [measured] | ✅/⚠️/❌ |
-
-## Architecture Decisions Made During Build
-
-[Any decisions not in the original architecture doc — logged as mini-ADRs]
-- Chose [X] over [Y] for [reason] (affects FR-NNN)
-
-## Known Rough Edges (for Evaluator attention)
-
-- [Specific area where implementation is weakest]
-- [Edge case that might not be fully handled]
-- [UI state that might not render perfectly]
-
-## If Retry: What Was Fixed
-
-| Evaluator Finding | Fix Applied | Regression Test |
-|-------------------|-------------|-----------------|
-| C1: [finding title] | [what was changed] | [test added] |
-| M1: [finding title] | [what was changed] | [test added] |
-```
+**Invariants the pipeline depends on** (section order matters):
+- `## FR → Implementation Map` FIRST — one row per FR from the contract. Status: `✅ Done` / `⚠️ Partial` / `❌ Not done`. Key files + test files per FR. Missing FRs signal incomplete build.
+- `## AC → Test Map` SECOND — one row per AC from the contract. Test file + test name + Pass/Fail status. Evaluator cross-checks this against contract ACs (any AC you silently drop = Evaluator flags it).
+- `## Test Results Summary` — unit/E2E/lint counts.
+- `## NFR Compliance` — measured or estimated metrics per NFR target.
+- `## Known Rough Edges` — flag areas you suspect the Evaluator will challenge. Honest flagging earns more credibility than silent omission.
+- If retry (attempt 2+): `## What Was Fixed` table — one row per CRITICAL/MAJOR finding from prior eval-report.md, what was changed, and the regression test added.
 
 ### Phase 5: Update Progress Files
 

@@ -144,7 +144,14 @@ Three dispatches in sequence. The orchestrator reads `state.current_feature` fro
 
 > You are being dispatched in REVIEW-PROPOSAL mode (see your system prompt's MODE ROUTING table).
 >
-> Do NOT run Playwright — there is no app yet. Read .harness/evaluator/criteria.md, the draft contract, and the Generator's proposal. Write your review to .harness/features/${FEATURE}/review.md per the template at @templates/features/review.md.txt with a VERDICT line (agreed | needs-revision).
+> Do NOT run Playwright — there is no app yet. Read (all via Read tool):
+> - `.harness/evaluator/criteria.md` — grading rubric
+> - `.harness/features/${FEATURE}/contract.md` — Planner's draft contract
+> - `.harness/features/${FEATURE}/proposal.md` — Generator's proposed HOW
+> - `.harness/spec/constitution.md` — use it to judge test-strategy adequacy + HOW-level coding-standard compliance (v2.1.3+)
+> - `.harness/spec/architecture.md` — use it to verify the proposal's component/directory/data-model choices align with the declared architectural style (v2.1.3+)
+>
+> PRD is NOT needed at this stage — the contract already contains the NFR targets. Write your review to `.harness/features/${FEATURE}/review.md` per the canonical template at `@templates/features/review.md.txt` with a VERDICT line (agreed | needs-revision).
 
 **Iterate**: if verdict is `needs-revision`, re-dispatch Generator via the Agent tool (same `harness:generator` subagent_type, NEGOTIATE mode prompt) to revise proposal.md; then Evaluator reviews again. Max 3 rounds (per `config.max_negotiation_rounds` in manifest). If no agreement at round 3, escalate to human.
 

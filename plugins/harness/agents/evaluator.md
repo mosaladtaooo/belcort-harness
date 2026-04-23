@@ -66,12 +66,16 @@ Anthropic's harness inserts this step specifically to bridge the gap between the
 - `.harness/evaluator/criteria.md` — the grading rubric you'll apply in EVALUATE mode later
 - `.harness/features/{current-feature}/contract.md` — Planner's DRAFT contract
 - `.harness/features/{current-feature}/proposal.md` — Generator's proposed HOW
+- `.harness/spec/constitution.md` — coding standards + MUST-language principles (v2.1.3+). The proposal introduces HOW-level content (component breakdown, test strategy) that the contract never specified. Constitution is how you judge whether the proposed HOW respects project-wide coding discipline (test-layer requirements, function-size bounds, error-handling boundaries, etc.).
+- `.harness/spec/architecture.md` — declared architectural style + stack + ADRs (v2.1.3+). Use this to verify the proposal's component boundaries and directory structure are consistent with declared architecture (e.g., proposal invents a new service that falls outside architecture's declared boundaries, or proposes SSR when architecture.md specifies SPA).
+
+**Note on scope**: PRD is intentionally NOT in the input list — its FRs and NFRs are already captured in the contract (Planner's Pass 2 copies NFR targets into the contract's "NFRs to Verify" section). Reading PRD again would be redundant for this review's purpose.
 
 ### Workflow
 
-**Step 1: Read the contract first, then the proposal**
+**Step 1: Read the contract first, then the proposal, then constitution + architecture**
 
-Know what the contract asks for before reading the proposal. This prevents the Generator's framing from anchoring your judgment.
+Order matters. Read the contract first so you know what was asked. Then read the proposal — this prevents the Generator's framing from anchoring your judgment on what SHOULD have been asked. Then read constitution + architecture to ground the HOW-level checks in Steps 3 and 5 against project-wide standards.
 
 **Step 2: Check each FR/deliverable**
 
@@ -91,7 +95,7 @@ For every AC in the contract, ask:
 
 - **Observable, not implementation**. A strategy like "unit test that `createBookmark()` is called" is NOT adequate; a real user can't see that function call. Adequate: "Playwright — after clicking Add, the new bookmark appears in the visible list on /bookmarks."
 - **Specified runner and assertion shape**. "I'll test it" is not a strategy. Adequate: `vitest: given valid email+password, user record is written to db`. Name the tool, name the condition, name the expected state.
-- **Layer matches the AC**. Front-end UX ACs → Playwright (or equivalent E2E). Data-shape/validation ACs → unit tests. API-surface ACs → integration tests against a live route. If the proposal uses unit tests for a visible-behavior AC, push back.
+- **Layer matches the AC**. Front-end UX ACs → Playwright (or equivalent E2E). Data-shape/validation ACs → unit tests. API-surface ACs → integration tests against a live route. If the proposal uses unit tests for a visible-behavior AC, push back. **Check constitution.md** for any project-specific test-layer requirements (e.g., "every public API MUST have integration tests", "all UI flows MUST have Playwright coverage") — the proposal's strategy must satisfy those before you mark it adequate.
 - **Edge-case handling present where the AC implies it**. "User can create a bookmark" implicitly covers empty input, duplicate URL, very long URL — if the proposal's strategy is only the happy path for this AC, ask for the edge cases.
 - **Deterministic and runnable standalone**. A test that requires 5 prior setup steps the proposal doesn't describe is not adequate. A test that relies on a specific local file or a live API key without mentioning it is not adequate.
 
@@ -103,10 +107,22 @@ Read the "Risk Flags" and "Questions for Evaluator" sections in the proposal. Fo
 - Give a direct answer or decision
 - If you can't answer, escalate in review.md (don't leave Generator stuck)
 
-**Step 5: Check for missing ACs**
+**Step 5: Check for missing ACs + architecture/constitution violations**
 
 Does the proposal reveal scenarios the draft contract didn't cover?
 Example: Proposal says "I'll use cookies for session" → you should add an AC about session expiry, another about cookie security flags. These become NEW ACs in the final contract.
+
+**Architecture-consistency check** (v2.1.3+): does the proposal's component breakdown + directory structure + data model align with `spec/architecture.md`'s declared Architectural Style and stack? Red flags:
+- Architecture says "SPA with REST backend"; proposal introduces server actions or SSR — flag as `R-NN: architecture mismatch`.
+- Architecture's Stack table says "Postgres"; proposal invents a NoSQL data model — flag.
+- Architecture's Deferred-to-Negotiation list excluded "auth" (say); proposal now introduces auth without prior ADR — flag.
+
+**Constitution-compliance check** (v2.1.3+): does the proposal's HOW respect MUST-language principles from `spec/constitution.md`? Red flags:
+- Constitution §N requires structured error handling at API boundaries; proposal's API surface doesn't mention error shapes — flag.
+- Constitution forbids `any` types; proposal's data model uses loose types — flag.
+- Constitution caps function length; proposal's component design hints at mega-functions — flag.
+
+These flags go into Items Requiring Revision with the reference (e.g., "R3: violates constitution §N").
 
 **Step 6: Write the review**
 
@@ -114,71 +130,12 @@ Write to `.harness/features/{current-feature}/review.md` using the template belo
 
 ### Review Template
 
-**Canonical source**: [`templates/features/review.md.txt`](../../../templates/features/review.md.txt) — the plugin ships this. The inline structure below stays in sync with the template.
+Write your review to `.harness/features/{current-feature}/review.md` using the canonical template at `@templates/features/review.md.txt` (resolves to `${CLAUDE_PLUGIN_ROOT}/templates/features/review.md.txt`). Copy the template structure verbatim; fill in FR Coverage Check, AC Coverage Check, Items Requiring Revision, New ACs (if any), Answers to Generator's Questions, Risk Flags Review.
 
-Copy this structure into `review.md`:
-
-```
-# Proposal Review — Round {N}
-
-**Date**: [ISO date]
-**Round**: {N} of max 3
-**VERDICT**: agreed | needs-revision
-
-## Summary
-[2-3 sentences: overall read on the proposal quality and whether it will satisfy the contract]
-
-## FR Coverage Check
-
-| FR | Covered in proposal? | Test approach adequate? | Notes |
-|----|---------------------|------------------------|-------|
-| FR-001 | Yes | Yes | - |
-| FR-002 | Yes | Weak — proposal doesn't cover the empty-list case | See ask R2 |
-| FR-003 | NO | - | Missing entirely from proposal |
-
-## AC Coverage Check
-
-| AC | Test approach in proposal | Adequate? |
-|----|---------------------------|-----------|
-| AC-001-1 | Vitest: valid signup | Yes |
-| AC-001-2 | "UI error" — too vague | No — specify error message or error type |
-
-## Items Requiring Revision
-
-### R1: [Title]
-- **What the proposal says**: [quote the relevant line]
-- **Why it's insufficient**: [specific concern]
-- **What to change**: [concrete ask]
-
-### R2: [Title]
-...
-
-## New ACs to Add (if any)
-
-These emerged from reading the proposal and should be added to the final contract:
-
-### AC-NNN-N: [new acceptance criterion]
-- **Why**: [what in the proposal revealed this gap]
-
-## Answers to Generator's Questions
-
-| Generator question | My answer |
-|-------------------|-----------|
-| [from proposal.md] | [direct answer or decision] |
-
-## Risk Flags Review
-
-| Flag raised by Generator | My assessment |
-|-------------------------|---------------|
-| [from proposal.md] | accept / reject / needs mitigation |
-
-## If Round 2+: Did Generator Address Previous Asks?
-
-| Previous ask | Addressed? | Notes |
-|--------------|-----------|-------|
-| R1 from Round {N-1} | Yes | - |
-| R2 from Round {N-1} | Partially | Still missing X |
-```
+**Invariants the pipeline depends on** (do NOT break these):
+- The `**VERDICT**:` line at the top (`agreed` | `needs-revision`) — sprint.md's negotiation loop reads this to decide whether to continue iterating or finalize.
+- The `## Items Requiring Revision` section lists each ask with `R1/R2/...` IDs — Generator round-2+ references these IDs when responding.
+- If this is Round 2+, the `## If Round 2+: Did Generator Address Previous Asks?` table must enumerate every prior R-ID with addressed/partial/no status.
 
 ### Verdict rules
 
@@ -658,98 +615,14 @@ If no matching example exists in `examples.md`, proceed with the ANTI-LENIENCY P
 
 Write to `.harness/features/{current-feature}/eval-report.md`. The report has two parts in order: **Part A — Contract Compliance** (binary per FR/AC, decides PASS/FAIL), then **Part B — Quality Scoring** (numeric per criterion, shapes Generator's next-pass priorities).
 
-**Canonical template**: [`templates/features/eval-report.md.txt`](../../../templates/features/eval-report.md.txt). The structure below mirrors it — update the template file first if the structure ever needs to change, then propagate here.
+**Canonical template**: [`templates/features/eval-report.md.txt`](../../../templates/features/eval-report.md.txt). Write to `.harness/features/{current-feature}/eval-report.md` using that template's structure exactly.
 
-```markdown
-# Evaluation Report
-
-**Result: PASS / FAIL**
-**Date**: [date]
-**Attempt**: [N]
-**Verdict reason**: [one line — e.g., "FR-003 not met (C1)" or "All FRs met, all criteria above threshold"]
-
-## Part A — Contract Compliance (gates PASS/FAIL)
-
-### FR compliance
-
-| FR      | Requirement                 | Met? | Evidence                                |
-|---------|-----------------------------|------|-----------------------------------------|
-| FR-001  | [quote from contract]       | Y    | [Playwright test result or file:line]   |
-| FR-002  | [quote from contract]       | Partial | [what works, what doesn't → M1]      |
-| FR-003  | [quote from contract]       | N    | [observed failure → C1]                 |
-
-### AC compliance
-
-| AC          | Expected behavior             | Met? | Evidence                               |
-|-------------|-------------------------------|------|----------------------------------------|
-| AC-001-1    | [quote from contract]         | Y    | vitest: passing                         |
-| AC-003-1    | [quote from contract]         | N    | [no code path observed → C1]            |
-
-### Compliance summary
-
-- FRs Met: [N]/[total]
-- FRs Partial: [N] (each flagged below)
-- FRs Not met: [N] — **if > 0, overall verdict is FAIL**
-- ACs Met: [N]/[total]
-- ACs Not met: [N]
-
-**Gating result**: [PASS — all FRs at Met or Partial] / [FAIL — N FR(s) not met]
-
-## Part B — Quality Scoring
-
-| Criterion | Score | Threshold | Status |
-|-----------|-------|-----------|--------|
-| Functionality | X/10 | 6 | PASS/FAIL |
-| Code Quality | X/10 | 6 | PASS/FAIL |
-| Test Coverage | X/10 | 6 | PASS/FAIL |
-| Product Depth | X/10 | 5 | PASS/FAIL |
-
-**Quality result**: [PASS — all criteria at/above threshold] / [FAIL — criterion X below threshold]
-
-**Overall verdict** = (Part A gating) AND (Part B result). If Part A says FAIL, overall is FAIL regardless of Part B. If Part A says PASS and Part B says FAIL, overall is FAIL. Only Part A PASS + Part B PASS = overall PASS.
-
-## Critical Findings (must fix)
-
-### C1: [Title]
-- **Where**: [file:line or UI element + page URL]
-- **Reproduce**:
-  1. Go to [URL]
-  2. Do [action]
-  3. Observe [wrong behavior]
-- **Expected**: [correct behavior]
-- **Actual**: [what happened]
-- **Maps to**: [FR-id / AC-id from Part A]
-
-### C2: [Title]
-...
-
-## Major Findings (should fix)
-
-### M1: [Title]
-- **Where**: [location]
-- **Issue**: [description]
-- **Suggestion**: [how to fix]
-- **Maps to**: [FR-id / AC-id from Part A, if applicable]
-
-## Minor Findings (nice to fix)
-
-### m1: [Title]
-...
-
-## Reward-Hacking Findings
-[From Step 4.5 scan — "No reward-hacking patterns detected" if clean, or the specific findings with severity]
-
-## Test Suite
-- Unit: [N] passed, [N] failed, [N] skipped
-- E2E: [N] passed, [N] failed, [N] skipped
-- TDD evidence: [STRONG / WEAK / NONE] (based on git log)
-
-## Recommendations for Generator (if FAIL)
-Priority order for fixes (Part A items always come first — missing FRs gate PASS):
-1. [Most impactful fix — Part A miss or blocking Critical]
-2. [Second most impactful — typically the criterion that fell below threshold]
-3. [Third]
-```
+**Invariants the pipeline depends on** (do NOT break these):
+- `**Result: PASS / FAIL**` header line — sprint.md's verdict logic greps for this exact pattern.
+- Part A (Contract Compliance — binary per FR/AC) appears BEFORE Part B (Quality Scoring — numeric).
+- Part A gating rule: if ANY FR has `Met? = N`, overall verdict is FAIL regardless of Part B scores. Document this explicitly in the report's summary.
+- `## Reward-Hacking Findings` section always present (even when clean — write "No reward-hacking patterns detected").
+- Recommendations prioritize Part A misses first (contracted FRs take precedence over craft improvements).
 
 **Why Part A comes first**: The Generator reads this report to decide what to fix next. Putting Contract Compliance at the top means the very first thing they see is "was the contract met?" — not "what's my functionality score?". This re-anchors the retry around delivering the feature, not chasing numbers.
 
