@@ -390,7 +390,7 @@ For full rationale behind every v2 change:
 - v2.1.5 — Planner feature-size gate (prevent oversized dispatches that exhaust Claude Code subagent budgets mid-build); pre-TDD scaffolding commit rule in `generator.md` (non-behavioral work now commits at logical group boundaries, not just post-FR); SKILL.md Recovery section expanded with hard-stop-mid-scaffolding case
 - v2.1.6 — doc patch: replaced broken `.agentlint.toml` (never loaded — AgentLint reads `agentlint.yml`, not TOML) with proper `agentlint.yml`. `max-file-size` limit now set to 1500 globally since the rule supports only one `limit` option (verified in AgentLint source); rationale preserved as inline YAML comments.
 
-See `CHANGELOG.md` for per-release detail.
+See [`CHANGELOG.md`](CHANGELOG.md) for per-release detail. See [`ROADMAP.md`](ROADMAP.md) for the v3 watch list + parked items.
 
 **v1.5.2 on `main`** — prior stable. Migration notes above. For existing installs, run `scripts/uninstall-rules.sh` once to remove the legacy global `~/.claude/CLAUDE.md` block, then `/harness:setup` in each project.
 
