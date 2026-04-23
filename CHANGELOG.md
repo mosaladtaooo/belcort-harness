@@ -6,6 +6,14 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## [2.1.6] — 2026-04-23
+
+### Fix — AgentLint project config was silently ignored since v2.1.3
+- Replaced `.agentlint.toml` with `agentlint.yml` at repo root. AgentLint reads YAML (`agentlint.yml`), not TOML (`.agentlint.toml`) — the v2.1.3-introduced `.agentlint.toml` with `[[suppress]]` blocks was never loaded. Confirmed by `agentlint doctor`: "Config file: agentlint.yml not found" and `get_config` returning `rules: {}` (empty, no project-level overrides).
+- The new `agentlint.yml` sets `max-file-size: { limit: 1500 }` — global limit increase since the rule supports only a single `limit` option, no per-path suppression (verified by reading `site-packages/agentlint/packs/universal/max_file_size.py:28`). 1500 lines accommodates the largest harness file (`planner.md` at ~1120 lines) with ~33% headroom for growth.
+- Root cause for why the broken config wasn't caught earlier: AgentLint silently treats a missing `agentlint.yml` as "use defaults" without warning about unrelated filenames present in the repo. The v2.1.3 commit that added `.agentlint.toml` appeared to work (it committed cleanly, no hook errors) but had zero effect on AgentLint's actual behavior. Surfaced during v2.1.5 development when the `max-file-size` hook blocked an Edit to `planner.md` despite the nominal suppression.
+- Rationale for all original suppressions (harness-engineering research cites, single-file plugin.json constraint, doctor.sh structural cohesion) preserved as inline comments in the new `agentlint.yml`.
+
 ## [2.1.5] — 2026-04-23
 
 ### Feature — Planner feature-size gate (prevent oversized dispatches)

@@ -1,0 +1,37 @@
+# AgentLint configuration for belcort-harness.
+# Schema: https://github.com/mauhpr/agentlint
+#
+# History: v2.1.3 introduced a .agentlint.toml with [[suppress]] blocks that
+# AgentLint silently ignored (wrong filename + wrong format — AgentLint reads
+# agentlint.yml YAML, not .agentlint.toml TOML). Fixed in v2.1.6.
+
+severity: standard  # strict | standard | relaxed
+
+packs:
+  - universal
+  - quality
+
+rules:
+  # The max-file-size rule's default limit (500) is too low for the harness's
+  # agent-prompt files, which are intentionally comprehensive per Anthropic's
+  # harness-engineering research (Rajasekaran 2026). Each agent in plugin.json's
+  # agents[] resolves to ONE md file used verbatim as the subagent's system
+  # prompt — splitting across multiple files is not supported by Claude Code's
+  # plugin system. Our current file sizes:
+  #   plugins/harness/agents/planner.md      ~1120 lines (6 MODE routing table)
+  #   plugins/harness/agents/evaluator.md     ~657 lines
+  #   plugins/harness/agents/generator.md     ~510 lines
+  #   plugins/harness/skills/harness/SKILL.md ~420 lines
+  #   plugins/harness/scripts/doctor.sh       ~200 lines
+  # Limit 1500 gives the largest file (planner.md) ~33% headroom for growth.
+  # The rule is a `warning` severity — it surfaces advice, not a hard stop,
+  # but the PostToolUse hook emits a blocking-error wrapper on Windows, so the
+  # pragmatic fix is to pitch the limit above our legitimately-large files
+  # rather than fight the wrapper.
+  #
+  # Note: max-file-size ALSO only supports a single global `limit` (see
+  # site-packages/agentlint/packs/universal/max_file_size.py line 28) — there
+  # is no per-path override schema. If a more targeted suppression becomes
+  # possible in a future AgentLint release, revisit this setting.
+  max-file-size:
+    limit: 1500
