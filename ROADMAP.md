@@ -70,6 +70,12 @@ Deferred items with non-trivial value. Revisit when the "When to revisit" condit
 - **When to revisit**: when a user reports "the Planner keeps picking the wrong architecture and I want to see alternatives."
 - **Context**: discussed 2026-04-24 as a theoretical fork-subagent consumer.
 
+### 6. Sparse-checkout for mechanical worktree `.harness/` isolation
+- **What**: use `git worktree add --no-checkout` + `git sparse-checkout set --no-cone '*' '!.harness'` at worktree creation, so `.worktrees/current/.harness/` never physically appears.
+- **Why parked**: v2.1.8 ships prose + prompt-discipline fix (SKILL.md Working Directory Contract + dispatch prompts + resume.md guidance). Mechanical prevention via sparse-checkout adds Windows-compat fragility (path separators, case-sensitivity, git-for-Windows quirks) disproportionate to the confusion risk.
+- **When to revisit**: if the prose-level fix proves insufficient in practice (e.g., a subagent still reads the stale `.harness/` despite the contract), or if Anthropic's GAN-isolation philosophy evolves toward requiring mechanical enforcement of ownership contracts.
+- **Context**: discussed 2026-04-24. The `.gitignore` / `git rm --cached` approaches don't work (would cause squash-merge to delete main's `.harness/`); sparse-checkout is the correct mechanical path. See CHANGELOG v2.1.8 "Honest note on the mechanical fix that got deferred."
+
 ---
 
 ## Parked

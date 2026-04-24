@@ -177,6 +177,8 @@ Create the worktree:
 git worktree add .worktrees/current -b "harness/build/${FEATURE}" 2>/dev/null || true
 ```
 
+**Note on the worktree's stale `.harness/`:** the checkout includes a frozen snapshot of `.harness/` at `.worktrees/current/.harness/` as a git-worktree side-effect. It is stale and must not be read or written by any agent or orchestrator step. The live `.harness/` is at project root. See SKILL.md § File Ownership Contract → Working directory and `.harness/` location. The dispatch prompt below restates this rule inline so the Generator has it in its fresh context.
+
 Assemble the dispatch context. The Generator reads most files via its own Read tool — the inline file list in the prompt is a hint, not authoritative. Prefer per-FR story reads per TDD cycle over the full aggregate contract.
 
 If `.harness/features/${FEATURE}/eval-report.md` exists (this is a retry), the orchestrator reads its content and appends it to the Agent prompt under a `--- EVALUATOR FEEDBACK (fix these) ---` marker before the user-request block.
@@ -189,9 +191,11 @@ The orchestrator dispatches the Generator via the Agent tool:
 
 > You are being dispatched in BUILD mode (see your system prompt's MODE ROUTING table).
 >
+> **Working directory contract (v2.1.8):** your cwd is the project root. All `.harness/...` paths below resolve from project root. The `.worktrees/current/.harness/` folder exists (git-worktree side-effect) but is a stale frozen snapshot — never read or write it. Source code goes into `.worktrees/current/src/...`; spec and report files stay under project-root `.harness/`. If you `cd .worktrees/current` for a Bash command, `cd` back before any `.harness/` Read/Write, or use `$CLAUDE_PROJECT_DIR/.harness/...` absolute paths.
+>
 > Implement the negotiated contract via TDD (use superpowers:test-driven-development for the RED → GREEN → REFACTOR cycle; see your Phase 2 instructions). Read per-FR stories at .harness/features/${FEATURE}/stories/FR-NNN.md per cycle — that's your canonical per-cycle context.
 >
-> Key files (read via Read tool as needed):
+> Key files (read via Read tool as needed, always from project-root `.harness/`):
 > - .harness/spec/constitution.md
 > - .harness/spec/architecture.md
 > - .harness/features/${FEATURE}/contract.md (final, negotiated)
@@ -230,14 +234,16 @@ The orchestrator dispatches the Evaluator via the Agent tool:
 
 > You are being dispatched in EVALUATE mode (see your system prompt's MODE ROUTING table).
 >
+> **Working directory contract (v2.1.8):** your cwd is the project root. All `.harness/...` paths (`eval-report.md`, `criteria.md`, `examples.md`, `evaluator-notes.md`, `contract.md`, `proposal.md`, `review.md`, `constitution.md`, `prd.md`, `init.sh`) resolve from project root. The `.worktrees/current/.harness/` folder is a stale frozen snapshot — never read or write it. Source code to exercise lives in `.worktrees/current/src/...`; if `init.sh` needs to `cd` there to start the app, that's fine for launching the app, but always come back to project root for `.harness/...` writes like `eval-report.md`.
+>
 > Test the running application via Playwright MCP, grade against the four criteria with hard thresholds, run the reward-hacking scan (Step 4.5), and write your verdict to .harness/features/${FEATURE}/eval-report.md per the template at @templates/features/eval-report.md.txt.
 >
-> Calibration-mandatory reads BEFORE scoring:
+> Calibration-mandatory reads BEFORE scoring (all from project-root `.harness/`):
 > - .harness/evaluator/examples.md (few-shot anchors)
 > - .harness/spec/evaluator-notes.md (if exists)
 > - .harness/evaluator/criteria.md
 >
-> Then: read implementation-report.md, contract.md, proposal.md, review.md, constitution.md, prd.md (via Read tool). Start the app with bash .harness/init.sh. Exercise via Playwright.
+> Then: read implementation-report.md, contract.md, proposal.md, review.md, constitution.md, prd.md (via Read tool — all from project-root `.harness/`). Start the app with bash .harness/init.sh (also project-root). Exercise via Playwright.
 
 ---
 

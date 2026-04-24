@@ -129,6 +129,25 @@ The temptation is to "just edit it, it's one line." Resist. Even a one-line edit
 
 **Enforcement note (v2.0.0+).** This rule is prose-only. There is no mechanical hook enforcement; Opus 4.7 follows the constraint when stated explicitly. If the orchestrator ever drifts (edits a spec file directly), the Evaluator's retrospective will surface the drift as a finding during post-merge reconciliation.
 
+### Working directory and `.harness/` location — root is authoritative (v2.1.8+)
+
+During a sprint's build phase, `.harness/` appears in **two places** due to git-worktree mechanics:
+
+| Path | Purpose | Status |
+|---|---|---|
+| `<project-root>/.harness/` | Live state — spec files, manifest, feature reports, progress tracking | **Authoritative — only copy to read or write** |
+| `.worktrees/current/.harness/` | Git-worktree artifact — frozen snapshot from when the build branch was cut | **Stale — never read or write** |
+
+The worktree copy exists because `git worktree add` checks out every tracked file on the branch. It does not update during the sprint and will drift from reality immediately. A subagent reading from the worktree copy will see stale manifest phase, stale contract, stale scores.
+
+**Rule for every subagent + orchestrator:** all `.harness/` reads and writes must use project-root paths. Source code goes into `.worktrees/current/src/...` (scope-isolated on the build branch); `.harness/` does not.
+
+**Cwd contract:** subagents inherit the Agent tool's default cwd (project root). Bash commands that `cd .worktrees/current` change cwd for that subshell only — they must NOT be used as a base for subsequent `.harness/...` path resolution. If you find yourself writing a `.harness/` path after a `cd`, either construct the absolute path via `$CLAUDE_PROJECT_DIR/.harness/...` or `cd` back to project root first.
+
+**For `/harness:resume`:** invoke from project root, not from `.worktrees/current/`. Resume reads `.harness/manifest.yaml` to determine phase; reading the stale worktree copy would misidentify the pipeline state.
+
+**Mechanical prevention — why not?** A sparse-checkout approach could physically prevent `.harness/` from appearing in the worktree. It was considered and deferred to the v3 watch list because sparse-checkout adds Windows compatibility fragility and cross-OS complexity disproportionate to the confusion risk. This prose rule + explicit dispatch guidance is the Anthropic-aligned "simplicity first" fix for v2.x.
+
 ## Agent Communication Protocol
 
 Agents NEVER share conversation context. They communicate exclusively via `.harness/` files. Each feature has its own folder under `.harness/features/NNN-name/` for scoped artifacts.

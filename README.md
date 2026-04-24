@@ -381,7 +381,7 @@ For full rationale behind every v2 change:
 
 ## Status
 
-**v2.1.7 on `v2-beta` branch** (current) — iterating through live stress-test findings:
+**v2.1.8 on `v2-beta` branch** (current) — iterating through live stress-test findings:
 - v2.1.0 — native Agent-tool dispatch (plugin-declared `harness:planner/generator/evaluator` subagent types), migrated from `claude -p` subprocess pattern
 - v2.1.1 — dropped `tools:` frontmatter allowlist (subagents inherit parent session's tool set); project-tools propagation via `./CLAUDE.md`
 - v2.1.2 — stress-test patches: Windows python3-stub detection, `/quick` spec-drift check, `/clarify` ADR gap closed, doctor.sh checks for pre-allowed npm permissions + superpowers plugin
@@ -390,6 +390,7 @@ For full rationale behind every v2 change:
 - v2.1.5 — Planner feature-size gate (prevent oversized dispatches that exhaust Claude Code subagent budgets mid-build); pre-TDD scaffolding commit rule in `generator.md` (non-behavioral work now commits at logical group boundaries, not just post-FR); SKILL.md Recovery section expanded with hard-stop-mid-scaffolding case
 - v2.1.6 — doc patch: replaced broken `.agentlint.toml` (never loaded — AgentLint reads `agentlint.yml`, not TOML) with proper `agentlint.yml`. `max-file-size` limit now set to 1500 globally since the rule supports only one `limit` option (verified in AgentLint source); rationale preserved as inline YAML comments.
 - v2.1.7 — explicit frontmatter tuning for max context + turns: all three agents declare `model: inherit`, `effort: max`, `permissionMode: default`, `maxTurns: 2000`. **Runtime pairing**: start Claude Code with `claude --model claude-opus-4-7[1m]` for the 1M context window; without this, `inherit` picks the default 200K Opus variant. See CHANGELOG for the full rationale including fields deliberately omitted.
+- v2.1.8 — closes the two-`.harness/`-folder cognitive confusion hazard (root = authoritative, worktree copy = stale snapshot). SKILL.md gains an explicit Working-directory-and-`.harness/`-location rule under File Ownership Contract; sprint.md dispatch prompts for Generator and Evaluator now lead with a "Working directory contract (v2.1.8)" paragraph; resume.md requires project-root invocation. Sparse-checkout-based mechanical prevention was considered and deferred to v3 — see ROADMAP.md.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for per-release detail. See [`ROADMAP.md`](ROADMAP.md) for the v3 watch list + parked items.
 

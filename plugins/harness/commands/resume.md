@@ -4,6 +4,8 @@ description: Continue an interrupted harness pipeline from the last checkpoint. 
 
 # `/harness:resume`
 
+**Invoke from project root, not from `.worktrees/current/`** (v2.1.8). `/harness:resume` reads `.harness/manifest.yaml` to determine current phase. If invoked from inside `.worktrees/current/`, it would read the stale frozen snapshot copy at `.worktrees/current/.harness/manifest.yaml` and misidentify the pipeline state. See SKILL.md § File Ownership Contract → Working directory and `.harness/` location.
+
 Run the Recovery procedure documented in the harness skill: see SKILL.md § Recovery.
 
 The procedure:

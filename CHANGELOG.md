@@ -6,6 +6,24 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## [2.1.8] — 2026-04-24
+
+### Fix — Two-`.harness/` folder cognitive-confusion hazard (docs + prompt discipline)
+During a sprint's build phase, `.harness/` appears in two places due to git-worktree mechanics: the **live** copy at project root and a **frozen snapshot** at `.worktrees/current/.harness/` (checked out as a side-effect of `git worktree add`). The root copy is authoritative; the worktree copy goes stale immediately. A subagent or `/harness:resume` invocation that reads from the worktree copy would see stale manifest phase, stale contract, stale scores — and the risk is structural (nothing mechanically prevents the wrong read).
+
+Surfaced during live stress-test on BELCORT ACCOUNTING — retrospective phase wrote correctly to root, but the two visible `.harness/` folders raised the question of whether dispatch could pick the wrong one.
+
+Fixes shipped:
+- **SKILL.md § File Ownership Contract** gains a new sub-section "Working directory and `.harness/` location — root is authoritative" with an explicit table distinguishing live vs stale + a cwd rule for subagents + a specific note for `/harness:resume`.
+- **sprint.md Step 3 (BUILD dispatch)** adds a note after `git worktree add` explaining the stale snapshot, and prepends a "Working directory contract (v2.1.8)" paragraph to the Generator's dispatch prompt so the Generator has the rule in its fresh context.
+- **sprint.md Step 4 (EVALUATE dispatch)** prepends the same cwd contract paragraph to the Evaluator prompt, explicitly listing every `.harness/...` file the Evaluator reads and clarifying that source-code-launching Bash (`cd .worktrees/current`) is fine for starting the app but must not be a base for subsequent `.harness/` Read/Write.
+- **resume.md** adds a lead-in directive: invoke from project root, not from `.worktrees/current/`. Reading the stale manifest would misidentify the pipeline state.
+
+### Honest note on the mechanical fix that got deferred
+I originally proposed a mechanical Option A for v2.1.8: add `.harness/` to the build-branch's `.gitignore` to prevent the stale copy from appearing in the worktree. During implementation I discovered this approach doesn't work cleanly — `.gitignore` only affects untracked files; `.harness/` is already tracked on every branch. Untracking (`git rm -r --cached`) on the build branch would cause squash-merge to delete `.harness/` from main. The correct mechanical approach is `git sparse-checkout` at worktree creation, which adds Windows-compatibility fragility disproportionate to the confusion risk.
+
+Sparse-checkout-based mechanical prevention is now recorded on the v3 Watch List (ROADMAP.md item 6). Shipping the prose + prompt-discipline fix alone follows Anthropic's "simplicity first" — it addresses the cognitive confusion without introducing cross-OS git complexity.
+
 ## [2.1.7] — 2026-04-24
 
 ### Feature — Explicit frontmatter tuning for maximum context + turns
