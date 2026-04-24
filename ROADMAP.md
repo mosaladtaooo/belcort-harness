@@ -20,6 +20,9 @@ See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 | Version | Date | Summary |
 |---|---|---|
+| 2.1.9 | 2026-04-24 | Secrets-handling contract (.env.example vs .env.local) + Evaluator setup-required gate |
+| 2.1.8 | 2026-04-24 | Worktree cwd contract — root `.harness/` authoritative, frozen worktree copy never read |
+| 2.1.7 | 2026-04-24 | Frontmatter tuning — `model: inherit`, `effort: max`, `maxTurns: 2000` on all three agents |
 | 2.1.6 | 2026-04-23 | AgentLint config file fix (`.agentlint.toml` → `agentlint.yml`) |
 | 2.1.5 | 2026-04-23 | Planner feature-size gate + pre-TDD scaffolding commit rule + SKILL.md Recovery expanded |
 | 2.1.4 | 2026-04-23 | Evaluator tuning category vocabulary alignment + tune-evaluator watch-list |
@@ -28,7 +31,7 @@ See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 | 2.1.1 | 2026-04-22 | Dropped `tools:` frontmatter allowlist + project-tools propagation |
 | 2.1.0 | 2026-04-21 | Native Agent-tool subagent dispatch (migrated from `claude -p` subprocess) |
 | 2.0.0 | 2026-04-21 | Minimalist refactor — Planner → Generator → Evaluator pipeline rewrite |
-| 1.5.x | (prior) | Prior stable; see `main` branch |
+| 1.5.x | (prior) | Prior stable; see git tags |
 
 ## In Progress
 
@@ -90,9 +93,9 @@ Considered and explicitly decided against. Recorded here to prevent re-debate.
 
 ### P.2 Adopting fork-subagent at plugin level today
 - **What it would do**: opt the harness into Claude Code's fork-subagent cost optimization (auto-trigger or `context: fork` activation).
-- **Why parked**: structural mismatch. Fork's auto-trigger requires **omitting** `subagent_type`, but our plugin-declared subagents (`harness:planner`/`generator`/`evaluator`) depend on specifying it to load the correct system prompt. Explicit activation paths (skill `context: fork`, env var) don't materially help a sequential pipeline.
-- **Revisit only if**: we first build a parallel phase (see v3 Watch List item 1 or 4). At that point fork becomes the right tool for a concrete problem.
-- **Context**: discussed 2026-04-24 via claude-code-guide agent research.
+- **Why parked**: **structurally incompatible** (Phase 0 research finding, 2026-04-24). Per Anthropic's official Claude Code docs, `context: fork` is a **skill-only** frontmatter field — it does not appear in the agent frontmatter schema (which exposes `model`, `effort`, `permissionMode`, `maxTurns`, `tools`, `disallowedTools`, `skills`, `memory`, `isolation`). Auto-trigger requires omitting `subagent_type`, which contradicts our plugin-declared subagent architecture. `CLAUDE_CODE_FORK_SUBAGENT=1` env var enables fork globally but does not override the skill-scoped activation semantics. No documented fallback exists for parallel plugin-declared subagent dispatches.
+- **Revisit only if**: (a) Anthropic extends fork semantics to plugin-declared subagents via the Agent tool, OR (b) we adopt a skill-wrapper pattern (a skill with `context: fork` + `agent: harness:evaluator` that dispatches the agent through the skill-fork path — speculative, needs empirical validation).
+- **Context**: discussed 2026-04-24 via claude-code-guide agent research. Phase 0 research gate executed 2026-04-24 during v3 planning; adoption aborted on definitive docs finding. See CHANGELOG v2.1.9 follow-up conversation for the reasoning trace.
 
 ---
 

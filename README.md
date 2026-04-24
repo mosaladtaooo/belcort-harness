@@ -381,7 +381,7 @@ For full rationale behind every v2 change:
 
 ## Status
 
-**v2.1.9 on `v2-beta` branch** (current) — iterating through live stress-test findings:
+**v2.1.9 — shipped to `main` as current stable** (2026-04-24) after 9 patch releases of live stress-test iteration on `v2-beta`:
 - v2.1.0 — native Agent-tool dispatch (plugin-declared `harness:planner/generator/evaluator` subagent types), migrated from `claude -p` subprocess pattern
 - v2.1.1 — dropped `tools:` frontmatter allowlist (subagents inherit parent session's tool set); project-tools propagation via `./CLAUDE.md`
 - v2.1.2 — stress-test patches: Windows python3-stub detection, `/quick` spec-drift check, `/clarify` ADR gap closed, doctor.sh checks for pre-allowed npm permissions + superpowers plugin
@@ -395,7 +395,9 @@ For full rationale behind every v2 change:
 
 See [`CHANGELOG.md`](CHANGELOG.md) for per-release detail. See [`ROADMAP.md`](ROADMAP.md) for the v3 watch list + parked items.
 
-**v1.5.2 on `main`** — prior stable. Migration notes above. For existing installs, run `scripts/uninstall-rules.sh` once to remove the legacy global `~/.claude/CLAUDE.md` block, then `/harness:setup` in each project.
+**v1.5.x** — prior stable. See git tag `v1.5.2` for the final pre-v2 release (main was v1.5 before 2026-04-24). For existing v1.5 installs upgrading to v2: run `scripts/uninstall-rules.sh` once to remove the legacy global `~/.claude/CLAUDE.md` block, then `/harness:setup` in each project.
+
+**`v2-beta`** — active development branch for post-v2.1.9 work; merges to `main` via FF at release points.
 
 **License**: MIT.
 **Author**: BELCORT AI Consulting `<tools@belcort.com>`.
