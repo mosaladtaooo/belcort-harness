@@ -226,7 +226,15 @@ Orchestrator updates `.harness/manifest.yaml` → `state.phase = "evaluating"` a
 
 ## 4. Evaluate — dispatch Evaluator subagent (FRESH context, SEPARATE from Generator)
 
-The orchestrator dispatches the Evaluator via the Agent tool:
+**4a. Setup-required gate (v2.1.9+).** Before dispatching the Evaluator, the orchestrator reads `.harness/features/${FEATURE}/implementation-report.md` → `## Setup required` section. If it lists required files that the user must create (e.g., `.env.local`) OR other user-completable steps (database migrations with user credentials, external service config), the orchestrator:
+
+1. Checks whether each required file exists at the project-root path.
+2. If all required files exist AND the report doesn't flag remaining user steps, proceed to 4b (Evaluator dispatch).
+3. Otherwise: present the Setup section to the user verbatim, with a message like *"Generator finished building. Before I dispatch the Evaluator, complete this setup: [list]. Type 'continue' when ready."* Wait for confirmation. Do NOT auto-retry or skip — an Evaluator run against an app that can't start produces a false FAIL that wastes retry budget.
+
+This gate exists because the app under test often needs secrets (DB URLs, API keys, signing keys) that the Generator cannot write (AgentLint's `no-env-commit` + `no-secrets` rules are unsuppressible errors, by design). The two-file convention `.env.example` (Generator) + `.env.local` (user) hands off cleanly at this gate.
+
+**4b. Evaluator dispatch.** The orchestrator dispatches the Evaluator via the Agent tool:
 
 - **subagent_type**: `harness:evaluator`
 - **description**: `"Evaluate ${FEATURE} via Playwright"`

@@ -6,6 +6,24 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## [2.1.9] — 2026-04-24
+
+### Feature — Secrets-handling contract (two-file convention) + Evaluator setup gate
+Generator was hitting AgentLint's `no-env-commit` + `no-secrets` hooks (both `severity: error`, unsuppressible per AgentLint's safety-invariant contract) when trying to write `.env.local`. Bash heredoc fallback also failed — AgentLint intercepts at PreToolUse regardless of how the write is framed. Correct behavior on the hook side; the gap was in Generator's prose contract, which didn't specify the two-file handoff convention.
+
+Surfaced during live stress-test on BELCORT ACCOUNTING.
+
+Fixes:
+- **`agents/generator.md`** Phase 2 gains a "Secrets and environment files (v2.1.9+)" section above the numbered TDD rules. Explicit: Generator writes `.env.example` with obvious placeholders (`REPLACE_ME`, `<your-value>`); user writes `.env.local`. Forbids writing `pause-questions.md` for secret values (secrets must not enter conversation history).
+- **`templates/features/implementation-report.md.txt`** gains a `## Setup required (before Evaluator can run)` section. Generator populates with required files, env vars (with sources), other user steps, and the final `bash .harness/init.sh` command. If no setup needed, Generator writes "None — init.sh handles everything."
+- **`commands/sprint.md` Step 4 adds a "4a. Setup-required gate"** before Evaluator dispatch. Orchestrator reads the implementation-report's Setup section, checks required-file existence, and pauses for user completion if incomplete. Prevents false-FAIL Evaluator runs against apps that can't start because of missing env.
+
+### Why this fits Anthropic's GAN-isolation philosophy
+Secrets belong to the user's domain, not the agent's. The two-file convention makes the ownership boundary explicit: `.env.example` (agent-authored placeholder) lives in the agent's domain; `.env.local` (user-authored actual values) lives in the user's. The setup gate enforces the handoff: agent finishes building, user completes setup, evaluator tests the combined result. No role bleeds into another.
+
+### Release-cadence note
+v2.1.5 (feature sizing), v2.1.8 (worktree cwd), v2.1.9 (secrets handling) all followed the same pattern: real bug found via stress-test → fix is an explicit rule in Generator's prose contract → shipped as patch. The mechanism is sound; the rough edges live in the contract, and they surface quickly under real use — which is what v2-beta stress-testing is designed to produce.
+
 ## [2.1.8] — 2026-04-24
 
 ### Fix — Two-`.harness/` folder cognitive-confusion hazard (docs + prompt discipline)

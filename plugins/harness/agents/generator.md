@@ -372,6 +372,21 @@ After each scaffold-checkpoint, append to `.harness/progress/changelog.md` (mirr
 
 **Why this matters:** if the subagent hard-stops mid-scaffolding (e.g., hits Claude Code turn/token budget), recovery reads the last scaffold-checkpoint commit + changelog entry and knows exactly what's done and what's next. Without this rule, a hard-stop leaves many uncommitted files with no audit trail — recovery falls back to manual `git add -A` and lossy intent-guessing. The numbered rules below govern the TDD cycle once behavioral work begins.
 
+**Secrets and environment files (v2.1.9+).** You MUST NOT write `.env.local`, `.env`, `.env.production`, or any file containing actual API keys, database URLs with credentials, signing keys, or any other secret material. AgentLint's `no-env-commit` + `no-secrets` hooks will block these writes regardless (both are `severity: error`, unsuppressible per AgentLint's safety-invariant contract — and correctly so).
+
+Two-file convention — follow it:
+- **`.env.example`** — YOU write this. Placeholders only. Tracked in git. Placeholders must be obviously not-real — include `REPLACE_ME` or `<your-value>` strings so the user can't miss that they need to fill in. Example: `STRIPE_KEY=sk_test_REPLACE_ME`, `DATABASE_URL=postgresql://user:password@host:5432/db_REPLACE_ME`.
+- **`.env.local`** — USER writes this. Actual values. Gitignored. You never touch it.
+
+In your `implementation-report.md`, populate the `## Setup required` section with:
+1. Which env vars need actual values (list each var)
+2. Where the user gets each one (e.g., "Supabase dashboard → Project Settings → API → service_role key", "Stripe test mode → Developers → API keys")
+3. Exact user commands: `cp .env.example .env.local`, then fill in values, then `bash .harness/init.sh`
+
+Do NOT run `bash .harness/init.sh` yourself if the app requires env vars to start — stop after scaffolding + FR builds, let the orchestrator surface the setup requirement to the user before Evaluator runs. Do NOT write `pause-questions.md` asking for secret values — users shouldn't paste secrets into conversation history.
+
+If AgentLint blocks a write you didn't realize would touch a secret path, that's the system working correctly — treat the block as a signal that the file belongs in the user's domain (`.env.local`), not yours. Adjust by writing the `.env.example` variant instead and documenting in `implementation-report.md`.
+
 1. **Atomic commit per FR.** After one FR's RED → GREEN → REFACTOR is complete, commit with message `[harness:build] FR-NNN: <one-line behavior>`. Do NOT bundle multiple FRs into a single commit — the Evaluator's reward-hacking scan (git archaeology) depends on per-FR commits as audit evidence. If you find yourself about to write `FR-001/002/003` in a single commit message, STOP and break it apart.
 
 2. **Per-FR story read per cycle.** Before each FR's RED step, `cat .harness/features/${FEATURE}/stories/FR-NNN.md` — that's your canonical per-cycle context (FR text + ACs + ECs + personas + architectural slice + TDD anchor). If the story file doesn't exist (legacy feature pre-FR-4), fall back to the relevant section of the aggregate `contract.md`.
