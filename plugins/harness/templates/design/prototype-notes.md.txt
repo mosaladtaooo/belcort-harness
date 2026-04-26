@@ -1,0 +1,92 @@
+<!-- BELCORT Harness — Template: prototype-notes.md -->
+<!--
+Written by: Designer in EXPLORE Step 8 (hi-fi resume after user picks a direction).
+Location when instantiated: .harness/design/prototype/prototype-notes.md
+Purpose: Human-facing notes accompanying the hi-fi self-contained HTML prototype. Captures
+         what's covered, what's mocked vs functional, what was intentionally skipped, and
+         the result of huashu-design's mandatory Playwright validation pass. The "Next step"
+         line is the bridge from design loop to build loop.
+Canonical source: this file. The inline copy in plugins/harness/agents/designer.md must stay in sync.
+-->
+
+# Prototype Notes: {{feature_or_project_name}}
+
+**Generated**: {{ISO_DATE}}
+**Direction**: {{chosen direction name from directions-summary.md}}
+**Philosophy**: {{流派 + one-line description from the chosen direction}}
+**Source HTML**: `.harness/design/prototype/prototype.html`
+
+## Screens covered
+
+<!--
+List every screen / state the prototype renders. Use enough specificity that a Generator (or
+the user demoing this) knows what's actually visible vs. what's described in passing.
+Examples:
+  - Empty dashboard (zero items, primary CTA visible)
+  - Populated dashboard (10 sample items, sort + filter active)
+  - Item detail modal (open from row click)
+  - Settings panel (account + theme, theme toggle functional)
+-->
+
+- {{screen_1}}
+- {{screen_2}}
+- {{screen_3}}
+
+## Interactions
+
+<!--
+What's clickable, hoverable, keyboard-navigable. Distinguish "fully functional in-prototype"
+(state actually changes) from "mocked/visual only" (button looks pressable but doesn't change
+state). The Generator needs to know which interactions are spec'd by the design vs. which the
+user expects from the demo but the design didn't actually commit to.
+-->
+
+| Interaction | Functional / Mock | Notes |
+|-------------|-------------------|-------|
+| {{e.g., Sort header click}} | Functional | {{Re-orders items in DOM}} |
+| {{e.g., Bulk-action toolbar}} | Mock | {{Renders but no row selection state implemented}} |
+| {{e.g., Theme toggle}} | Functional | {{Persists in localStorage; resets on reload}} |
+
+## Declared gaps
+
+<!--
+States the prototype intentionally did NOT cover. Honest declaration here is more credible
+than silent omission — the Generator and Evaluator inherit this list. Examples:
+  - Empty state for 0 items not designed (only populated state shown)
+  - Error states use placeholder text ("Something went wrong") — not styled
+  - Loading skeletons not implemented; populated state appears instantly
+  - Mobile breakpoint untested below 375px
+  - Keyboard focus rings not styled (browser default visible)
+-->
+
+- {{gap_1}}
+- {{gap_2}}
+- {{gap_3}}
+
+## Validation
+
+<!--
+huashu-design runs a built-in Playwright validation pass in hi-fi mode (clicks main interactions,
+verifies no JS errors, no layout collapse, assets load). Capture the result verbatim.
+Statuses:
+  - PASS — all clicks worked, no console errors, layout stable
+  - PASS-WITH-WARNINGS — clicks worked but warnings emitted (e.g., contrast below WCAG AA on one element)
+  - FAIL — interactions broke (rare; Designer should regenerate before exiting if FAIL)
+-->
+
+- **Status**: {{PASS | PASS-WITH-WARNINGS | FAIL}}
+- **Pass date**: {{ISO_DATE}}
+- **Warnings (if any)**: {{list each warning verbatim}}
+- **Console errors observed**: {{none | list}}
+
+## Next step
+
+To build this design into actual source code, run:
+
+```
+/harness:sprint "<feature description — what to build, in 1–4 sentences>"
+```
+
+The sprint flow's Planner reads this prototype as design context. The Generator implements against the prototype's screens, interactions, and declared gaps; the Evaluator tests against the same. Source-code patches happen in `/harness:sprint`, not here — Designer's output ends at this prototype.
+
+If you want to apply only the prototype's design tokens (palette, typography, spacing) to existing source without a full feature build, that's `/harness:design teach` (lands in Step 2 of the v1 design loop).
