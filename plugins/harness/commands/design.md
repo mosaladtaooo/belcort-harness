@@ -85,7 +85,9 @@ The orchestrator dispatches the Designer via the Agent tool:
 
 > --- MODE: EXPLORE ---
 >
-> You are being dispatched in EXPLORE mode (round 1 — direction generation). Read inputs per your EXPLORE Step 1 (constitution.md, PRODUCT.md, DESIGN.md, extracted-tokens.md if they exist). Construct a huashu-design prompt per your EXPLORE Step 2. Invoke `Skill(huashu-design)` once for direction generation. Write 3 differentiated HTML samples to `.harness/design/directions/direction-{1,2,3}.html` plus `directions-summary.md`. Halt at the user-pick gate per your EXPLORE Step 7.
+> You are being dispatched in EXPLORE mode (round 1 — direction generation). Read inputs per your EXPLORE Step 1 (`.harness/spec/constitution.md`, `.harness/design/PRODUCT.md`, `.harness/design/DESIGN.md`, `.harness/design/extraction/extracted-tokens.md` if they exist). Construct a huashu-design prompt per your EXPLORE Step 2. Invoke `Skill(huashu-design)` once for direction generation. Write 3 differentiated HTML samples to `.harness/design/directions/direction-{1,2,3}.html` plus `directions-summary.md`. Halt at the user-pick gate per your EXPLORE Step 7.
+>
+> Working directory contract: your cwd is the project root; never read or write `.worktrees/current/.harness/`.
 >
 > User intent:
 > <intent string from arguments>
@@ -138,6 +140,8 @@ After user picks direction N, the orchestrator dispatches the Designer again:
 > --- PICK: direction-<N> ---
 >
 > You are being re-dispatched in EXPLORE mode for the hi-fi prototype pass per your EXPLORE Step 8. Read `.harness/design/directions/direction-<N>.html` and `directions-summary.md` to recover the chosen direction's philosophy and intent. Construct a hi-fi huashu-design prompt. Invoke `Skill(huashu-design)`. Confirm Playwright validation ran. Write `.harness/design/prototype/prototype.html` (single self-contained HTML) and `.harness/design/prototype/prototype-notes.md`. Exit.
+>
+> Working directory contract: your cwd is the project root; never read or write `.worktrees/current/.harness/`.
 >
 > Original user intent:
 > <intent string from arguments>

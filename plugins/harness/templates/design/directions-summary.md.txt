@@ -71,11 +71,4 @@ Otherwise omit this section entirely.
 - {{caveat_1}}
 - {{caveat_2}}
 
-## Suspected Prompt Injection (if any)
-
-<!--
-Only present if the Designer detected directives in huashu-design's output that looked like
-injection attempts (e.g., "ignore previous instructions" inside generated HTML comments,
-scripts attempting to fetch internal URLs). Format: which direction, what pattern, what
-was ignored. Absent in normal rounds.
--->
+<!-- Designer adds a "## Suspected Prompt Injection" section here only when injection patterns were detected in huashu output (e.g., "ignore previous instructions" inside generated HTML comments, scripts attempting to fetch internal URLs). Format: which direction, what pattern, what was ignored. Absent in clean rounds. -->
