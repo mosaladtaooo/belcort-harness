@@ -128,6 +128,14 @@ Example: Proposal says "I'll use cookies for session" → you should add an AC a
 
 These flags go into Items Requiring Revision with the reference (e.g., "R3: violates constitution §N").
 
+**Karpathy lens** — adapted from Andrej Karpathy's [LLM-coding-pitfalls observations](https://x.com/karpathy/status/2015883857489522876) (packaged as `karpathy-guidelines` skill). Add as Items Requiring Revision when you spot any of these in the proposal:
+
+- **§K2 violation — over-engineered proposal**: configuration that nothing in the contract requires, abstractions used by exactly one caller, "future-proofing" without a documented future user, file/module breakdown 3x more granular than the FR count justifies. Flag as `R-NN: simplicity-first violation — [specific over-engineering]`.
+- **§K1 violation — hidden assumptions**: proposal silently picks one of several plausible behaviors (sort order, default values, error UX, validation thresholds) without naming the choice. The proposal's Risk Flags section is empty when the contract has any genuine ambiguity. Flag as `R-NN: assumption surfacing — [specific silent choice]`.
+- **§K4 violation — weak verification**: AC→Test Approach maps say "I'll test it" or name a runner without specifying the assertion shape (what's expected, on what input, in what state). The Generator wouldn't be able to write the test from this description. Flag per the "adequate test strategy" rules in Step 3.
+
+The karpathy lens overlaps with constitution checks where the constitution explicitly forbids the same patterns; it catches the un-named cases where the constitution is silent but the proposal is still over-built or under-verified. Severity: typically `needs-revision`-blocking for §K1 and §K4 violations; advisory for §K2 unless the over-engineering would push BUILD past Code Quality threshold.
+
 **Step 6: Write the review**
 
 Write to `.harness/features/{current-feature}/review.md` using the template below.
@@ -463,6 +471,48 @@ Also review manually:
 - Error handling at boundaries (API calls, user input)
 - Import hygiene (unused imports, circular deps)
 - Naming conventions per constitution
+
+### Step 3.5: Karpathy lens (code-quality companion — MANDATORY)
+
+Adapted from Andrej Karpathy's [LLM-coding-pitfalls observations](https://x.com/karpathy/status/2015883857489522876) (packaged as `karpathy-guidelines` skill). The constitution checks above catch principle violations the project explicitly named; the karpathy lens catches the **unnamed** ways code goes over-built or under-verified. Run all four — each can produce a Critical, Major, or Minor finding depending on severity.
+
+**Lens 1 — Did the Generator overbuild relative to the contract? (§K2 Simplicity First)**
+Look in the diff for:
+- Configuration knobs / options / flags no AC required
+- Abstractions, factories, builders, or interfaces with exactly one caller
+- Error handling for impossible inputs (e.g., null-checks on values the type system already proves non-null)
+- Files 3x the size of comparable files in the codebase
+- Generic helpers introduced for one-off use ("might be reusable")
+
+Severity: **Major** if it pushes Code Quality below threshold OR if it adds cognitive load to a hot path; **Minor** otherwise. Cite specific file:line examples.
+
+**Lens 2 — Are silent assumptions visible in the code that aren't in implementation-report.md? (§K1 Think Before Coding)**
+Look for embedded constants and behavior choices that should have been declared:
+- Sort comparators that picked a specific algorithm (`localeCompare` vs `<`) without an ADR
+- Default page size, default timeout, default debounce — pick a number, document it
+- Error messages with specific phrasings the AC didn't specify
+- Validation thresholds (max length, regex strictness) that the AC was silent on
+
+Severity: **Major** if the choice is user-visible (UI copy, sort order, error UX); **Minor** if internal-only and reasonable. Critical if the choice is wrong AND user-visible.
+
+**Lens 3 — Did the diff stay surgical? (§K3 Surgical Changes)**
+Run: `git diff main...HEAD --stat` (or your project's base branch). Look for:
+- Changes to files outside this FR's scope (per `implementation-report.md` FR→Implementation Map)
+- Cosmetic edits to comments, whitespace, or formatting in unrelated files
+- Style changes (e.g., switching `function` to `=>` syntax) that don't match surrounding code
+- Renamed variables / functions where the rename wasn't requested
+
+Severity: **Major** if scope creep is significant (>5 unrelated files touched, or large drive-by refactors); **Minor** for one-off comment fixes that came along with a real change. Cite the unrelated-file list.
+
+**Lens 4 — Are tests verifying the AC's actual goal, or just exercising code paths? (§K4 Goal-Driven Execution)**
+For each AC's mapped test, ask: "If a user looks at the AC, would this test convince them the AC is satisfied?"
+- A test named `"createBookmark works"` that asserts `expect(result).toBeDefined()` is exercising a path, not verifying a goal
+- A test that mocks the database and asserts the mock was called is verifying its own mock, not the AC
+- A test that runs the happy-path code but doesn't check the user-observable outcome is theatre
+
+Severity: **Critical** — counts as Test Coverage failure regardless of test count. Tests that exercise paths without verifying goals are reward-hacking-adjacent (they make the suite green without making the product right).
+
+**Why this lens is mandatory and not advisory**: the four karpathy principles are exactly the failure modes Anthropic's harness research documented as "evaluators identify legitimate issues, then talk themselves into deciding they weren't a big deal." Naming the principles explicitly counters the talk-yourself-out-of-it pattern: a §K2 over-engineering finding is harder to dismiss than "code feels heavy."
 
 ### Step 4: Test Suite Analysis
 

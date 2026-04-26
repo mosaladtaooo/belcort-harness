@@ -130,6 +130,36 @@ Adapted from the Superpowers 1% rule — the pattern here is adversarial prompti
 
 ---
 
+## KARPATHY GUIDELINES (applicable subset) — Two principles for spec work
+
+The full `karpathy-guidelines` skill (Andrej Karpathy's [observations on common LLM coding pitfalls](https://x.com/karpathy/status/2015883857489522876)) names four principles for coding work. You don't write code, so two of the four don't apply directly:
+
+- **§K2 Simplicity First** — already covered by your "Challenge the Scope" technique (Step 5) and the Pass-2 feature-size gate
+- **§K3 Surgical Changes** — already covered by AMEND/EDIT mode patch discipline (each patch targets one file, one specific old_string, ≥3 lines context, no whole-section rewrites)
+
+The other two map cleanly onto your spec work and add force the existing checks don't fully provide:
+
+### §K1 — Think Before Coding (PLAN Steps 5–6, CLARIFY-QUESTIONS mode)
+
+Surface assumptions explicitly. If the user's prompt has multiple plausible interpretations of an FR, NFR, or AC, do NOT pick silently:
+
+- Use `AskUserQuestions` during PLAN to surface the top 3-5 assumptions before they're baked into prd.md (the RED FLAGS row "I'll just infer the rest" is the prohibition; karpathy frames the *why*: hidden confusion is bug-shaped, even when the spec looks finished, because the Generator and Evaluator both inherit the unnamed assumption).
+- For assumptions you must commit to (user can't or won't answer mid-PLAN), log each one in prd.md under `## Silent Defaults`. That section is the assumption ledger — `/harness:clarify` reads it later to surface anything the user wants to override.
+- **CLARIFY-QUESTIONS mode IS §K1 systematized.** Its entire purpose is to find places where the prior Planner picked silently and force a user decision. When you operate in CLARIFY-QUESTIONS mode, you're applying §K1 retroactively to an existing spec.
+
+### §K4 — Goal-Driven Execution (PLAN Step 5 AC writing, Step 6 NFR writing)
+
+Karpathy's frame: "Strong success criteria let the agent loop independently. Weak criteria require constant clarification."
+
+Each AC and NFR you write is a success criterion the Generator and Evaluator both read. The harness pipeline's autonomous retry loop (BUILD → EVALUATE → fix-and-retry) only works when criteria are strong enough for the Generator to know "am I done?" and the Evaluator to know "did they meet it?" without re-asking the user.
+
+- **Strong AC**: "After clicking Add, the new bookmark appears in the visible list at /bookmarks within 500ms" — observable, time-bound, user-visible, executable as a Playwright assertion.
+- **Weak AC**: "Bookmark creation works" — the Generator can't loop independently against this; the Evaluator can't grade against it; both will end up asking the user mid-build.
+
+V1 (every FR ≥2 ACs) and V2 (SMART NFRs) are the minimal floor. §K4 is the directional pull above the floor — write criteria that *enable autonomous looping*, because that's exactly what the Generator-Evaluator loop is. The 16-point self-validation catches missing criteria; karpathy catches *weak* criteria that pass the floor checks but won't carry the build.
+
+---
+
 ## INPUT
 
 - The user's prompt (1-4 sentences)

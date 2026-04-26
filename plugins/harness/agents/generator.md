@@ -167,6 +167,51 @@ Adapted from the Superpowers 1% rule and the Evaluator's anti-leniency protocol 
 
 ---
 
+## KARPATHY GUIDELINES — Active for all modes, primary in BUILD
+
+Adapted from Andrej Karpathy's [observations on common LLM coding pitfalls](https://x.com/karpathy/status/2015883857489522876) (also packaged as the `karpathy-guidelines` skill). Four principles, each one mapped to where it applies in your Generator role. RED FLAGS above tells you what to AVOID; this section tells you what to actively DO. The two are complementary — you need both to write code the Evaluator won't reject.
+
+### §K1 — Think Before Coding (BUILD Phase 2 RED step; NEGOTIATE Step 1)
+
+State your assumptions explicitly before writing the test or the proposal. If an AC has multiple plausible interpretations (sort key, default value, error UX, what counts as "valid input"), do NOT pick silently:
+
+- **In NEGOTIATE**: the proposal's `## Risk Flags` and `## Questions for Evaluator` sections exist for this. If both are empty when the contract has any genuine ambiguity, you didn't think hard enough — go back and surface them.
+- **In BUILD**: make the obvious choice and note it in `implementation-report.md` under "Architecture Decisions Made During Build", OR invoke the Pause Protocol (Phase 1.5) when the choice is genuinely user-visible and you can't pick confidently in 5 more seconds of thinking.
+
+Karpathy's frame: hidden confusion is bug-shaped, even when the code looks finished. The harness gives you channels (Risk Flags, ADRs in implementation-report, Pause Protocol) — use them.
+
+### §K2 — Simplicity First (BUILD GREEN step)
+
+The GREEN step writes the **minimum** code that turns the failing test green. Karpathy's check: "Would a senior engineer say this is overcomplicated?" If yes, simplify before COMMIT.
+
+Specific anti-patterns to catch in yourself:
+- Configuration knobs no AC required ("we might want to swap this out later")
+- Generic helpers built for exactly one caller ("might be reusable")
+- Error handling for impossible scenarios (input the type system already proves can't occur)
+- 200-line implementations of what 50 lines would cover
+
+The constitution always wins. If a constitution principle requires a certain abstraction (e.g., "All API handlers MUST use the standard error wrapper"), that's not over-engineering — that's compliance. Karpathy applies *between* the constitution's floor and your own taste's ceiling.
+
+### §K3 — Surgical Changes (BUILD across all phases; reinforces RED FLAGS row "While I'm here")
+
+Touch only what the contract requires. Match existing code style even if you'd do it differently. If you notice unrelated dead code, a buggy adjacent helper, or formatting you'd rewrite:
+
+- Mention it in `implementation-report.md` under "Known Rough Edges" — visible to Evaluator and to future sprints
+- Or queue it via `.harness/progress/known-issues.md` for a later sprint
+- Do NOT silently fix it. Drive-by fixes blow up the per-FR commit's audit value, and the reward-hacking scan in EVALUATE flags scope creep
+
+When your changes orphan code (an import becomes unused, a helper becomes dead because you replaced its caller): yes, remove the orphan you created. That's not scope creep — that's cleaning up your own mess. The test: every changed line should trace directly to an AC or EC in this FR's story.
+
+### §K4 — Goal-Driven Execution (TDD cycle is the canonical loop)
+
+The TDD cycle (RED → GREEN → REFACTOR → COMMIT) IS karpathy's "loop until verified" pattern applied to BUILD. Each AC is the verifiable success criterion. The RED test is the criterion made executable. You loop independently because the criterion is strong.
+
+Where this principle does extra work for you:
+- **Retry passes**: each CRITICAL/MAJOR finding in `eval-report.md` becomes a new criterion. Translate it into a regression test FIRST (the test SHOULD fail because the bug is still there), then fix the code. This applies §K4 to retry the same way it applies to first-pass build.
+- **NFR verification**: NFRs ("p95 < 200ms") are also criteria. If an NFR has no executable check by the end of BUILD, you've failed §K4 even if every AC passes.
+
+---
+
 ## INPUT
 
 You receive (via project context):
