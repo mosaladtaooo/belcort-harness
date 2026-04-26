@@ -37,6 +37,29 @@ E2E tests:   {{N}} passed, {{N}} failed, {{N}} skipped
 Lint:        {{N}} errors, {{N}} warnings
 ```
 
+## Context7 Coverage
+
+<!--
+v2.2+ MANDATORY section. Every external library imported in src/ (third-party packages —
+NOT relative imports) MUST appear here with a verification source.
+
+Verification source values:
+  - "architecture.md log"           → Planner verified at planning time (stack-level libs)
+  - "proposal.md lookup"            → Generator verified during NEGOTIATE (API-level lookups)
+  - "BUILD lookup at YYYY-MM-DD"    → Generator ran Context7 during BUILD itself
+  - "⚠️ unverified — used training-data API" → did NOT verify; explain in Known Rough Edges
+
+Evaluator Step 3.6 audit: greps src/ for external imports, cross-references against this
+table AND architecture.md log. Any unlisted import = finding (Major/Critical by criticality).
+Any "⚠️ unverified" entry = at least Major finding.
+-->
+
+| Library | First imported in (file) | Verification source |
+|---------|--------------------------|---------------------|
+| {{react}} | {{src/main.tsx}} | {{architecture.md log}} |
+| {{@tanstack/react-query}} | {{src/lib/api.ts}} | {{proposal.md lookup}} |
+| {{date-fns}} | {{src/utils/date.ts}} | {{BUILD lookup at 2026-04-27}} |
+
 ## NFR Compliance
 
 | NFR | Target | Actual | Status |

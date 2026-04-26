@@ -54,6 +54,24 @@ src/
 - {{edge_case_draft_contract_missed}}
 - {{dependency_unverified_via_context7}}
 
+## Context7 Lookups Performed
+
+<!--
+v2.2+ MANDATORY section. Every framework-specific API referenced anywhere in this proposal
+(Component Breakdown, Data Model, API Surface, FR→Implementation Mapping, AC→Test Approach)
+MUST appear in this table with a real Context7 lookup result. The architecture.md Context7
+Verification Log already covers Planner-named libraries at the stack level — this table
+adds the API-level / feature-level lookups you performed during NEGOTIATE.
+
+Empty table = REVIEW-PROPOSAL flags `R-NN: Context7 lookups missing or empty` and `needs-revision`.
+Generic entries ("React APIs") = `R-NN: lookups too coarse to be useful` and `needs-revision`.
+-->
+
+| API / library feature | Context7 ID | Lookup query | Verified? | Used in proposal section |
+|-----------------------|-------------|--------------|-----------|--------------------------|
+| {{React Server Components stable APIs}} | {{/facebook/react}} | {{"Server Components in React 19"}} | {{yes}} | {{Component Breakdown — FR-002}} |
+| {{Drizzle select with multiple where conditions}} | {{/drizzle-team/drizzle-orm}} | {{"select where AND conditions"}} | {{yes}} | {{Data Model Proposal}} |
+
 ## Questions for Evaluator
 - {{clarifying_question}}
 

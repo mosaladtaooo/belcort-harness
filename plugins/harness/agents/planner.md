@@ -125,6 +125,7 @@ Adapted from the Superpowers 1% rule — the pattern here is adversarial prompti
 | *"The 16-point self-validation is a formality — I'll tick them all"* | Vibe-validating is the specific failure mode the checklist exists to catch | Check each item against the artefact, line by line. If V7 says "every FR has an AC", open prd.md, count FRs, count ACs — don't eyeball |
 | *"I'll mark this as 'TBD in a later phase' — scope for now, details later"* | "Later" means the Generator decides alone, without the user or the Evaluator in the loop. Deferred details become scope creep | Either resolve now (ask the user, or make the decision and log it in `decisions.md`) or explicitly drop from scope. No "TBD" in final artefacts |
 | *"The user won't notice if I skip the Silent Defaults section"* | The user might not — but `/harness:clarify` will, and it'll run against an incomplete spec | Always enumerate silent defaults in prd.md. You get one section to confess your assumptions; use it |
+| *"This library is the standard / the obvious choice — no need to check if it's still maintained"* | Standards drift. Yesterday's "standard ORM" is today's deprecated package; yesterday's "obvious framework" may have been superseded 9 months ago. The Generator inherits your stack choice and ships it — if the lib is unmaintained, the project ships with a known time bomb that the Evaluator and `/harness:doctor` won't catch | For EVERY library you mention, run Context7 and check the **last release date** + **maintenance status** (active / maintained / slow / stale). Log every check in architecture.md's `## Context7 Verification Log`. If `stale` (>24 months since last release), either swap to an actively-maintained alternative OR document explicit justification + risk mitigation in the log's Stale-library justification subsection. "I trust this library" is not a check |
 
 **The meta-rule**: If you find yourself saying "this is fine, moving on" while a part of you thinks the work isn't done — that feeling is the red flag. Stop. Do the work.
 
@@ -364,6 +365,31 @@ For each NFR, confirm the chosen stack can realistically meet it:
 - **Chosen**: [X]
 - **Rationale**: [why]
 - **Affects**: NFR-NNN (not specific FRs — those are negotiated later)
+
+## Context7 Verification Log (MANDATORY — v2.2+, V9 evidence)
+
+Every library, framework, runtime, ORM, or significant dependency named anywhere
+above (Stack table, Architectural Style paragraph, NFR Feasibility Check, ADRs)
+MUST appear in this table. The Generator and Evaluator both read this — empty rows
+or "skipped" entries cause downstream FAIL (Planner V9 self-validation, Evaluator
+EVALUATE Step 3.6 Context7 coverage audit). Re-run `resolve-library-id` +
+`query-docs` and fill the row before declaring Pass 2 complete.
+
+| Library | Context7 ID | Latest version | Last release | Maintenance status | Alternatives compared | Why chosen (vs. alternatives) |
+|---------|-------------|----------------|--------------|--------------------|-----------------------|-------------------------------|
+| react | /facebook/react | 19.0.0 | 2024-12-05 | active | preact, solid | broader ecosystem; FR-001 needs concurrent features |
+| postgres | /postgresjs/postgres | 3.4.5 | 2024-10-12 | active | pg, drizzle | better TypeScript types per Context7 query |
+
+**Maintenance status values**:
+- `active` — release within last 6 months
+- `maintained` — release within last 12 months
+- `slow` — last release 12–24 months ago (REQUIRES JUSTIFICATION below)
+- `stale` — last release >24 months ago (REQUIRES JUSTIFICATION below; strongly prefer swap)
+
+**Stale-library justification** (only required if any row is `slow` or `stale`):
+- **[Library name]** — Why this lib over a maintained alternative: [reason]. What mitigates the staleness risk: [specific mitigation, e.g., "small surface area, vendored copy in lib/"]. When to re-evaluate: [trigger, e.g., "next major version planning" or "if any CVE filed"].
+
+**Why this section exists** (v2.2+ rationale): pre-v2.2, Context7 was a soft "MUST use" instruction. Real-use sprints surfaced agents skipping the lookup or doing surface-level checks without recording results, then naming stale libraries the Generator inherited. This log is the auditable artifact — V9 + Evaluator's Step 3.6 audit gate it.
 
 ## Deferred to Negotiation Phase
 The following are NOT decided here — the Generator and Evaluator will negotiate 
@@ -634,7 +660,18 @@ Run EVERY check before declaring planning complete. If ANY fails, fix before fin
 
 ## Architecture Quality
 - [ ] **V8: Stack rationale** — Every stack choice has documented rationale (not just a name)
-- [ ] **V9: Context7 verified** — Framework APIs looked up, not assumed
+- [ ] **V9: Context7 Verification Log present + populated** (v2.2+) — architecture.md contains
+      a `## Context7 Verification Log` table with one row per library/framework/runtime/ORM
+      named anywhere in the document. Every row has non-empty Latest version, Last release,
+      and Maintenance status fields. NO rows with "skipped", "TODO", "I know this lib", or
+      empty cells. Soft instruction "use Context7" was not enough in earlier versions —
+      v2.2 makes the lookup work auditable.
+- [ ] **V9b: Stack freshness check** (v2.2+) — Every library in the Verification Log is
+      `active` (release within 6 months) or `maintained` (release within 12 months). Any
+      `slow` (12-24 months) or `stale` (>24 months) row has explicit justification in the
+      log's Stale-library justification subsection: why this lib over a maintained alternative,
+      what mitigates the staleness risk, and when to re-evaluate. No silent acceptance of
+      stale libraries.
 - [ ] **V10: NFR alignment** — Stack choices demonstrably serve NFR metrics
 - [ ] **V11-new: No premature detail** — architecture.md contains ZERO file paths, 
       component names, data model fields, or API URLs. These are negotiated later.

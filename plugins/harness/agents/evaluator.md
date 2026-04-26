@@ -128,6 +128,16 @@ Example: Proposal says "I'll use cookies for session" → you should add an AC a
 
 These flags go into Items Requiring Revision with the reference (e.g., "R3: violates constitution §N").
 
+**Context7-coverage check** (v2.2+ — MANDATORY): does the proposal include the `## Context7 Lookups Performed` section, and is every framework-specific API in the Component Breakdown / Data Model / API Surface backed by a row in that section?
+
+- Section absent entirely → flag as `R-NN: missing Context7 verification — section not present`. This is a `needs-revision` blocker regardless of other content quality.
+- Section present but EMPTY (zero rows) → flag as `R-NN: Context7 lookups missing — section is empty` and `needs-revision`.
+- Section contains generic/unspecific entries (e.g., "React APIs" instead of "React 19 Server Components stable APIs", "ORM features" instead of "Drizzle `select().where()` with multiple conditions") → flag as `R-NN: Context7 lookups too coarse to be useful — restate with specific API + Context7 ID + lookup query`.
+- Proposal references a library or framework API that does NOT appear in the Lookups section AND does NOT appear in `architecture.md` § Context7 Verification Log → flag with the specific unverified API: `R-NN: API <X> referenced in proposal but not in Context7 Lookups Performed nor architecture log`.
+- Proposal uses a library/version pinned in architecture.md whose Maintenance status is `slow` or `stale` AND there's no Stale-library justification → flag as `R-NN: stack-freshness violation — <lib> is <status> with no documented justification`.
+
+**Why this check exists** (v2.2+ rationale): the Planner's V9 self-check covers stack-level libraries; the Generator's NEGOTIATE introduces API-level decisions (specific framework features, ORM query patterns, hook behaviors) the Planner couldn't pre-verify. Without this REVIEW-PROPOSAL check, those API-level decisions slip through and are caught only at EVALUATE Step 3.6 — too late, after code is written. Catching them here is cheaper.
+
 **Karpathy lens** — adapted from Andrej Karpathy's [LLM-coding-pitfalls observations](https://x.com/karpathy/status/2015883857489522876) (packaged as `karpathy-guidelines` skill). Add as Items Requiring Revision when you spot any of these in the proposal:
 
 - **§K2 violation — over-engineered proposal**: configuration that nothing in the contract requires, abstractions used by exactly one caller, "future-proofing" without a documented future user, file/module breakdown 3x more granular than the FR count justifies. Flag as `R-NN: simplicity-first violation — [specific over-engineering]`.
@@ -513,6 +523,67 @@ For each AC's mapped test, ask: "If a user looks at the AC, would this test conv
 Severity: **Critical** — counts as Test Coverage failure regardless of test count. Tests that exercise paths without verifying goals are reward-hacking-adjacent (they make the suite green without making the product right).
 
 **Why this lens is mandatory and not advisory**: the four karpathy principles are exactly the failure modes Anthropic's harness research documented as "evaluators identify legitimate issues, then talk themselves into deciding they weren't a big deal." Naming the principles explicitly counters the talk-yourself-out-of-it pattern: a §K2 over-engineering finding is harder to dismiss than "code feels heavy."
+
+### Step 3.6: Context7 coverage audit — MANDATORY (v2.2+)
+
+The Generator was instructed to use Context7 before every external API call AND to log every lookup in `implementation-report.md` § Context7 Coverage. The Planner did the same in `architecture.md` § Context7 Verification Log. **Verify it actually happened by cross-referencing actual imports in `src/` against those two logs.**
+
+**Why this audit exists**: pre-v2.2, Context7 was a soft "MUST use" instruction. Real-use observation: agents claimed they used Context7 but produced no auditable record, then named outdated APIs / stale libraries. v2.2 makes the work auditable; this step is the gate that turns auditability into enforcement. Without it, the artifact sections become a checkbox the Generator fills with "yes I did it" placeholders.
+
+```bash
+# A. Extract every external library imported in src/ (third-party only — strip ./ and ../)
+EXT_IMPORTS=$(grep -rhE "^(import|from) .* (from )?['\"][^./]" src/ 2>/dev/null \
+  | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/" \
+  | awk -F/ '{ if (substr($1,1,1) == "@") print $1"/"$2; else print $1 }' \
+  | sort -u)
+echo "$EXT_IMPORTS" | head -50
+LIB_COUNT=$(echo "$EXT_IMPORTS" | grep -c .)
+
+# B. Extract libraries already verified in architecture.md Context7 Verification Log
+PLANNER_VERIFIED=$(awk '/^## Context7 Verification Log/,/^## /' .harness/spec/architecture.md \
+  | grep -E '^\| [a-zA-Z@]' | awk -F'|' '{gsub(/ /,"",$2); print $2}' | grep -v '^Library$')
+
+# C. Extract libraries verified in implementation-report.md Context7 Coverage
+FEATURE=$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')
+GEN_VERIFIED=$(awk '/^## Context7 Coverage/,/^## /' ".harness/features/${FEATURE}/implementation-report.md" \
+  | grep -E '^\| [a-zA-Z@]' | awk -F'|' '{gsub(/ /,"",$2); print $2}' | grep -v '^Library$')
+
+# D. Find unverified imports — present in EXT_IMPORTS but in NEITHER verified list
+echo "$EXT_IMPORTS" | while read lib; do
+  [ -z "$lib" ] && continue
+  if ! echo "$PLANNER_VERIFIED" | grep -qx "$lib" && ! echo "$GEN_VERIFIED" | grep -qx "$lib"; then
+    echo "UNVERIFIED: $lib"
+  fi
+done
+```
+
+**Reporting rules:**
+
+For each library in the UNVERIFIED list:
+- **Critical**: the library is core to the feature (database driver, framework, auth library, payment SDK, anything in the architecture.md Stack table) AND was not in the Planner's log either. The Planner missed it; the Generator missed it; the code is now using a training-data-recalled API of an unverified library on a hot path.
+- **Major**: the library is meaningful but not core (HTTP client, validation library, date utility) AND used in user-visible code paths.
+- **Minor**: the library is a small utility (lodash, uuid, classnames) AND used only in low-risk paths.
+
+For each library in the Planner log with Maintenance status `slow` or `stale` that's actually imported in src/:
+- Verify the Stale-library justification subsection in architecture.md addresses this lib. If absent → **Major** finding (`stack-freshness audit failure: <lib> imported but justification missing`). If present → no finding (Planner already accepted the risk on the user's behalf).
+
+For each library in the implementation-report Context7 Coverage marked `⚠️ unverified`:
+- Treat as **Major** by default; **Critical** if the lib is core per the architecture stack table.
+
+**Always include a Step 3.6 audit summary in eval-report.md, even when clean:**
+
+```
+## Context7 Coverage Audit (Step 3.6)
+- Imports scanned: N libraries
+- Verified by Planner (architecture.md log): M
+- Verified by Generator (implementation-report.md): K
+- Unverified: P (see findings below if P > 0)
+- Stale-library imports without justification: Q (see findings below if Q > 0)
+
+[All clean] | [N findings filed under Code Quality]
+```
+
+This summary section confirms the audit ran. Missing summary in eval-report.md = pipeline failure (orchestrator's responsibility to surface, not yours).
 
 ### Step 4: Test Suite Analysis
 
