@@ -384,10 +384,15 @@ if [ "$DESIGN_PRESENT" = "1" ]; then
       break
     fi
 
-    P0_COUNT=$(grep -c '^- \*\*\[P0\]' "$LATEST_AUDIT" 2>/dev/null || echo "0")
-    P1_COUNT=$(grep -c '^- \*\*\[P1\]' "$LATEST_AUDIT" 2>/dev/null || echo "0")
-    P2_COUNT=$(grep -c '^- \*\*\[P2\]' "$LATEST_AUDIT" 2>/dev/null || echo "0")
-    P3_COUNT=$(grep -c '^- \*\*\[P3\]' "$LATEST_AUDIT" 2>/dev/null || echo "0")
+    # NOTE: grep -c returns exit 1 when zero matches in an existing file (POSIX),
+    # which would trigger `|| echo "0"` and produce multi-line output ("0\n0").
+    # Use ${VAR:-0} parameter expansion instead — defaults only when grep printed
+    # nothing (file missing; already guarded above). For zero matches in an
+    # existing file, grep prints "0" alone and the integer test passes.
+    P0_COUNT=$(grep -c '^- \*\*\[P0\]' "$LATEST_AUDIT" 2>/dev/null); P0_COUNT=${P0_COUNT:-0}
+    P1_COUNT=$(grep -c '^- \*\*\[P1\]' "$LATEST_AUDIT" 2>/dev/null); P1_COUNT=${P1_COUNT:-0}
+    P2_COUNT=$(grep -c '^- \*\*\[P2\]' "$LATEST_AUDIT" 2>/dev/null); P2_COUNT=${P2_COUNT:-0}
+    P3_COUNT=$(grep -c '^- \*\*\[P3\]' "$LATEST_AUDIT" 2>/dev/null); P3_COUNT=${P3_COUNT:-0}
 
     # ─── Step C: PASS branch — no P0, exit the loop and proceed to merge ──
     if [ "$P0_COUNT" -eq 0 ]; then
@@ -429,7 +434,7 @@ The full audit report is at: ${LATEST_AUDIT}
 
 Inline content of the report (read this and act on EACH P0):
 
-$(cat \"${LATEST_AUDIT}\")
+$(cat "${LATEST_AUDIT}")
 
 Fix every P0 listed above. Each P0 entry has a 'Where:' location and a 'Fix:' instruction — apply the Fix at the Where. P0s tagged with (constitution §N) are constitutional violations and MUST be fixed; constitution wins over DESIGN.md and over functional convenience.
 
@@ -464,6 +469,20 @@ After this BUILD pass, the audit will re-run automatically. If P0 findings persi
     # If Evaluator returns FAIL, exit this audit-loop (the FAIL branch
     # below handles it; the audit gate doesn't fire again until functional
     # PASS).
+
+    # ─── Step H: Explicit Evaluator-FAIL exit ────────────────────────────
+    # After the Evaluator re-dispatch above writes eval-report.md, parse
+    # the verdict and break out of the audit-loop on FAIL. The existing
+    # functional FAIL branch (5b/5c) downstream of this loop handles
+    # state.retry_count and the user-gate. Without this explicit check,
+    # the loop would re-enter Step A (AUDIT) on a functionally regressed
+    # build, which is not what we want — the audit gate only fires after
+    # a clean functional PASS.
+    EVAL_VERDICT=$(grep -m1 '^\*\*Result:' .harness/features/${FEATURE}/eval-report.md 2>/dev/null | grep -oE 'PASS|FAIL')
+    if [ "$EVAL_VERDICT" = "FAIL" ]; then
+      echo "Audit-driven re-build regressed functionally (Evaluator FAIL on retry ${AUDIT_RETRY_COUNT}). Exiting audit-loop; existing functional FAIL branch will handle via state.retry_count."
+      break
+    fi
 
     # End of loop body — control returns to the `while` condition above.
     # On the next iteration: dispatch AUDIT again (Step A), re-parse counts,

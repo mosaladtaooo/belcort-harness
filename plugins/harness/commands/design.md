@@ -35,7 +35,7 @@ Route on the first token of `$ARGUMENTS`:
 - `explore "<intent>"` → § Subcommand: explore
 - `reroll "<feedback>"` → § Subcommand: reroll
 - `teach` → § Subcommand: teach
-- `audit` → § Subcommand: audit (stub for Step 3)
+- `audit` → § Subcommand: audit (full implementation; user-invoked, presentational only)
 - `extract` → § Subcommand: extract (stub for Step 4)
 - anything else → show usage block, exit
 
