@@ -11,6 +11,181 @@ Three fresh subagents. Isolated contexts. No chat back-channel. Every decision r
 
 ---
 
+## v2.2-staging 更新说明（2026-04-27 · 中文）
+
+> 本分支基于 v2.1.9，新增**完整的设计循环**——让没有技术 / 设计背景的 AI-first 用户能用「先出原型 → 验证 → 再写代码」的工作流构建产品。
+
+### 为什么有这个分支
+
+v2.1.9 的 BELCORT 是**工程化 harness**——擅长把 spec 转成 production-grade 代码。但对没有技术 / 设计背景的用户来说，**spec 是黑盒**：纯文字描述里「用户可以筛选 bookmark」看起来都对，真做出来才发现错。这时已经投入了大量工程时间，返工代价很高。
+
+v2.2-staging 加了一个 **Designer subagent** 和 `/harness:design` 命令族，把「判断成本」从代码完成后**前移到原型阶段**——失败几分钟就丢，工程师一行代码不动。
+
+### 更新清单
+
+| # | Commit | 改动 | 解决什么问题 |
+|---|---|---|---|
+| 1 | `2efafd0` | karpathy-guidelines 集成 | LLM 写代码常犯的 4 大失败模式（过度复杂、隐藏假设、scope 蔓延、模糊验收）三个 agent 都内置了反制 |
+| 2 | `1c4289f` | Context7 强制审计 | Context7 之前是「软指令」，现在是「可审计契约」——架构 log + Generator coverage + Evaluator audit 三层闸门 |
+| 3 | `fb9aad8` + `e9f6c8d` | Designer subagent + `/harness:design` 命令骨架（Step 1） | 引入第 4 个 subagent；EXPLORE / REROLL 模式上线 |
+| 4 | `0b41c93` | TEACH 模式 + sprint 设计上下文注入（Step 2） | 设计系统 codify 成 DESIGN.md，sprint 自动读 |
+| 5 | `4a5c0cb` + `b400120` | AUDIT 模式 + 自动审计闸门 + P0 重试循环（Step 3） | sprint Evaluator PASS 后自动跑设计审计，P0 自动重跑 BUILD（cap 2 次） |
+| 6 | `8d8ab0d` | EXTRACT 模式 + brownfield 检测（Step 4） | 已有项目能从源码抽 design tokens；brownfield 自动识别 |
+| 7 | `9ed8007` + `d201b1a` | REROLL 增强 + `--reference-image` 输入（Step 5） | reroll 历史感知 + 5 轮预算 + 可附参考图锚定方向 |
+
+### 各更新详细说明
+
+#### 1. karpathy-guidelines 集成（`2efafd0`）
+
+把 [Andrej Karpathy 关于 LLM 写代码的反 slop 原则](https://x.com/karpathy/status/2015883857489522876)分别映射到三个 agent：
+
+- **Generator**：全部 4 条原则（思考再写、最简实现、外科手术式改动、可验证目标驱动）
+- **Evaluator**：作为审查 lens，识别过度工程、隐藏假设、scope 蔓延
+- **Planner**：narrow slice——只用 §K1（思考再写：surface assumptions 显式化）+ §K4（可验证 AC / NFR）
+
+**为什么需要**：LLM 写代码默认会过度复杂化、生成不必要的抽象、对 task 做隐性假设。Karpathy 的原则是反制这些的具体行动指引。
+
+#### 2. Context7 强制审计（`1c4289f`）
+
+之前 Context7 是 “MUST use” 的软指令，agent 可以声称用了但没证据。现在变成**可审计的工作流契约**：
+
+- **Planner**：`spec/architecture.md` 加强制 `## Context7 Verification Log` 表（每个库一行：版本、上次发布、维护状态、对比的备选）+ V9 / V9b self-validation 闸门
+- **Generator**：`proposal.md` 加强制 `## Context7 Lookups Performed`；`implementation-report.md` 加强制 `## Context7 Coverage`
+- **Evaluator**：REVIEW-PROPOSAL 和 EVALUATE 都加 Context7 完整性检查（grep `src/` 里的 imports 跨对照两份 log，发现未审计 lib 直接 finding）
+
+**为什么需要**：real-use sprint 实测发现 agent 命名了过时 lib 或用 training-data 里的旧 API。强制 artifact + 自动 audit 关闭这个 gap。
+
+#### 3. Designer subagent + `/harness:design` 命令（Step 1：`fb9aad8`、`e9f6c8d`）
+
+引入第 4 个 subagent `harness:designer`，5 个模式（EXPLORE / REROLL / TEACH / AUDIT / EXTRACT）。Step 1 实现 **EXPLORE + REROLL**：
+
+- `/harness:design explore "<intent>"`——huashu-design 出 3 个不同设计哲学方向 → 用户挑一个 → 生成 hi-fi 可点击 HTML 原型 + Playwright 验证
+- `/harness:design reroll "<feedback>"`——用户不满意，附 feedback 重抽
+
+**为什么需要**：非技术用户能「看图说话」判断对 / 不对，但写不出好 spec。原型给他们一个能用产品本能反应的 artifact。
+
+**Follow-up（`e9f6c8d`）** 修了 Evaluator 抓出的 4 MAJOR + 3 MINOR：REROLL 步骤编号矛盾、`.harness/` 路径前缀漏写 4 处、缺 working-directory contract、huashu 输出捕获方式没说清。
+
+#### 4. TEACH 模式 + sprint 设计上下文注入（Step 2：`0b41c93`）
+
+- **TEACH 模式**：用户验证完原型后跑 `/harness:design teach`——impeccable 把原型 codify 成 `.harness/design/DESIGN.md`（设计 tokens、原则、反 patterns、动效、可访问性）
+- **sprint.md INPUT 补丁**：Planner Step 1 + Generator BUILD 现在条件性读 `.harness/design/{prototype.html, DESIGN.md, PRODUCT.md}` 作为输入——条件性意味着没有这些文件的 sprint 行为完全不变
+
+**为什么需要**：原型只是视觉契约；要让 Planner 写 PRD 和 Generator 写代码时都尊重这个契约，得有可机读的 DESIGN.md 桥接。
+
+#### 5. AUDIT 模式 + 自动审计闸门 + P0 重试循环（Step 3：`4a5c0cb`、`b400120`）
+
+整个 v1 改动最大的一步：
+
+- **AUDIT 模式**：包 impeccable 5 维度 audit（Accessibility / Performance / Theming / Responsive Design / Anti-Patterns）+ **宪法交叉检查**（任何违反 `spec/constitution.md` 的发现自动升级 P0，无视 impeccable 给的 0-4 分）
+- **sprint 自动审计闸门**：Evaluator PASS 后自动 dispatch designer AUDIT。P0 → 自动重跑 BUILD（cap 2 次），P1 → 用户决定，P2 / P3 → 记录
+- **`/harness:design audit`**：用户手动审计（不带自动重试，纯展示）
+
+**为什么需要**：sprint 验完功能但不验视觉。Generator 可能写出「功能对但难看 / 违反 constitution 的 a11y」代码——之前没人接住。
+
+**Follow-up（`b400120`）** 修了 Evaluator 抓出的 2 个 CRITICAL bash bug：
+- `grep -c PATTERN file 2>/dev/null || echo "0"`——零匹配存在文件时 grep 同时输出 `0` + exit 1，触发 `||` 后再输出一个 `0\n0`，整数比较失败让 clean audit 跑成失败重试
+- `$(cat \"...\")`——反斜杠在 `$(...)` 里是字面量，cat 收到带引号字符的文件名找不到文件，让 AUDIT_FEEDBACK 内容为空
+
+这两个都是 LLM 自己写的、看着对实际错的 bash idiom——单 agent 模式很难自查这种盲点，**这就是 generator + evaluator 双 agent 模式的价值**。
+
+#### 6. EXTRACT 模式 + brownfield 检测（Step 4：`8d8ab0d`）
+
+- **EXTRACT 模式**：包 impeccable 的 `document` Scan mode（**只读**抽 tokens——刻意避开 impeccable 自己的 `extract` flow，那个会改源码）。输出到 `.harness/design/extraction/extracted-tokens.md`，含 confidence 评级（HIGH / MEDIUM / LOW）
+- **`/harness:design explore` brownfield gate**：检测到已有项目（`package.json` + `src/` 有内容）但还没 extract → 警告用户先 extract
+- **sprint.md 友好跳过**：brownfield 没 DESIGN.md 时审计闸门优雅跳过，不会硬 fail
+
+**为什么需要**：往已有 app 加 feature 时，AI 不能从零生成方向（会跟现有视觉脱节）。先抽现有 design tokens 作为约束。
+
+**关键决策**：Generator 自己核了 impeccable 源码，发现 `document` 是只读的、`extract` 会改源码——选了 `document`。如果误用 `extract`，brownfield 模式会**无声修改用户源代码**。这种实证验证而非盲信 brief 的工作方式是 v2.2 idiom。
+
+#### 7. REROLL 增强 + `--reference-image`（Step 5：`9ed8007`、`d201b1a`）
+
+最后一步，体验 polish：
+
+- **REROLL 历史感知**：读 prior `directions-summary.md` 的 `## Reroll History`，累积 ban list（之前用过的哲学 / 调色板 / 布局），保证新 round 真的不同
+- **轮次预算硬上限 5 轮**：到顶 halt + 3 个 escape 选项（接受现有 / 重新 explore / 加参考图）
+- **Feedback → constraint 翻译**：用户的「more editorial」被翻译成具体约束（哲学倾向、调色板限制、布局密度）
+- **`--reference-image <path>` 选项**（EXPLORE + REROLL 都支持）：用户附图作为方向锚点。最多 3 张图。pre-validation 校验路径
+
+**为什么需要**：之前 reroll 只是把 feedback 当字符串传给 huashu，没保证新 round 跟旧 round 真的不同。参考图是「用户在跟 AI 设计审美对话」这个根本问题最强的 mitigation——直接附图比文字描述精确得多。
+
+**Follow-up（`d201b1a`）** 修了 Evaluator 抓出的 1 个 CRITICAL：round counter off-by-one——首次 reroll 同时写了 Round 1 + Round 2 共 2 entries，导致后续 round 编号全部偏移 1，cap 提前一轮触发。
+
+### 端到端工作流
+
+#### Greenfield（从零做新产品）
+
+```
+/harness:design explore "要做的产品" [--reference-image ~/inspiration.jpg]
+   → 3 个不同设计哲学方向 → 选 1 → hi-fi 可点击原型
+
+（如果 3 个都不喜欢）
+/harness:design reroll "feedback" [--reference-image ~/another.jpg]
+   → 历史感知重抽，5 轮预算
+
+/harness:design teach
+   → impeccable codify 原型 → .harness/design/DESIGN.md
+
+/harness:sprint "build feature 1"
+   → Planner 自动读 prototype + DESIGN.md
+   → Generator BUILD 应用 design tokens
+   → Evaluator PASS 后自动 AUDIT
+   → P0 自动重跑 BUILD（cap 2 次）
+   → 全过 → merge
+```
+
+#### Brownfield（往已有产品加 feature）
+
+```
+/harness:design explore "新 feature"
+   → 检测到 brownfield + 没 extraction → 警告
+
+/harness:design extract
+   → impeccable document scan-mode（只读）→ extracted-tokens.md
+
+/harness:design teach
+   → 用 extraction 写 DESIGN.md（结合现有 app 风格）
+
+/harness:design explore "新 feature"   ← 重新跑
+   → 现在有 DESIGN.md 约束，方向跟现有 app 一致
+
+后面流程同 greenfield
+```
+
+### 总改动量（基于 v2.1.9）
+
+- **10 个 commit**（5 个 step 主 commit + 4 个 follow-up + karpathy + Context7）
+- **11 个文件改动**，**+2459 行 / -4 行**——零删除其他东西
+
+### 设计哲学
+
+整套循环遵循 BELCORT 的核心原则：
+
+1. **GAN 隔离**：Designer 写 design artifacts，Generator 写代码，Evaluator 审两者——三方互不污染
+2. **文件契约**：所有 inter-agent 通信经 `.harness/design/` 文件，不经 chat
+3. **可审计 artifact**：每个 mode 都产出可读 markdown，用户和 Evaluator 都能查
+4. **失败前移**：原型阶段 catch 大部分错误，工程阶段只面对验证过的设计
+5. **conditional injection**：设计循环是 opt-in 的——不跑 design 命令的 sprint 行为完全不变
+
+### 已知未来工作
+
+Step 5 Evaluator 在 v1 retrospective 里点出 3 件未来要验证或修的事：
+
+1. **huashu-design 的 `--reference-image` 实际效果**：BELCORT wiring 正确，但 huashu 实际能不能「读本地图片让它影响 palette」还需真实测过——可能是 silent no-op
+2. **Brownfield gate 不在 reroll 时触发**：用户 explore 时被 warn 接受了，reroll 时附新图风格可能跟现有 app 撞，没人提醒
+3. **Reroll history 损坏的恢复**：如果用户手动改坏 `directions-summary.md` 的 History 段，Designer 当前没明确 halt
+
+这些都不影响 v1 跑通，作为 v2 候选。
+
+### 给使用者的下一步建议
+
+1. **重启 Claude Code**：让本地 plugin 加载 v2.2-staging 的 Designer + 新命令
+2. **真项目测一次完整流程**：是验证 synthesis 是否真的对的最直接方式
+3. **决定是否合并**：staging → v2-beta（进活跃开发分支）或 → main（出新 release）
+
+---
+
 ## Why this exists
 
 Most "AI code generators" are a single LLM doing everything — planning, coding, self-grading — in one fat context. That setup produces confident-looking but fragile output: the generator reliably praises its own work, misses edge cases because its context is already contaminated with its own assumptions, and skips tests it knows are failing.
