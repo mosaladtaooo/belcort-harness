@@ -1,5 +1,5 @@
 ---
-description: Designer subagent orchestration — visual exploration, hi-fi prototype, design tokens, audit, extract. v1 Step 1 ships explore + reroll; teach/audit/extract land in Steps 2–4. Writes only to .harness/design/, never to source.
+description: Designer subagent orchestration — visual exploration, hi-fi prototype, design tokens, audit, extract. v1 ships explore + reroll (Step 1) + teach (Step 2) + audit (Step 3) + extract (Step 4). Writes only to .harness/design/, never to source.
 argument-hint: "<subcommand> [args]"
 ---
 
@@ -36,7 +36,7 @@ Route on the first token of `$ARGUMENTS`:
 - `reroll "<feedback>"` → § Subcommand: reroll
 - `teach` → § Subcommand: teach
 - `audit` → § Subcommand: audit (full implementation; user-invoked, presentational only)
-- `extract` → § Subcommand: extract (stub for Step 4)
+- `extract` → § Subcommand: extract (full implementation; brownfield onboarding)
 - anything else → show usage block, exit
 
 ---
@@ -53,28 +53,51 @@ Strip the leading `explore` token from `$ARGUMENTS`; the remainder is the user's
 
 …and exit.
 
-### Step 2: Brownfield gate (advisory)
+### Step 2: Brownfield gate (warning + accept-or-decline)
 
-If `.harness/design/extraction/extracted-tokens.md` does NOT exist AND the project has UI source (look for any of: `package.json` with React/Vue/Svelte deps, files matching `src/**/*.{tsx,jsx,vue,svelte}`, `app/**/*.{tsx,jsx}`):
+Detect whether this project is brownfield using these heuristics (any one is sufficient):
 
-Show the user an advisory:
+- `package.json` exists at project root AND lists at least one UI framework dep (`react`, `vue`, `svelte`, `solid-js`, `next`, `nuxt`, `@sveltejs/kit`, `astro`).
+- `src/` directory exists AND contains at least one file matching `src/**/*.{tsx,jsx,vue,svelte}`.
+- `app/` directory exists AND contains at least one file matching `app/**/*.{tsx,jsx,vue,svelte}`.
+- `.harness/manifest.yaml` exists AND `features.completed` (per the manifest schema — a list of completed feature folder names) is non-empty (sprints have already shipped against this codebase).
+
+If NONE of the heuristics fire (greenfield: empty project, or no source code, or no completed features and no UI framework), proceed silently to Step 3 (no warning, no gate).
+
+If brownfield AND `.harness/design/DESIGN.md` does NOT exist AND `.harness/design/extraction/extracted-tokens.md` does NOT exist (no design system codified yet, no extraction on file):
+
+Show the user this warning and require accept-or-decline:
 
 ```
 ═══════════════════════════════
-  Harness — Design Explore
+  Harness — Design Explore (Brownfield Detected)
 ═══════════════════════════════
-Heads-up: this project looks brownfield (UI source detected) and no
-extracted design tokens are on file at .harness/design/extraction/
-extracted-tokens.md.
+Brownfield project detected (existing source code, no design system
+codified yet at .harness/design/DESIGN.md, no token extraction on file
+at .harness/design/extraction/extracted-tokens.md).
 
-The Designer will halt with a recommendation to run `/harness:design extract`
-first if it determines the existing design language matters here.
+For best results, consider running first:
+  /harness:design extract     # auto-extract design tokens from
+                              # existing code
 
-Continue anyway / cancel?
+Then re-run:
+  /harness:design explore "<intent>"     # AI directions will be
+                                         # constrained by your existing
+                                         # design system
+
+Or proceed without extraction (AI may generate directions that don't
+match your existing app's style).
+
+Continue without extraction? [y/N]
 ═══════════════════════════════
 ```
 
-If the user cancels, exit. Otherwise, proceed — the Designer subagent applies the actual brownfield-gate per its EXPLORE Step 1 logic; the orchestrator's advisory is a courtesy.
+Pick parsing is loose: accept `y`, `yes`, `Y`, `YES`, `proceed`, `continue` as accept; anything else (including bare Enter, `n`, `N`, `no`, `cancel`) as decline.
+
+- **If accept**: log a one-line note ("Proceeding without brownfield extraction — AI directions may not match existing app style.") and proceed to Step 3.
+- **If decline**: halt with: `Run /harness:design extract first.` Exit.
+
+If brownfield AND either `.harness/design/DESIGN.md` exists OR `.harness/design/extraction/extracted-tokens.md` exists (a design system or extraction is on file): proceed silently to Step 3 — the Designer subagent will read those files as constraints per its EXPLORE Step 1 logic.
 
 ### Step 3: Dispatch Designer in EXPLORE mode (round 1: directions)
 
@@ -385,13 +408,82 @@ If verdict is PASS (no P0), replace the excerpt block with `_No P0 findings — 
 
 ## Subcommand: `extract`
 
-Implemented in Step 4 of v1. When extract lands, this subcommand will dispatch Designer in EXTRACT mode to read a brownfield project's UI source and produce `extracted-tokens.md`.
+Onboards a brownfield project by scanning its existing source for design tokens (colors, typography, spacing, elevation, motion), reusable components, and inferred design principles. Writes a single report at `.harness/design/extraction/extracted-tokens.md`. The user reviews it, then typically runs `/harness:design teach` to codify into `.harness/design/DESIGN.md`. Single-shot, no human gate (impeccable's document/scan flow does the heavy lifting via the Designer subagent).
 
-For now: tell the user
+### Step 1: Pre-checks
 
-> `/harness:design extract` is implemented in Step 4 of the v1 design loop. Not yet available on this branch. If you have a brownfield design language to honor, document it manually in `.harness/design/DESIGN.md` for now and the Designer will respect it during EXPLORE.
+The Designer cannot extract from nothing. Verify source code exists:
 
-…and exit.
+- Look for any of: `src/` directory with content, `app/` directory with content, `pages/` directory with content, `components/` directory with content, `package.json` at project root.
+- If NONE of those exist, abort with:
+  > `/harness:design extract` requires existing source code. This appears to be an empty or non-code directory. For greenfield, use `/harness:design explore "<intent>"` instead.
+
+  Exit.
+
+Note (do NOT abort) whether `.harness/design/extraction/extracted-tokens.md` already exists. If it does, this is a **re-extract** — pass the fact to Designer in the dispatch prompt so it can diff-highlight what changed from the prior extraction.
+
+### Step 2: Working-directory contract reminder
+
+The Designer's cwd will be the project root (the same as the orchestrator's cwd here). Any `.worktrees/current/.harness/` folder visible during a concurrent build is a stale snapshot — the Designer will NOT read or write it. The dispatch prompt re-states this contract verbatim per the existing pattern in other subcommands.
+
+### Step 3: Dispatch Designer in EXTRACT mode
+
+The orchestrator dispatches the Designer via the Agent tool:
+
+- **subagent_type**: `harness:designer`
+- **description**: `"EXTRACT: scan brownfield source for design tokens"`
+- **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
+
+> --- MODE: EXTRACT ---
+>
+> You are being dispatched in EXTRACT mode. {{INITIAL_OR_REEXTRACT_NOTE}}
+>
+> Working directory contract: your cwd is the project root; never read or write `.worktrees/current/.harness/`.
+>
+> Run the full EXTRACT procedure per your system prompt (Steps 1–9). Detect framework + CSS approach + primary design surface. Read the priority files (token files first — `tailwind.config.*`, `theme.ts`, `tokens.json`, root CSS variable declarations — then main layout, then 3–5 representative components — bounded scan, ~15 files max). Construct an impeccable prompt explicitly invoking the `document` flow in **Scan mode** (NOT impeccable's own `extract` flow, which patches source). Invoke `Skill(impeccable)`. Capture the output, handle the Tailwind/utility-first / multi-framework edge cases per Step 5. Write the report to `.harness/design/extraction/extracted-tokens.md` per Step 6 with all required sections (Color palette, Typography, Spacing scale, Elevation/shadows, Motion tokens, Reusable components found, Inferred design principles, Confidence). Self-validate per Step 7. Print the parseable exit-message line per Step 9.
+>
+> Designer's write surface in EXTRACT mode is `.harness/design/extraction/` only — read-only against source code. Do NOT modify any source file, do NOT run `npm install`, do NOT touch `package.json` or any lockfile.
+
+`{{INITIAL_OR_REEXTRACT_NOTE}}` is replaced by the orchestrator with one of:
+- `"This is the initial extraction (no prior extracted-tokens.md on file)."` if `.harness/design/extraction/extracted-tokens.md` did not exist at Step 1.
+- `"This is a re-extraction — prior extracted-tokens.md exists at .harness/design/extraction/extracted-tokens.md. Read it and diff-highlight what changed from the prior extraction in the new report's ## Diff vs Prior Extraction section."` if it did.
+
+### Step 4: After dispatch returns
+
+The Designer subagent writes `.harness/design/extraction/extracted-tokens.md` and prints a parseable exit line. The orchestrator:
+
+1. Parses Designer's stdout for the `EXTRACT complete. Confidence: ...` line. Capture confidence level (HIGH | MEDIUM | LOW), token counts (colors, fonts, components), and the report path.
+2. Verifies the file exists at `.harness/design/extraction/extracted-tokens.md`. If not, surface the failure to the user verbatim — the Designer's exit message will explain what went wrong.
+3. Reads the first ~40 lines of the report (e.g., `head -40` via Bash, or Read with limit=40) for the excerpt below — enough to show the header comment block + the start of the Color palette section.
+4. Presents to the user:
+
+```
+═══════════════════════════════
+  Harness — Design Extracted
+═══════════════════════════════
+Extraction report: .harness/design/extraction/extracted-tokens.md
+Confidence: <HIGH | MEDIUM | LOW>
+Tokens found: colors=<n>, fonts=<n>, components=<n>
+
+--- First 40 lines ---
+<excerpt>
+--- End excerpt ---
+
+Review the extraction. If it captures your design system well:
+  /harness:design teach     # codify into .harness/design/DESIGN.md
+                            # (impeccable will use this extraction
+                            # as input alongside any prototype)
+
+If extraction was low-confidence (LOW), you may want to:
+  /harness:design explore "<intent>"     # validate a fresh hi-fi
+                                         # prototype that resolves
+                                         # ambiguities, then teach
+═══════════════════════════════
+```
+
+If confidence is LOW, replace the closing block with a stronger nudge: *"Confidence is LOW (utility-first / inline-everywhere / scan blocked). The next step is `/harness:design teach` — impeccable's teach flow will use this sparse extraction as input AND interview you to fill the semantic gaps. Or run `/harness:design explore` to validate a fresh prototype that resolves ambiguities first, then teach."*
+
+Done.
 
 ---
 
@@ -403,6 +495,7 @@ For now: tell the user
 - The orchestrator does NOT auto-progress past human gates. The user-pick gate after EXPLORE/REROLL Step 4 is the only place humans steer the design loop; respect it.
 - `teach`: Designer writes only `.harness/design/DESIGN.md`. Does NOT touch source code, spec files, or any path outside `.harness/design/`. PRODUCT.md is intentionally deferred — if impeccable's teach flow tries to leak a PRODUCT.md to project root, the Designer removes it.
 - `audit` subcommand: Designer writes only `.harness/design/audits/audit-<feature-id>-<n>.md`. NEVER touches source code, spec files, or anything outside `.harness/design/audits/`. The user-invoked variant is presentational — it does NOT auto-loop on P0 (that auto-loop lives in `/harness:sprint`'s post-Evaluator-PASS path); the user-invoked variant just reports findings.
+- `extract` subcommand: Designer in EXTRACT mode is **read-only against source code**. The Designer reads files under `src/`, `app/`, `pages/`, `components/`, `package.json`, and theme/CSS files to scan the design language, but writes ONLY to `.harness/design/extraction/extracted-tokens.md`. The Designer does NOT modify any source file, does NOT run `npm install`, does NOT touch `package.json` / lockfiles / build configs / `.env`, and does NOT consolidate duplicate components (that is impeccable's own `extract` flow's behaviour, which BELCORT's EXTRACT mode explicitly does NOT invoke — it invokes impeccable's `document` flow in scan mode instead). Source-write ownership stays with the Generator; if the extraction report's `## Notes for the Generator (post-codify)` section flags duplicates worth consolidating, that is a future Sprint's BUILD-pass concern, not Designer's.
 
 ---
 
@@ -436,7 +529,16 @@ audit [--target build|prototype]
                        /harness:design audit
                        /harness:design audit --target prototype
 
-extract              Extract tokens from brownfield.   [Step 4 — not yet shipped]
+extract              Scan a brownfield project's source for design tokens
+                     (colors, typography, spacing, elevation, motion),
+                     reusable components, and inferred design principles.
+                     Writes .harness/design/extraction/extracted-tokens.md
+                     so /harness:design teach can codify into DESIGN.md
+                     with empirical grounding (vs interview-from-memory).
+                     Read-only against source code; never modifies any
+                     source file. Brownfield gate in /harness:design
+                     explore warns if you skip extraction first.
+                     Example: /harness:design extract
 
 All design artifacts land under .harness/design/. Source code is never touched.
 ═══════════════════════════════

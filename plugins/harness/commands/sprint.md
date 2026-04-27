@@ -488,6 +488,26 @@ After this BUILD pass, the audit will re-run automatically. If P0 findings persi
     # On the next iteration: dispatch AUDIT again (Step A), re-parse counts,
     # decide.
   done
+else
+  # Audit gate skipped — design context not present. The skip is fine for
+  # greenfield projects (no /harness:design ever ran) but worth a one-line
+  # log on brownfield so the user sees why audit didn't fire and how to
+  # enable it. Heuristic for brownfield: source code present (src/, app/,
+  # pages/, or components/ has content; OR package.json lists a UI framework).
+  if { [ -d "src" ] && [ -n "$(ls -A src 2>/dev/null)" ]; } \
+     || { [ -d "app" ] && [ -n "$(ls -A app 2>/dev/null)" ]; } \
+     || { [ -d "pages" ] && [ -n "$(ls -A pages 2>/dev/null)" ]; } \
+     || { [ -d "components" ] && [ -n "$(ls -A components 2>/dev/null)" ]; } \
+     || [ -f "package.json" ]; then
+    if [ ! -f ".harness/design/DESIGN.md" ]; then
+      echo "Skipping audit-gate: no .harness/design/DESIGN.md (run /harness:design extract + teach to enable design audit on this brownfield project)."
+    fi
+    # If DESIGN.md exists but constitution.md doesn't, the gate would have
+    # required constitution.md anyway — don't second-guess that here.
+  fi
+  # Greenfield case (no source dirs, no package.json): silent skip — the
+  # user hasn't started building anything yet, so a missing design audit
+  # is the expected state.
 fi
 ```
 
