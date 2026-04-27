@@ -117,6 +117,13 @@ Every file under `.harness/` has exactly one writer per phase. If you're not the
 | `progress/changelog.md` | All agents append | All agents |
 | `progress/decisions.md` | Orchestrator (ADR on any spec/prompt change) | All agents |
 | `progress/known-issues.md` | Orchestrator — **three writers**: (a) `/harness:retrospective` on post-merge drift capture (primary); (b) `/harness:edit` Step 6 when a cascade-edit defers a V-gate failure ("defer-to-sprint"); (c) `/harness:audit` when the user chooses "record as debt" for a finding. Append-only; entries persist across sprints. | Retrospective (dedup against existing entries); Audit (verification-debt scan starts here); Planner CLARIFY-QUESTIONS (skip ambiguities already recorded); human |
+| `design/PRODUCT.md` (v2.2+, optional) | User (manual; intentionally deferred from TEACH) | Designer EXPLORE / TEACH (read for product context); Planner (read as design context if present) |
+| `design/DESIGN.md` (v2.2+) | Designer TEACH (initial + re-teach merge) | Designer EXPLORE / AUDIT (read as design system reference); Planner (read as design context); Generator BUILD (read for tokens during UI work) |
+| `design/DESIGN.json` (v2.2+, optional) | Designer TEACH (machine-readable token export, when impeccable produces one) | Generator BUILD (read for programmatic token consumption) |
+| `design/directions/direction-{1,2,3}.html`, `design/directions/directions-summary.md` (v2.2+) | Designer EXPLORE / REROLL (overwrites on every round) | User (visual artifact for picking); Designer REROLL (read prior summary for ban list + history) |
+| `design/prototype/prototype.html`, `design/prototype/prototype-notes.md` (v2.2+) | Designer EXPLORE Step 8 (after user pick; overwrites on re-pick) | User (demo artifact); Designer TEACH (visual contract for codification); Designer AUDIT (audit target if no build); Planner (read as visual contract for sprint design context) |
+| `design/audits/audit-<feature-id>-<n>.md` (v2.2+) | Designer AUDIT (NEW each invocation; `<n>` increments — history-preserved) | sprint.md auto-audit-gate (parses for P0 counts); user (presentational); Designer AUDIT (reads prior audits for retry context) |
+| `design/extraction/extracted-tokens.md` (v2.2+, brownfield) | Designer EXTRACT (overwrites on re-extract; prior diff captured in report) | User (review before TEACH); Designer TEACH (read as brownfield token input); Designer EXPLORE (gates AI directions on brownfield projects) |
 
 ### The "orchestrator does not edit spec files" rule
 

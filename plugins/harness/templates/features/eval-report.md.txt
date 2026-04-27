@@ -9,7 +9,7 @@ Canonical source: this file. The inline copy in plugins/harness/agents/evaluator
 
 # Evaluation Report
 
-**Result**: {{PASS | FAIL}}
+**Result: {{PASS | FAIL}}**
 **Date**: {{ISO_DATE}}
 **Attempt**: {{N}}
 **Verdict reason**: {{one_line — e.g., "FR-003 not met (C1)" or "All FRs met, all criteria above threshold"}}

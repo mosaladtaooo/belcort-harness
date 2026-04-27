@@ -313,6 +313,78 @@ optional_plugin_check "huashu-design"     "Designer EXPLORE+REROLL wrap this ski
 optional_plugin_check "impeccable"        "Designer TEACH+AUDIT+EXTRACT wrap this skill (v2.2+ design loop). Required for /harness:design teach, /harness:design audit, /harness:design extract, and the auto-audit-gate in /harness:sprint." \
   "/plugin marketplace add https://github.com/pbakaus/impeccable && /plugin install impeccable"
 
+# v2.2+ impeccable version probe (Agent 2 C2 finding A4) — Designer wraps the
+# document/teach/audit/extract flows which only exist in impeccable v3+. v2.x
+# had different skill names entirely; the substring match in optional_plugin_check
+# above passes against either v2.x or v3.x indiscriminately, so we add a
+# content probe here that reads SKILL.md and confirms the v3 flow names are
+# present. Without this, /harness:design teach/audit/extract will fail at runtime
+# with a confusing skill-not-found error rather than at preflight with a clear fix.
+check_impeccable_v3() {
+  local skill_md
+  skill_md=$(find "$CLAUDE_HOME/plugins" "$CLAUDE_HOME/skills" -path "*impeccable*/SKILL.md" 2>/dev/null | sort -V | tail -1)
+  [ -z "$skill_md" ] && return  # already covered by optional_plugin_check WARN above
+  if grep -qE '^name:[[:space:]]*impeccable\b' "$skill_md" \
+     && grep -qE 'document|teach|audit|extract' "$skill_md"; then
+    add_result "RECOMMEND" "PASS" "impeccable v3+ flows" "document/teach/audit/extract present in $skill_md"
+  else
+    add_result "RECOMMEND" "FAIL" "impeccable v3+ flows" \
+      "$skill_md does not expose v3 flows (document/teach/audit/extract). v2.x had different skill names. /harness:design teach/audit/extract will fail at runtime." \
+      "Reinstall to pin v3+: /plugin install impeccable@latest"
+  fi
+}
+check_impeccable_v3
+
+# Same approach for huashu-design (lighter check — verify SKILL.md mentions
+# the key capabilities Designer EXPLORE/REROLL relies on).
+check_huashu_design_capabilities() {
+  local skill_md
+  skill_md=$(find "$CLAUDE_HOME/plugins" "$CLAUDE_HOME/skills" -path "*huashu-design*/SKILL.md" 2>/dev/null | sort -V | tail -1)
+  [ -z "$skill_md" ] && return  # already covered by optional_plugin_check WARN above
+  if grep -qE '设计方向顾问|junior designer|junior_designer|prototype|hi-fi' "$skill_md"; then
+    add_result "RECOMMEND" "PASS" "huashu-design capabilities" "key capabilities (设计方向顾问 / junior designer / prototype workflow) present in $skill_md"
+  else
+    add_result "RECOMMEND" "WARN" "huashu-design capabilities" \
+      "$skill_md does not mention 设计方向顾问 / junior designer / prototype — Designer EXPLORE/REROLL may not work as expected." \
+      "Reinstall: /plugin install huashu-design@latest"
+  fi
+}
+check_huashu_design_capabilities
+
+# v2.2+ Playwright npm CLI check (Agent 2 C2 finding E1) — huashu-design's
+# hi-fi validation uses `npx playwright`, NOT the MCP. This is a separate
+# artifact from the MCP that the existing CRITICAL check covers.
+check_playwright_npm_cli() {
+  if ! npx --no-install playwright --version >/dev/null 2>&1; then
+    add_result "RECOMMEND" "WARN" "Playwright npm CLI" \
+      "npx playwright not resolvable — huashu-design's prototype validation uses 'npx playwright', not the MCP" \
+      "npm install -D @playwright/test  # or globally: npm i -g playwright"
+    return
+  fi
+  add_result "RECOMMEND" "PASS" "Playwright npm CLI" "npx playwright resolves"
+}
+check_playwright_npm_cli
+
+# Git identity check (Agent 2 M2 finding E2 — promoted to CRITICAL because
+# without user.name + user.email, the sprint merge step (`git commit ...`)
+# fails AFTER the full pipeline cost has already been paid. Catching it at
+# preflight saves the user a wasted sprint.
+check_git_identity() {
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local name email
+    name=$(git config user.name 2>/dev/null)
+    email=$(git config user.email 2>/dev/null)
+    if [ -n "$name" ] && [ -n "$email" ]; then
+      add_result "CRITICAL" "PASS" "Git identity" "user.name=$name, user.email=$email"
+    else
+      add_result "CRITICAL" "FAIL" "Git identity" \
+        "user.name and/or user.email unset — sprint merge will fail after full pipeline cost" \
+        "git config user.name 'Your Name' && git config user.email 'you@example.com'"
+    fi
+  fi
+}
+check_git_identity
+
 # ─────────────────────────────────────────────────────────────
 # RECOMMENDED: Bash permission pre-allows for npm-family commands
 # ─────────────────────────────────────────────────────────────

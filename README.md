@@ -280,13 +280,14 @@ Plus one Trustworthy-Agents principle:
 
 ---
 
-## The three agents
+## The four agents
 
 | Agent | Subagent type | Job | Tools | Modes |
 |---|---|---|---|---|
 | **Planner** | `harness:planner` | Expands a 1-4 sentence prompt into a product-grade spec (PRD + constitution + architecture + evaluator criteria + per-FR stories + build contract) | Read, Write, Context7 MCP | PLAN, CLARIFY-QUESTIONS, CLARIFY-APPLY, AMEND, EDIT, CONSTITUTION-AMEND |
 | **Generator** | `harness:generator` | Negotiates the contract's HOW, then implements it via TDD. Delegates RED→GREEN→REFACTOR to `superpowers:test-driven-development`. Atomic per-FR commits. | Read, Write, Bash, Context7 MCP | NEGOTIATE, FINALIZE-CONTRACT, BUILD |
 | **Evaluator** | `harness:evaluator` | Adversarial tester. Runs the built app through Playwright, grades against 4 criteria with hard thresholds, runs git-archaeology reward-hacking scan, produces pass/fail verdict with specific findings. | Read, Write, Bash, Playwright MCP | REVIEW-PROPOSAL, EVALUATE, REVALIDATE |
+| **Designer** (v2.2+) | `harness:designer` | Visual-language agent. Wraps `huashu-design` (3 differentiated directions → hi-fi prototype) and `impeccable` (codify, 5-dim audit, brownfield extract). Writes only under `.harness/design/`; never touches source or spec. | Read, Write, Bash, Skill | EXPLORE / REROLL / TEACH / AUDIT / EXTRACT — dispatched via `/harness:design` subcommands and the `/harness:sprint` auto-audit-gate after Evaluator PASS |
 
 Each agent has a `<SUBAGENT-CONTEXT>` block at the top of its system prompt that explicitly forbids re-invoking the harness pipeline or dispatching further subagents. Subagents do ONE job per dispatch, write output to a file, and exit.
 
@@ -305,6 +306,9 @@ Each agent has a `<SUBAGENT-CONTEXT>` block at the top of its system prompt that
   ├─ Generator (BUILD via superpowers:test-driven-development) → source code + atomic commits + implementation-report.md
   │     ↳ may pause mid-build via pause-questions.md → orchestrator collects answers → re-dispatch
   ├─ Evaluator (EVALUATE) — calibration-mandatory examples.md read → Playwright test → Part-A binary gates Part-B numeric → reward-hacking git-archaeology scan → eval-report.md
+  ├─ (v2.2+ if .harness/design/) Designer AUDIT — impeccable 5-dim audit + constitution cross-check
+  │     ├─ P0 found? → BUILD retry (cap 2) → re-EVALUATE → loop
+  │     └─ P0 == 0 → continue to retrospective
   ├─ Tuning check — user agrees/disagrees with Evaluator; divergences logged to tuning-log.md
   ├─ if PASS → retrospective (drift analysis) → merge → manifest.phase = complete
   └─ if FAIL (retries < max) → Generator BUILD again with eval-report.md as retry context
@@ -312,7 +316,7 @@ Each agent has a `<SUBAGENT-CONTEXT>` block at the top of its system prompt that
 
 ---
 
-## The 17 commands
+## The 18 commands
 
 ### Entry points
 
@@ -322,6 +326,7 @@ Each agent has a `<SUBAGENT-CONTEXT>` block at the top of its system prompt that
 | `/harness:quick "<prompt>"` | Fast path. Skip Planner, write a minimal 2-4 AC contract inline, single Generator → Evaluator pass. Use for <30 min scoped tweaks with obvious approach. |
 | `/harness:resume` | Recover from an interrupted sprint. Reads manifest + changelog + git log, dispatches the right subagent for the current phase. |
 | `/harness:brainstorm "<vague idea>"` | Pre-plan exploration for ambiguous prompts (<2 sentences, "maybe", "not sure"). Interviews the user, writes `.harness/brainstorm-current.md`, which the next `/harness:sprint` consumes as additional context. |
+| `/harness:design "<subcommand>"` | Pre-sprint design loop for visual products. Subcommands: `explore` / `reroll` / `teach` / `audit` / `extract`. Generates 3 differentiated visual directions, hi-fi prototypes, codifies design tokens, and runs design audits. v2.2+. |
 
 ### Spec-edit (fresh Planner dispatch + mechanical patch apply)
 
@@ -336,7 +341,7 @@ All spec-edit commands follow the same safety protocol: **the orchestrator never
 
 ### Audit family
 
-Five distinct questions, five distinct tools:
+Six distinct questions, six distinct tools:
 
 | Command / mode | Question it answers |
 |---|---|
@@ -345,8 +350,9 @@ Five distinct questions, five distinct tools:
 | `/harness:audit` | *"Do shipped features have deferred debt, stale known-issues, suspicious skip markers?"* (cross-feature, historical) |
 | Evaluator REVALIDATE mode | *"Does each previously-shipped feature still comply with the NEW constitution?"* (only inside `/harness:constitution-amend`) |
 | `/harness:retrospective` | *"Did the implementation drift from the spec?"* (post-build contract ↔ reality reconciliation) |
+| `/harness:design audit` (v2.2+) | *"Does the built UI satisfy the design system + constitution visually?"* (impeccable 5-dim audit + constitution cross-check on the current feature's prototype OR built UI; user-invoked = presentational; sprint.md auto-audit-gate fires the same audit after Evaluator PASS and loops BUILD on P0 capped at 2 retries; writes `.harness/design/audits/audit-<feature-id>-<n>.md`) |
 
-Mnemonic: **analyze** = consistency, **validate** = completeness, **audit** = debt, **REVALIDATE** = backward-compat, **retrospective** = reality.
+Mnemonic: **analyze** = consistency, **validate** = completeness, **audit** = debt, **REVALIDATE** = backward-compat, **retrospective** = reality, **design audit** = visual conformance.
 
 ### Phase management + lifecycle
 
@@ -501,10 +507,26 @@ None are required; each enhances a specific phase.
 │   ├── analysis-report.md     # /harness:analyze output
 │   ├── retrospective.md       # /harness:retrospective drift analysis
 │   └── .archive/TIMESTAMP/    # Rewind-archived files
-└── progress/
-    ├── changelog.md           # Append-only activity log (all agents)
-    ├── decisions.md           # ADR log (orchestrator)
-    └── known-issues.md        # Retrospective debt
+├── progress/
+│   ├── changelog.md           # Append-only activity log (all agents)
+│   ├── decisions.md           # ADR log (orchestrator)
+│   └── known-issues.md        # Retrospective debt
+└── design/                    # v2.2+ Designer outputs (only present if /harness:design ran)
+    ├── PRODUCT.md             # (optional) product-level intent
+    ├── DESIGN.md              # design tokens + principles (Designer TEACH writes)
+    ├── DESIGN.json            # machine-readable token export
+    ├── directions/            # Designer EXPLORE writes
+    │   ├── direction-1.html
+    │   ├── direction-2.html
+    │   ├── direction-3.html
+    │   └── directions-summary.md
+    ├── prototype/             # Designer EXPLORE Step 8 writes (after pick)
+    │   ├── prototype.html
+    │   └── prototype-notes.md
+    ├── audits/                # Designer AUDIT writes (history-preserved)
+    │   └── audit-<feature-id>-<N>.md
+    └── extraction/            # Designer EXTRACT writes (brownfield only)
+        └── extracted-tokens.md
 ```
 
 All paths are relative to your project root. The harness never touches files outside `.harness/` except during Generator BUILD (source code + git commits) and the `./CLAUDE.md` activation rule file.

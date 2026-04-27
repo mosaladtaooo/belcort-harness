@@ -339,14 +339,53 @@ if [ -z "$FEATURE_ID" ]; then
   FEATURE_ID=$(sed -n 's/^  current_feature: *\([^ #"]*\).*/\1/p' .harness/manifest.yaml)
 fi
 
-# Gate: design context must exist AND constitution.md must exist.
+# Gate: design context must exist AND constitution.md must be substantive.
+# Content-size check (Agent 4 CR-5): a stub DESIGN.md (empty or near-empty) or a
+# stub prototype.html shouldn't fire the gate — we'd dispatch Designer to audit
+# against criteria that don't exist yet, wasting a full Designer + impeccable
+# round and confusing the user. Require constitution.md > 200 bytes (the smallest
+# meaningful constitution has at least a couple of clauses), AND require either
+# DESIGN.md ≥ 2KB (the size below which TEACH self-validation fails) or
+# prototype.html ≥ 1KB (the size below which a real prototype can't fit even
+# a single component).
 DESIGN_PRESENT=0
-if [ -d ".harness/design" ] && { [ -f ".harness/design/DESIGN.md" ] || [ -f ".harness/design/prototype/prototype.html" ]; } && [ -f ".harness/spec/constitution.md" ]; then
-  DESIGN_PRESENT=1
+if [ -d ".harness/design" ] && [ -s ".harness/spec/constitution.md" ] && [ "$(wc -c < .harness/spec/constitution.md 2>/dev/null)" -gt 200 ]; then
+  if { [ -s ".harness/design/DESIGN.md" ] && [ "$(wc -c < .harness/design/DESIGN.md)" -ge 2048 ]; } \
+     || { [ -s ".harness/design/prototype/prototype.html" ] && [ "$(wc -c < .harness/design/prototype/prototype.html)" -ge 1024 ]; }; then
+    DESIGN_PRESENT=1
+  else
+    echo "Skipping audit-gate: design files exist but appear to be stubs (DESIGN.md < 2KB or prototype < 1KB)."
+  fi
 fi
 
 if [ "$DESIGN_PRESENT" = "1" ]; then
   mkdir -p .harness/design/audits
+
+  # Empty-FEATURE_ID guard (Agent 2 + 3 finding): the manifest default for
+  # state.current_feature is "" — both sed fallbacks above return empty in
+  # that case, and a downstream glob like audit-${FEATURE_ID}-*.md would
+  # become audit--*.md, never matching the audit file Designer writes
+  # ("audit-unknown-1.md"). Without this guard the gate writes a report,
+  # the parser misses it, and the gate falsely reports "Manual investigation
+  # required" after a successful build. Halt the gate cleanly instead.
+  if [ -z "$FEATURE_ID" ] || [ "$FEATURE_ID" = '""' ]; then
+    echo "Auto-audit-gate: state.current_feature is empty in manifest. Skipping audit gate (no feature in progress)."
+    DESIGN_PRESENT=0  # short-circuit gate — falls through to skip block below
+  fi
+fi
+
+if [ "$DESIGN_PRESENT" = "1" ]; then
+  # Audit-target resolution (Agent 4 MA-5): pick ONE target before dispatch
+  # rather than passing a literal "URL OR prototype.html" string in the
+  # marker. The Designer never executes init.sh (Agent 4 CR-3 — see
+  # designer.md AUDIT Step 1.2 for the read-only resolution rule); the
+  # orchestrator picks the target by inspecting whether init.sh is present
+  # and executable, and otherwise falls back to the prototype.
+  if [ -f ".harness/init.sh" ] && [ -x ".harness/init.sh" ]; then
+    AUDIT_TARGET="(see Designer Step 1.2 — resolve URL via init.sh inspection)"
+  else
+    AUDIT_TARGET=".harness/design/prototype/prototype.html"
+  fi
 
   while [ "$AUDIT_RETRY_COUNT" -le "$AUDIT_MAX_RETRIES" ]; do
     # ─── Step A: Dispatch Designer in AUDIT mode ───────────────────────────
@@ -356,8 +395,7 @@ if [ "$DESIGN_PRESENT" = "1" ]; then
     # and a prompt containing:
     #
     #   --- MODE: AUDIT ---
-    #   --- AUDIT TARGET: <URL from bash .harness/init.sh, OR
-    #       .harness/design/prototype/prototype.html if no build yet> ---
+    #   --- AUDIT TARGET: ${AUDIT_TARGET} ---
     #
     #   You are being dispatched by /harness:sprint's auto-audit-gate after
     #   Evaluator PASS. Run the full AUDIT procedure per your system prompt
@@ -367,15 +405,26 @@ if [ "$DESIGN_PRESENT" = "1" ]; then
     #   Working directory contract: cwd is project root; never read or
     #   write .worktrees/current/.harness/.
     #
+    # IMPORTANT: the orchestrator captures Designer's stdout (specifically the
+    # "AUDIT complete. ..." exit line) to .harness/design/audits/.last-designer-stdout.txt
+    # so Step B can parse the contractual exit-line counts (Agent 2 + 3 + 4 fix
+    # for severity-laundering — exit-line is authoritative; file-grep is a
+    # fallback only). The orchestrator does this by capturing the Designer's
+    # final-message text from the Agent tool's structured return value.
+    #
     # The Designer writes the audit report to:
     #   .harness/design/audits/audit-${FEATURE_ID}-<n>.md
     # where <n> is the attempt count it computes from the highest existing N.
     #
-    # On return, the Designer prints exactly:
+    # On return, the Designer prints exactly (per designer.md:760 invariant):
     #   AUDIT complete. Verdict: <PASS|FAIL>. P0=<n>, P1=<n>, P2=<n>, P3=<n>. Report: .harness/design/audits/audit-<feature-id>-<n>.md
 
     # ─── Step B: Parse the latest audit file for P0/P1 counts ─────────────
-    LATEST_AUDIT=$(ls -t .harness/design/audits/audit-${FEATURE_ID}-*.md 2>/dev/null | head -1)
+    # Version-sort by N (Agent 4 CR-1) instead of mtime — avoids races when
+    # the user edits an old audit file, when /harness:design audit runs
+    # concurrently, or on network filesystems with clock skew. The audit
+    # filenames are guaranteed numeric; sort -V gives correct ordering.
+    LATEST_AUDIT=$(ls .harness/design/audits/audit-"${FEATURE_ID}"-*.md 2>/dev/null | sort -V | tail -1)
     if [ -z "$LATEST_AUDIT" ] || [ ! -f "$LATEST_AUDIT" ]; then
       # Designer dispatch failed to produce a report. Surface to user; do
       # NOT silently treat as PASS — that bypasses the gate.
@@ -384,18 +433,66 @@ if [ "$DESIGN_PRESENT" = "1" ]; then
       break
     fi
 
-    # NOTE: grep -c returns exit 1 when zero matches in an existing file (POSIX),
-    # which would trigger `|| echo "0"` and produce multi-line output ("0\n0").
-    # Use ${VAR:-0} parameter expansion instead — defaults only when grep printed
-    # nothing (file missing; already guarded above). For zero matches in an
-    # existing file, grep prints "0" alone and the integer test passes.
-    P0_COUNT=$(grep -c '^- \*\*\[P0\]' "$LATEST_AUDIT" 2>/dev/null); P0_COUNT=${P0_COUNT:-0}
-    P1_COUNT=$(grep -c '^- \*\*\[P1\]' "$LATEST_AUDIT" 2>/dev/null); P1_COUNT=${P1_COUNT:-0}
-    P2_COUNT=$(grep -c '^- \*\*\[P2\]' "$LATEST_AUDIT" 2>/dev/null); P2_COUNT=${P2_COUNT:-0}
-    P3_COUNT=$(grep -c '^- \*\*\[P3\]' "$LATEST_AUDIT" 2>/dev/null); P3_COUNT=${P3_COUNT:-0}
+    # Symlink defense (Agent 5 M-5): refuse to read/parse a symlinked audit
+    # file. A user (or a malicious skill output that smuggled a symlink
+    # into .harness/design/audits/) could point this at /etc/passwd or
+    # similar; even when impeccable+Designer wrote a real file at the
+    # canonical path, a later symlink replacement would redirect parsing.
+    if [ -L "$LATEST_AUDIT" ]; then
+      echo "Audit file is a symlink — refusing to read for security. Rerun /harness:design audit to write a fresh report."
+      break
+    fi
+
+    # ─── Severity-laundering defense (Agents 2 + 3 + 4) ──────────────────
+    # Designer's exit line is the contractual authoritative count
+    # (designer.md AUDIT Step 9). The orchestrator captured it to
+    # .last-designer-stdout.txt during dispatch; parse that first. If the
+    # exit line is missing or malformed, fall back to grepping the file
+    # body, but DO log a warning so future drift gets noticed.
+    EXIT_LINE=$(grep -m1 '^AUDIT complete\.' .harness/design/audits/.last-designer-stdout.txt 2>/dev/null)
+    if [[ "$EXIT_LINE" =~ Verdict:\ (PASS|FAIL).*P0=([0-9]+).*P1=([0-9]+).*P2=([0-9]+) ]]; then
+      AUDIT_VERDICT="${BASH_REMATCH[1]}"
+      P0_COUNT="${BASH_REMATCH[2]}"
+      P1_COUNT="${BASH_REMATCH[3]}"
+      P2_COUNT="${BASH_REMATCH[4]}"
+      # P3 captured separately (it may or may not be present in older
+      # exit lines; default 0 if absent).
+      if [[ "$EXIT_LINE" =~ P3=([0-9]+) ]]; then
+        P3_COUNT="${BASH_REMATCH[1]}"
+      else
+        P3_COUNT=0
+      fi
+    else
+      echo "WARNING: Designer exit line malformed or missing; falling back to file-grep."
+      # NOTE: grep -c returns exit 1 when zero matches in an existing file (POSIX),
+      # which would trigger `|| echo "0"` and produce multi-line output ("0\n0").
+      # Use ${VAR:-0} parameter expansion instead — defaults only when grep printed
+      # nothing (file missing; already guarded above). For zero matches in an
+      # existing file, grep prints "0" alone and the integer test passes.
+      P0_COUNT=$(grep -c '^- \*\*\[P0\]' "$LATEST_AUDIT" 2>/dev/null); P0_COUNT=${P0_COUNT:-0}
+      P1_COUNT=$(grep -c '^- \*\*\[P1\]' "$LATEST_AUDIT" 2>/dev/null); P1_COUNT=${P1_COUNT:-0}
+      P2_COUNT=$(grep -c '^- \*\*\[P2\]' "$LATEST_AUDIT" 2>/dev/null); P2_COUNT=${P2_COUNT:-0}
+      P3_COUNT=$(grep -c '^- \*\*\[P3\]' "$LATEST_AUDIT" 2>/dev/null); P3_COUNT=${P3_COUNT:-0}
+      AUDIT_VERDICT=$([ "$P0_COUNT" -eq 0 ] && echo "PASS" || echo "FAIL")
+    fi
+
+    # Severity-laundering defense: if Designer reports PASS but file-body
+    # grep finds any P0 entry, treat as FAIL. Catches a Designer that
+    # downgrades silently OR an exit-line that's structurally valid but
+    # semantically lies (e.g., "P0=0" emitted while the punch list still
+    # contains [P0] entries — the human-readable section the Generator
+    # would consume on retry would still show them).
+    if [ "$AUDIT_VERDICT" = "PASS" ]; then
+      P0_GREP_COUNT=$(grep -c '^- \*\*\[P0\]' "$LATEST_AUDIT" 2>/dev/null); P0_GREP_COUNT=${P0_GREP_COUNT:-0}
+      if [ "$P0_GREP_COUNT" -gt 0 ]; then
+        echo "Severity-laundering defense: Designer reported PASS but file-grep found P0=${P0_GREP_COUNT}. Treating as FAIL."
+        AUDIT_VERDICT="FAIL"
+        P0_COUNT="$P0_GREP_COUNT"
+      fi
+    fi
 
     # ─── Step C: PASS branch — no P0, exit the loop and proceed to merge ──
-    if [ "$P0_COUNT" -eq 0 ]; then
+    if [ "$AUDIT_VERDICT" = "PASS" ] && [ "$P0_COUNT" -eq 0 ]; then
       echo "Design audit passed (no P0). P1=${P1_COUNT}, P2=${P2_COUNT}, P3=${P3_COUNT} logged for review."
       # Surface P1+ to the user before tuning check (presentational only;
       # the loop has finished, control falls through to 5a-pre).
@@ -572,7 +669,7 @@ git worktree remove .worktrees/current 2>/dev/null
 
 Then the orchestrator (via Edit tool) updates:
 - `ROADMAP.md` — move feature to "✅ Shipped".
-- `.harness/manifest.yaml` — `features.completed` append, `features.in_progress = ""`, `state.phase = "complete"`, `state.retry_count = 0`.
+- `.harness/manifest.yaml` — `features.completed` append, `features.in_progress = ""`, `state.current_feature = ""` (Agent 3 M3: clear current_feature on merge so the next sprint's audit gate doesn't reuse the just-merged feature-id), `state.phase = "complete"`, `state.retry_count = 0`, `state.design_reroll_round = 0` (TIER A5: reset reroll counter — a new sprint starts fresh).
 
 Print scores + completion message. If the auto-audit-gate ran (i.e., `.harness/design/` was present), the completion message also surfaces: total audit attempts (max(N) of `audit-${FEATURE_ID}-N.md`), final audit verdict (PASS / FAIL — force-merged), and any P1+ findings that were logged for later. If the gate did not run (no `.harness/design/`), the completion message is unchanged from v2.2.
 

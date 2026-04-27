@@ -47,6 +47,12 @@ Generates 3 visual directions, halts at user-pick gate, then on user pick re-dis
 
 Optionally accepts up to 3 `--reference-image <path>` flags (or `--reference-image=<path>` form). Reference images are user-provided visual anchors that constrain palette / vibe / typography influence across all 3 directions — the Designer never modifies them, only passes paths to huashu-design with an explicit anchor-not-clone instruction. Reference images do NOT relax the 3-distinct-philosophies rule (the diversity rule still applies; the image bounds the palette/vibe space, not the philosophy axis).
 
+### Step 0: Reset reroll counter (Agent 3 + 4 finding A5)
+
+`/harness:design explore` starts a fresh exploration. Before any other work, the orchestrator resets `state.design_reroll_round` in `.harness/manifest.yaml` to 0 (Edit-tool or sed/awk; the field has safe-default 0 if absent on legacy manifests). This pairs with `/harness:design reroll`'s post-dispatch increment (see reroll Step 5) and the merge-time reset in sprint.md to keep the manifest counter aligned with the file-based `## Reroll History` count Designer maintains.
+
+This reset happens BEFORE Step 1 — even if the user later cancels at the human gate, a fresh explore should imply a fresh budget. If `.harness/manifest.yaml` doesn't exist (the harness hasn't been initialized), skip silently — there's no field to reset.
+
 ### Step 1: Validate intent + parse reference-image flags
 
 Strip the leading `explore` token from `$ARGUMENTS`. Parse the remainder for:
@@ -66,7 +72,8 @@ If the intent is empty (`/harness:design explore` with no payload), tell the use
 2. **Path expansion**: for each path, expand `~` to `$HOME` (Bash: `eval echo "$path"` is unsafe; use parameter expansion or `${path/#\~/$HOME}` style — the orchestrator can resolve this via Bash `realpath` or Node `path.resolve` depending on the harness runtime). Resolve relative paths against the orchestrator's cwd (project root) into absolute paths.
 3. **Existence check**: each resolved path must exist as a regular file. If any does not exist, abort with: *"Reference image not found: `<path>`. Check the path is correct and the file exists, then re-run."*
 4. **Extension check**: each path's extension must be one of `.jpg`, `.jpeg`, `.png`, `.webp` (case-insensitive). If any other extension, abort with: *"Reference image `<path>` is not a supported format. Allowed: .jpg / .jpeg / .png / .webp. Convert and re-run."*
-5. **Capture** the validated absolute paths as `${REFERENCE_IMAGES}` (comma-joined string) for the dispatch prompt.
+5. **Marker-collision rejection (Agent 5 M-1)**: reject any path containing a literal `---` (the dispatch-marker delimiter), a newline (`\n`), a NUL byte (`\0`), or shell metacharacters (`;`, `&&`, `||`, `$(`, backtick `` ` ``). If any path contains one of these, abort with: *"Reference image path contains characters that conflict with dispatch protocol. Rename the file or use a different path."* Rationale: the dispatch prompt embeds these paths inside a `--- REFERENCE-IMAGES: ${REFERENCE_IMAGES} ---` marker; a path containing `---` would split the marker structurally and let downstream content masquerade as a new mode marker. The shell-metacharacter set defends the path-resolution Bash that runs in this very step.
+6. **Capture** the validated absolute paths as `${REFERENCE_IMAGES}` (comma-joined string) for the dispatch prompt.
 
 If no `--reference-image` flag was provided, `${REFERENCE_IMAGES}` is empty — the dispatch prompt simply omits the marker. Reference images are optional.
 
@@ -284,6 +291,16 @@ The user-pick UX after a REROLL is identical to after an EXPLORE round:
 **Round-budget halt handling**: if Designer halts because the round counter exceeded 5 (Designer's REROLL Step 1 budget check), surface Designer's halt message verbatim to the user — it lists the 3 explicit options (accept-existing / fresh-explore / explore-with-reference-image). Do NOT silently re-dispatch or treat the halt as a failure; the cap is a feature.
 
 If the user is not satisfied with the REROLL round either, they can run `/harness:design reroll "<new feedback>"` again — provided they're below round 5. The hard cap at 5 rounds is enforced by the Designer subagent (REROLL Step 1.6); the orchestrator does not need to track round count itself, but it should expect Designer to halt with the budget message at round 6 and surface that halt to the user with the 3 options.
+
+### Step 5: Increment manifest reroll counter (Agent 3 + 4 finding A5)
+
+After Designer returns successfully (i.e., it did NOT halt with a budget-exhausted message — a halt path means no new round was added), the orchestrator increments `state.design_reroll_round` in `.harness/manifest.yaml` by 1. This mirrors the file-based `## Reroll History` count that Designer just appended to in REROLL Step 6, so a tamper-detection cross-check (Designer REROLL Step 1.6) can later compare the two and halt if they diverge with `manifest_round >= 5`.
+
+The orchestrator updates the field via Edit tool (or sed/awk for resilience). For a manifest entry like `  design_reroll_round: 0`, increment to `  design_reroll_round: 1`, etc. If the field is missing (legacy manifest), the orchestrator first inserts it under `state:` with safe-default 0 then increments to 1.
+
+This update is mechanical and does NOT involve a subagent — it's a local manifest field tracking a counter, not a spec edit. Per the v2 ownership rule, `state.*` is the orchestrator's writer territory, so this stays in scope.
+
+If Designer halted with the budget-exhausted message (round > 5 OR manifest cross-check fired), do NOT increment — the round didn't happen. Surface Designer's halt verbatim to the user.
 
 ---
 

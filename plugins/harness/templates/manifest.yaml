@@ -63,6 +63,17 @@ state:
   negotiation_round: 0       # incremented each proposal↔review cycle; max 3 before escalation
   retry_count: 0
   last_session: ""           # ISO timestamp of last agent dispatch
+  # v2.2+ design loop — Designer REROLL round counter (Agent 3 + 4 finding A5).
+  # Designer's REROLL Step 1 counts "## Reroll History" entries to compute the
+  # round number, but the user can delete that section to bypass the 5-round
+  # hard cap. This field tracks the same count from the orchestrator's side
+  # (incremented by /harness:design reroll Step 5; reset to 0 by
+  # /harness:design explore Step 0 and on merge). Designer's Step 1.5
+  # cross-checks: if entries < manifest_round AND manifest_round >= 5, the
+  # history was truncated and the budget is already exhausted — halt.
+  # Schema migration safe-default (per harness.version comment): treat as 0
+  # if absent on legacy manifests.
+  design_reroll_round: 0
 
 features:
   completed: []              # List of completed feature folder names
