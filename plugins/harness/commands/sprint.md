@@ -53,6 +53,39 @@ Dispatch pattern (v2.1.0+): the Planner is a plugin-shipped subagent type declar
 
 If a brainstorm file exists, the orchestrator includes its content in the Planner dispatch as additional context.
 
+**Design context injection (v1 design loop integration):** before dispatching the Planner, the orchestrator constructs a `DESIGN_CONTEXT` string that is appended to the Planner dispatch prompt if (and only if) a hi-fi prototype exists from a prior `/harness:design explore` run. This injection is fully conditional — when no `.harness/design/prototype/` exists, sprint.md behaviour is unchanged from v2.2.
+
+```bash
+# Load design context if a prototype exists from /harness:design explore
+DESIGN_CONTEXT=""
+if [ -f ".harness/design/prototype/prototype.html" ]; then
+  DESIGN_CONTEXT="
+--- DESIGN CONTEXT (from /harness:design explore + teach) ---
+
+A hi-fi prototype was created and validated by the user before this sprint. Read these files in addition to the spec:
+
+- \`.harness/design/prototype/prototype.html\` — visual contract for what the user expects to see
+- \`.harness/design/prototype/prototype-notes.md\` — interaction map: what's clickable, what's mock vs functional, declared gaps"
+
+  if [ -f ".harness/design/DESIGN.md" ]; then
+    DESIGN_CONTEXT="${DESIGN_CONTEXT}
+- \`.harness/design/DESIGN.md\` — design system (tokens, principles, anti-patterns, motion, accessibility) the build must respect"
+  fi
+
+  if [ -f ".harness/design/PRODUCT.md" ]; then
+    DESIGN_CONTEXT="${DESIGN_CONTEXT}
+- \`.harness/design/PRODUCT.md\` — product-level intent (users, brand, tone, anti-references) that informs the architecture"
+  fi
+
+  DESIGN_CONTEXT="${DESIGN_CONTEXT}
+
+When writing PRD, treat the prototype as visual contract — don't redesign the UX, transcribe what the prototype shows into FRs/UJs/ACs. When writing architecture, derive component breakdown that mirrors the prototype's structure. The prototype is INPUT (supplement) not REPLACEMENT — your negotiate phase still runs and can refine HOW.
+--- END DESIGN CONTEXT ---"
+fi
+```
+
+If `DESIGN_CONTEXT` is non-empty, the orchestrator appends it (verbatim) to the end of the Planner dispatch prompt below — after `$ARGUMENTS` and after the brainstorm block (if any).
+
 The orchestrator dispatches the Planner via the Agent tool:
 
 - **subagent_type**: `harness:planner`
@@ -67,6 +100,8 @@ The orchestrator dispatches the Planner via the Agent tool:
 > $ARGUMENTS
 >
 > [If `.harness/brainstorm-current.md` exists, the orchestrator appends its full content here under a `--- BRAINSTORM CONTEXT ---` marker before invoking the Agent tool.]
+>
+> [If `.harness/design/prototype/prototype.html` exists, the orchestrator appends `${DESIGN_CONTEXT}` (constructed above) here. When no prototype exists, this append is a no-op and the dispatch proceeds unchanged.]
 
 **After Planner returns, the orchestrator (not a subagent) performs these housekeeping steps using the Bash/Edit tools. These are natural-language instructions — not a shell script:**
 
@@ -183,6 +218,24 @@ Assemble the dispatch context. The Generator reads most files via its own Read t
 
 If `.harness/features/${FEATURE}/eval-report.md` exists (this is a retry), the orchestrator reads its content and appends it to the Agent prompt under a `--- EVALUATOR FEEDBACK (fix these) ---` marker before the user-request block.
 
+**Design system injection into BUILD context (v1 design loop integration):** before dispatching the Generator, the orchestrator constructs a `DESIGN_BUILD_CONTEXT` string that is appended to the Generator BUILD dispatch prompt if (and only if) `.harness/design/DESIGN.md` exists from a prior `/harness:design teach` run. Fully conditional — no DESIGN.md, no append, behaviour unchanged.
+
+```bash
+# Inject design system into Generator BUILD context if it exists
+DESIGN_BUILD_CONTEXT=""
+if [ -f ".harness/design/DESIGN.md" ]; then
+  DESIGN_BUILD_CONTEXT="
+--- DESIGN SYSTEM CONTEXT (from /harness:design teach) ---
+
+Read \`.harness/design/DESIGN.md\` before implementing UI components. Apply the design tokens (colors, typography, spacing, elevation) it specifies. Cross-check rendered output against \`.harness/design/prototype/prototype.html\` if you can — components should look like that prototype, not your own design taste.
+
+If DESIGN.md and constitution conflict, constitution wins (per the existing constitution-vs-DESIGN priority rule).
+--- END DESIGN SYSTEM CONTEXT ---"
+fi
+```
+
+If `DESIGN_BUILD_CONTEXT` is non-empty, the orchestrator appends it (verbatim) to the end of the Generator BUILD dispatch prompt below — after the key-files list and after the evaluator-feedback block (if any).
+
 The orchestrator dispatches the Generator via the Agent tool:
 
 - **subagent_type**: `harness:generator`
@@ -203,6 +256,8 @@ The orchestrator dispatches the Generator via the Agent tool:
 > - .harness/evaluator/criteria.md
 >
 > [If `.harness/features/${FEATURE}/eval-report.md` exists, the orchestrator appends its full content here under a `--- EVALUATOR FEEDBACK (fix these) ---` marker before invoking the Agent tool.]
+>
+> [If `.harness/design/DESIGN.md` exists, the orchestrator appends `${DESIGN_BUILD_CONTEXT}` (constructed above) here. When no DESIGN.md exists, this append is a no-op and the dispatch proceeds unchanged.]
 
 ---
 

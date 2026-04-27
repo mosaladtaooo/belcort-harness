@@ -33,7 +33,7 @@ Route on the first token of `$ARGUMENTS`:
 
 - `explore "<intent>"` → § Subcommand: explore
 - `reroll "<feedback>"` → § Subcommand: reroll
-- `teach` → § Subcommand: teach (stub for Step 2)
+- `teach` → § Subcommand: teach
 - `audit` → § Subcommand: audit (stub for Step 3)
 - `extract` → § Subcommand: extract (stub for Step 4)
 - anything else → show usage block, exit
@@ -218,13 +218,70 @@ If the user is not satisfied with the REROLL round either, they can run `/harnes
 
 ## Subcommand: `teach`
 
-Implemented in Step 2 of v1. When teach lands, this subcommand will dispatch Designer in TEACH mode to apply chosen design tokens to existing source code via `impeccable`.
+Codifies the validated hi-fi prototype's design language into a reusable `.harness/design/DESIGN.md` artifact. The Planner reads this on subsequent `/harness:sprint` runs to ground its PRD/architecture; the Generator reads it during BUILD to apply tokens to UI components. Single-shot, no human gate (impeccable does the heavy lifting).
 
-For now: tell the user
+### Step 1: Pre-checks
 
-> `/harness:design teach` is implemented in Step 2 of the v1 design loop. Not yet available on this branch. Use `/harness:design explore` for visual direction work today.
+Verify the prototype exists. The Designer cannot codify a design language from nothing:
 
-…and exit.
+- If `.harness/design/prototype/prototype.html` does NOT exist, abort with:
+  > `/harness:design teach` requires a hi-fi prototype. Run `/harness:design explore "<intent>"` first to generate one.
+- If `.harness/design/prototype/prototype-notes.md` does NOT exist, abort with the same message — the prototype-notes file carries the interaction map the Designer needs alongside the visual artifact.
+
+Note (do NOT abort) whether `.harness/design/DESIGN.md` already exists. If it does, this is a re-teach — pass the fact to Designer in the dispatch prompt so it merges rather than overwriting blindly.
+
+### Step 2: Dispatch Designer in TEACH mode
+
+The orchestrator dispatches the Designer via the Agent tool:
+
+- **subagent_type**: `harness:designer`
+- **description**: `"TEACH: codify design system from prototype"`
+- **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
+
+> --- MODE: TEACH ---
+>
+> You are being dispatched in TEACH mode. {{INITIAL_OR_RETEACH_NOTE}}
+>
+> Working directory contract: your cwd is the project root; never read or write `.worktrees/current/.harness/`.
+>
+> Read the prototype + prototype-notes per your TEACH Step 1 (`.harness/design/prototype/prototype.html`, `.harness/design/prototype/prototype-notes.md`). Read optional inputs per Step 2 (`.harness/spec/constitution.md`, `.harness/design/extraction/extracted-tokens.md`, prior `.harness/design/DESIGN.md` if re-teach). Construct an impeccable teach prompt per Step 3. Invoke `Skill(impeccable)`. Capture the DESIGN.md content, verify it's ≥2KB and contains the harness-required sections, scan for constitution conflicts. Write `.harness/design/DESIGN.md` per Step 7 (with the Designer header comment block prepended). See your system prompt for the full TEACH procedure.
+
+`{{INITIAL_OR_RETEACH_NOTE}}` is replaced by the orchestrator with one of:
+- `"This is the initial teach (no prior DESIGN.md on file)."` if `.harness/design/DESIGN.md` did not exist.
+- `"This is a re-teach — prior DESIGN.md exists at .harness/design/DESIGN.md. Merge updates surgically rather than overwriting blindly per K3."` if it did.
+
+### Step 3: After dispatch returns
+
+The Designer subagent writes `.harness/design/DESIGN.md` and exits. The orchestrator:
+
+1. Verifies the file exists and is ≥2KB. If not, surface the failure to the user verbatim (Designer's exit message will explain).
+2. Reads the first ~30 lines of DESIGN.md (e.g., `head -30 .harness/design/DESIGN.md` via Bash, or Read with limit=30).
+3. Presents to the user:
+
+```
+═══════════════════════════════
+  Harness — Design Codified
+═══════════════════════════════
+DESIGN.md written: .harness/design/DESIGN.md
+Size: <N> bytes
+Sections: ✓ Design Tokens, ✓ Principles, ✓ Anti-patterns, ✓ Motion, ✓ Accessibility
+Constitution conflicts: <none | N flagged in ## Constitution Conflicts section>
+
+--- First 30 lines ---
+<excerpt>
+--- End excerpt ---
+
+Review the full file. If you want to change specific sections, run:
+  /harness:edit DESIGN.md
+…or just edit the file directly. The next /harness:sprint will pick it up
+automatically — Planner reads DESIGN.md as design context, Generator reads
+it during BUILD.
+═══════════════════════════════
+```
+
+If the Designer exited with a `## Constitution Conflicts` warning, replace the success header with a yellow-flag header and surface the conflict count + conflict summaries to the user so they can decide whether to reconcile before the next sprint.
+
+Done.
 
 ---
 
@@ -258,6 +315,7 @@ For now: tell the user
 - The orchestrator does NOT call `huashu-design` or `impeccable` directly — the Designer subagent owns those Skill invocations. The orchestrator's job is dispatch + human-gate UX + re-dispatch.
 - The orchestrator does NOT dispatch Planner / Generator / Evaluator from `/harness:design`. Design is a separate axis from build; cross-axis interaction happens at the user's discretion (the user runs `/harness:sprint` after the design loop completes if they want to build).
 - The orchestrator does NOT auto-progress past human gates. The user-pick gate after EXPLORE/REROLL Step 4 is the only place humans steer the design loop; respect it.
+- `teach`: Designer writes only `.harness/design/DESIGN.md`. Does NOT touch source code, spec files, or any path outside `.harness/design/`. PRODUCT.md is intentionally deferred — if impeccable's teach flow tries to leak a PRODUCT.md to project root, the Designer removes it.
 
 ---
 
@@ -274,7 +332,11 @@ reroll "<feedback>"  Regenerate 3 directions with feedback. Requires a prior
                      explore round on file.
                      Example: /harness:design reroll "all three felt corporate"
 
-teach                Apply chosen tokens to source.    [Step 2 — not yet shipped]
+teach                Codify prototype into .harness/design/DESIGN.md (tokens +
+                     principles + anti-patterns + motion + accessibility) so
+                     /harness:sprint can ground specs in the design language.
+                     Requires a prior explore round.
+
 audit                Review existing UI vs impeccable. [Step 3 — not yet shipped]
 extract              Extract tokens from brownfield.   [Step 4 — not yet shipped]
 
