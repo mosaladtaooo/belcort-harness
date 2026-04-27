@@ -30,12 +30,12 @@ BELCORT is a production-grade implementation of that harness, shipped as a Claud
 In Claude Code:
 
 ```
-/plugin marketplace add https://github.com/mosaladtaooo/belcort-harness.git#v2-beta
+/plugin marketplace add https://github.com/mosaladtaooo/belcort-harness.git
 /plugin install harness@belcort-harness
 /reload-plugins
 ```
 
-Verify: `/plugin` → Installed tab → `harness@2.1.1`. `/agents` → three custom agents listed: `harness:planner`, `harness:generator`, `harness:evaluator`.
+Verify: `/plugin` → Installed tab → `harness@2.1.9`. `/agents` → three custom agents listed: `harness:planner`, `harness:generator`, `harness:evaluator`.
 
 ### Initialize a project
 
