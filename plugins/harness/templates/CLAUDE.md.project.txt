@@ -8,7 +8,13 @@ If there is even a 1% chance the harness should be active for a given request, i
 
 ## Trigger phrases
 
-When the user's prompt contains any of: `build`, `create`, `implement`, `make an app`, `develop`, `set up a project`, `new feature`, AND the task would take more than ~15 minutes of real work — suggest `/harness:sprint`.
+When the user's prompt contains any of: `build`, `create`, `implement`, `make an app`, `develop`, `set up a project`, `new feature`, AND the task would take more than ~15 minutes of real work — **route based on whether the product has a UI**:
+
+- **Has a UI** (web app, mobile app, dashboard, landing page, anything with a user-facing surface) — suggest `/harness:design explore "<intent>"` FIRST. The design loop produces a clickable HTML prototype the user validates by feel BEFORE any production code is written. Especially important when the user mentions they don't have design background, says "I want to see it first", or seems unsure what it should look like. After they validate the prototype + run `/harness:design teach`, THEN suggest `/harness:sprint`.
+- **No UI** (CLI, backend, data pipeline, library) — suggest `/harness:sprint` directly.
+- **Brownfield** (adding feature to existing app) — suggest `/harness:design extract` first to scan existing source for design tokens, then the design-first flow above.
+
+Additional design-loop triggers (route to `/harness:design`): `design`, `prototype`, `make a UI`, `make a website`, `make a landing page`, `mockup`, `what should it look like`, `show me what`, `I want to see`, `not sure what it should look like`, `I'm not a designer`.
 
 Skip the suggestion for: quick questions ("how do I X?"), single-line fixes, conversational requests, explicit manual-help asks.
 

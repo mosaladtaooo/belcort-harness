@@ -29,6 +29,7 @@ Each procedure lives in its own file under `commands/`. This is a pointer table,
 | `/harness:brainstorm "<idea>"` | [commands/brainstorm.md](../../commands/brainstorm.md) | Pre-plan exploration for vague/ambiguous requests. Interviews the user, surfaces silent assumptions, writes `.harness/brainstorm-current.md` so the subsequent `/harness:sprint` has a concrete prompt. Orchestrator-only (no subagent dispatch). |
 | `/harness:sprint "<prompt>"` | [commands/sprint.md](../../commands/sprint.md) | Full pipeline: plan → analyze → [human gate] → negotiate → build → evaluate → tuning → retrospect → merge |
 | `/harness:quick "<prompt>"` | [commands/quick.md](../../commands/quick.md) | Fast: skip Planner, minimal contract, single build+QA pass |
+| `/harness:design <subcommand>` | [commands/design.md](../../commands/design.md) | **Design loop (v2.2+)** — pre-sprint visual prototyping for products with a UI. Subcommands: `explore "<intent>"` (3 directions → user picks → hi-fi clickable HTML prototype), `reroll "<feedback>"` (history-aware re-spin, 5-round budget), `teach` (codify prototype → `.harness/design/DESIGN.md`), `audit` (5-dim impeccable audit + constitution cross-check), `extract` (brownfield: scan source → tokens). EXPLORE/REROLL accept `--reference-image <path>` (up to 3) to anchor visual direction. Dispatches new `harness:designer` subagent which wraps `huashu-design` + `impeccable` skills. **Recommended entry point for visual products** — run BEFORE `/harness:sprint` so the build phase has design context. |
 | `/harness:resume` | [commands/resume.md](../../commands/resume.md) | Recover from any phase using `manifest.yaml` + `changelog.md` |
 | `/harness:clarify` | [commands/clarify.md](../../commands/clarify.md) | Post-plan structured Q&A — surface spec ambiguities, collect answers in files, auto-patch specs. Runs before human approval gate. |
 | `/harness:analyze` | [commands/analyze.md](../../commands/analyze.md) | Cross-artifact consistency check (PRD ↔ architecture ↔ contract) |
@@ -55,6 +56,7 @@ Subagents are dispatched via the **Agent tool** using plugin-declared `subagent_
 - `harness:planner` — Planner agent (PLAN, CLARIFY-QUESTIONS, CLARIFY-APPLY, AMEND, EDIT, CONSTITUTION-AMEND modes)
 - `harness:generator` — Generator agent (NEGOTIATE, FINALIZE-CONTRACT, BUILD modes)
 - `harness:evaluator` — Evaluator agent (REVIEW-PROPOSAL, EVALUATE, REVALIDATE modes)
+- `harness:designer` — Designer agent (EXPLORE, REROLL, TEACH, AUDIT, EXTRACT modes; v2.2+; wraps `huashu-design` + `impeccable` skills via Skill tool)
 
 These are declared in `plugin.json` (`"agents": "./agents/"`) and resolve to the YAML-frontmatter-headed `.md` files in `agents/`. Each frontmatter specifies `tools:` (default allowlist) and `description:` (when Claude should use this agent).
 
@@ -265,12 +267,34 @@ See `@templates/manifest.yaml` for the authoritative schema with all fields, def
 5. When uncertain, ask the human ONE focused question.
 6. Planner does NOT specify files, components, data models, or API paths — those are negotiated between Generator and Evaluator before building.
 
+## Choosing your entry point (v2.2+ — orchestrator triage)
+
+When the user describes a new task and asks the orchestrator how to proceed, route based on these signals — do NOT default to `/harness:sprint` automatically:
+
+| User signal | Recommend |
+|---|---|
+| Task involves a UI, visual product, mobile app, dashboard, landing page, or anything with a user-facing surface — **especially if the user mentions they don't have design background, they want to "see it first", or they're not sure what it should look like** | **`/harness:design explore "<intent>"`** first → user picks a direction → hi-fi prototype → `/harness:design teach` to codify → THEN `/harness:sprint`. The design loop produces a clickable HTML prototype users without technical/design background can validate by feel before any production code is written. |
+| Brownfield (existing app, adding UI feature) | `/harness:design extract` first to capture existing tokens → `/harness:design teach` → `/harness:design explore` for the new feature → `/harness:sprint` |
+| Backend-only / CLI / data pipeline / no visual surface | Skip design loop. Go straight to `/harness:brainstorm` (if vague) or `/harness:sprint` (if scope is clear) |
+| Vague/ambiguous prompt regardless of UI | `/harness:brainstorm` first |
+| Tiny scoped task (<30 min, no new design surface) | `/harness:quick` |
+| Substantial scope, clear, no UI gap | `/harness:sprint` |
+
+**Why this matters for design-naive users**: spec-first workflows ask the user to validate written PRDs/architecture docs — that's a skill they may not have. Prototype-first workflows let them validate by clicking through a real interface — a skill they do have. The harness is mismatched to design-naive users without the design loop; with it, the harness becomes accessible to product owners who can react to interfaces but can't write specs.
+
+**When in doubt, ask**: "Is this product going to have a user-facing UI? If yes, do you want to see what it could look like before we write code?" — if yes, route to `/harness:design explore`.
+
 ## Pipeline Timing
 
 When each step runs — "auto" = no user input required; "gate" = blocks waiting for user; "manual" = user invokes explicitly.
 
 | Step | When it fires | Who triggers |
 |---|---|---|
+| `/harness:design explore` (v2.2+) | User explicitly invokes for visual products before sprint | **manual** (recommended for UI features) |
+| `/harness:design teach` (v2.2+) | After user picks a direction in explore + validates hi-fi prototype | **manual** |
+| `/harness:design extract` (v2.2+) | Brownfield onboarding — once per project | **manual** |
+| `/harness:design audit` (v2.2+, manual variant) | User-invoked ad-hoc design audit on prototype or built UI | **manual** |
+| Auto-design-audit (v2.2+) | After Evaluator PASS in `/sprint`, IF `.harness/design/` exists with DESIGN.md or prototype.html | auto (conditional) |
 | `doctor` preflight | Start of `/harness:sprint`, `/harness:quick`, `/harness:setup` | auto |
 | Planner (PLAN) | After doctor passes | auto |
 | `analyze` | After Planner returns, before human gate | auto |

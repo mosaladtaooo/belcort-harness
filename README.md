@@ -210,23 +210,55 @@ In Claude Code:
 /reload-plugins
 ```
 
-Verify: `/plugin` → Installed tab → `harness@2.1.1`. `/agents` → three custom agents listed: `harness:planner`, `harness:generator`, `harness:evaluator`.
+Verify: `/plugin` → Installed tab → `harness@2.2.0`. `/agents` → four custom agents listed: `harness:planner`, `harness:generator`, `harness:evaluator`, `harness:designer` (v2.2+).
 
 ### Initialize a project
 
 ```
 cd path/to/your/project
-/harness:doctor      # verify environment (MCPs, Node, git)
+/harness:doctor      # verify environment (MCPs, Node, git, optional skills: huashu-design, impeccable)
 /harness:setup       # scaffolds .harness/ + project-local ./CLAUDE.md
 ```
 
-### Run your first sprint
+### Choose your entry point (v2.2+)
+
+**For visual products (UI, mobile app, dashboard, landing page) — especially if you don't have design background, run the design loop FIRST:**
 
 ```
-/harness:sprint "build a 2-FR todo app: user can add a todo with title; user can mark a todo complete"
+/harness:design explore "build a habit tracker for night-owl freelancers"
+   → 3 differentiated visual directions in .harness/design/directions/
+   → open the HTML files in browser, pick one ("I pick direction-2")
+   → AI generates hi-fi clickable prototype + Playwright validation
+   → click through, verify it FEELS right
+
+# (optional, if 3 directions all miss)
+/harness:design reroll "all three felt too playful, more editorial"
+   → history-aware re-spin, 5-round budget; can also attach reference images
+   /harness:design reroll "..." --reference-image ~/Pictures/inspiration.jpg
+
+/harness:design teach
+   → impeccable codifies the prototype into .harness/design/DESIGN.md
+
+/harness:sprint "build the habit tracker (read prototype + DESIGN.md as design context)"
+   → Planner reads prototype + DESIGN.md → Generator BUILD respects design tokens
+   → Evaluator PASS → AUTO design audit fires → P0 findings auto-retry BUILD (cap 2)
 ```
 
-Observe the full pipeline: Planner drafts spec → analyze auto-runs → human approval gate → Generator ↔ Evaluator negotiate the contract → Generator BUILD via TDD with atomic per-FR commits → Evaluator EVALUATE exercises the running app via Playwright and grades against 4 criteria with hard thresholds → tuning check captures any divergence between the Evaluator's judgment and yours → retrospective reconciles spec with what actually shipped → merge.
+**Why design-first for design-naive users**: spec-first workflows ask you to validate written PRDs — a skill you may not have. Prototype-first workflows let you validate by clicking — a skill you do have. The design loop catches "this isn't what I wanted" in minutes (just discard the HTML), not days (after engineering). See [v2.2-staging 更新说明](#v22-staging-更新说明2026-04-27--中文) above for the full rationale.
+
+**For backend-only / CLI / data-pipeline projects (no UI surface):** skip the design loop and go straight to:
+
+```
+/harness:sprint "build a 2-FR todo CLI: user can add a todo with title; user can mark a todo complete"
+```
+
+**For tiny tasks (< 30 min, no new design surface):** use `/harness:quick "<prompt>"`.
+
+**For brownfield (adding feature to existing app):** run `/harness:design extract` once to scan existing source for design tokens, then proceed with the design-first flow above. The brownfield gate in `/harness:design explore` will warn you if you skip extraction.
+
+### What happens during `/harness:sprint`
+
+Planner drafts spec → analyze auto-runs → human approval gate → Generator ↔ Evaluator negotiate the contract → Generator BUILD via TDD with atomic per-FR commits → Evaluator EVALUATE exercises the running app via Playwright and grades against 4 criteria with hard thresholds → **(v2.2+) auto design audit if `.harness/design/` exists, P0 auto-retries BUILD up to 2 times** → tuning check captures any divergence between the Evaluator's judgment and yours → retrospective reconciles spec with what actually shipped → merge.
 
 ---
 

@@ -304,6 +304,14 @@ optional_plugin_check "security-guidance" "Generator+Evaluator OWASP checks" \
   "/plugin install security-guidance@claude-plugins-official"
 optional_plugin_check "agentlint"         "Evaluator automated code quality scan (33 checks)" \
   "/plugin install agentlint@claude-plugins-official"
+# v2.2+ — Designer subagent dispatches these via the Skill tool. WARN (not FAIL)
+# is the right level: harness still runs without them (sprints without design loop
+# work unchanged), but `/harness:design *` subcommands will halt with descriptive
+# errors if these are missing.
+optional_plugin_check "huashu-design"     "Designer EXPLORE+REROLL wrap this skill (v2.2+ design loop). Required for /harness:design explore and /harness:design reroll." \
+  "/plugin marketplace add https://github.com/alchaincyf/huashu-design && /plugin install huashu-design"
+optional_plugin_check "impeccable"        "Designer TEACH+AUDIT+EXTRACT wrap this skill (v2.2+ design loop). Required for /harness:design teach, /harness:design audit, /harness:design extract, and the auto-audit-gate in /harness:sprint." \
+  "/plugin marketplace add https://github.com/pbakaus/impeccable && /plugin install impeccable"
 
 # ─────────────────────────────────────────────────────────────
 # RECOMMENDED: Bash permission pre-allows for npm-family commands
