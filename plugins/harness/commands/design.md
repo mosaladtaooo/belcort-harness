@@ -1,5 +1,5 @@
 ---
-description: Designer subagent orchestration — visual exploration, hi-fi prototype, design tokens, audit, extract. v1 ships explore + reroll (Step 1) + teach (Step 2) + audit (Step 3) + extract (Step 4). Writes only to .harness/design/, never to source.
+description: Designer subagent orchestration — visual exploration, hi-fi prototype, design tokens, audit, extract. v1 ships explore + reroll (Step 1, polished in Step 5 with history-aware reroll, round budget, feedback-to-constraint translation) + teach (Step 2) + audit (Step 3) + extract (Step 4) + `--reference-image` flag for explore/reroll (Step 5). Writes only to .harness/design/, never to source.
 argument-hint: "<subcommand> [args]"
 ---
 
@@ -32,8 +32,8 @@ This is idempotent. If `.harness/` itself doesn't exist (the harness has never b
 
 Route on the first token of `$ARGUMENTS`:
 
-- `explore "<intent>"` → § Subcommand: explore
-- `reroll "<feedback>"` → § Subcommand: reroll
+- `explore "<intent>" [--reference-image <path>]...` → § Subcommand: explore
+- `reroll "<feedback>" [--reference-image <path>]...` → § Subcommand: reroll
 - `teach` → § Subcommand: teach
 - `audit` → § Subcommand: audit (full implementation; user-invoked, presentational only)
 - `extract` → § Subcommand: extract (full implementation; brownfield onboarding)
@@ -41,17 +41,34 @@ Route on the first token of `$ARGUMENTS`:
 
 ---
 
-## Subcommand: `explore "<intent>"`
+## Subcommand: `explore "<intent>" [--reference-image <path>]...`
 
 Generates 3 visual directions, halts at user-pick gate, then on user pick re-dispatches Designer to produce a hi-fi prototype.
 
-### Step 1: Validate intent
+Optionally accepts up to 3 `--reference-image <path>` flags (or `--reference-image=<path>` form). Reference images are user-provided visual anchors that constrain palette / vibe / typography influence across all 3 directions — the Designer never modifies them, only passes paths to huashu-design with an explicit anchor-not-clone instruction. Reference images do NOT relax the 3-distinct-philosophies rule (the diversity rule still applies; the image bounds the palette/vibe space, not the philosophy axis).
 
-Strip the leading `explore` token from `$ARGUMENTS`; the remainder is the user's intent (typically wrapped in quotes — strip them). If empty (`/harness:design explore` with no payload), tell the user:
+### Step 1: Validate intent + parse reference-image flags
+
+Strip the leading `explore` token from `$ARGUMENTS`. Parse the remainder for:
+
+- The user's **intent string** (typically wrapped in quotes — strip them; everything that isn't a flag is part of the intent).
+- Zero or more `--reference-image <path>` (space-separated form) or `--reference-image=<path>` (equals form) flags. Collect the paths into a list.
+
+If the intent is empty (`/harness:design explore` with no payload), tell the user:
 
 > Intent is required. Example: `/harness:design explore "Modern dashboard for a small SaaS team"`. Run again with an intent string.
 
 …and exit.
+
+**Reference-image pre-checks** (only if at least one `--reference-image` was provided):
+
+1. **Cap at 3**: if more than 3 paths were given, truncate to the first 3 and warn the user: *"More than 3 reference images provided; using the first 3 only. The 4th and beyond were ignored."*
+2. **Path expansion**: for each path, expand `~` to `$HOME` (Bash: `eval echo "$path"` is unsafe; use parameter expansion or `${path/#\~/$HOME}` style — the orchestrator can resolve this via Bash `realpath` or Node `path.resolve` depending on the harness runtime). Resolve relative paths against the orchestrator's cwd (project root) into absolute paths.
+3. **Existence check**: each resolved path must exist as a regular file. If any does not exist, abort with: *"Reference image not found: `<path>`. Check the path is correct and the file exists, then re-run."*
+4. **Extension check**: each path's extension must be one of `.jpg`, `.jpeg`, `.png`, `.webp` (case-insensitive). If any other extension, abort with: *"Reference image `<path>` is not a supported format. Allowed: .jpg / .jpeg / .png / .webp. Convert and re-run."*
+5. **Capture** the validated absolute paths as `${REFERENCE_IMAGES}` (comma-joined string) for the dispatch prompt.
+
+If no `--reference-image` flag was provided, `${REFERENCE_IMAGES}` is empty — the dispatch prompt simply omits the marker. Reference images are optional.
 
 ### Step 2: Brownfield gate (warning + accept-or-decline)
 
@@ -108,13 +125,22 @@ The orchestrator dispatches the Designer via the Agent tool:
 - **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
 
 > --- MODE: EXPLORE ---
+> {{REFERENCE_IMAGES_MARKER}}
 >
-> You are being dispatched in EXPLORE mode (round 1 — direction generation). Read inputs per your EXPLORE Step 1 (`.harness/spec/constitution.md`, `.harness/design/PRODUCT.md`, `.harness/design/DESIGN.md`, `.harness/design/extraction/extracted-tokens.md` if they exist). Construct a huashu-design prompt per your EXPLORE Step 2. Invoke `Skill(huashu-design)` once for direction generation. Write 3 differentiated HTML samples to `.harness/design/directions/direction-{1,2,3}.html` plus `directions-summary.md`. Halt at the user-pick gate per your EXPLORE Step 7.
+> You are being dispatched in EXPLORE mode (round 1 — direction generation). Read inputs per your EXPLORE Step 1 (`.harness/spec/constitution.md`, `.harness/design/PRODUCT.md`, `.harness/design/DESIGN.md`, `.harness/design/extraction/extracted-tokens.md` if they exist). {{REFERENCE_IMAGES_INSTRUCTION}} Construct a huashu-design prompt per your EXPLORE Step 2. Invoke `Skill(huashu-design)` once for direction generation. Write 3 differentiated HTML samples to `.harness/design/directions/direction-{1,2,3}.html` plus `directions-summary.md`. Halt at the user-pick gate per your EXPLORE Step 7.
 >
 > Working directory contract: your cwd is the project root; never read or write `.worktrees/current/.harness/`.
 >
 > User intent:
 > <intent string from arguments>
+
+`{{REFERENCE_IMAGES_MARKER}}` is replaced by the orchestrator with one of:
+- `--- REFERENCE-IMAGES: <path1>, <path2>, ... ---` (comma-separated absolute paths) — if at least one `--reference-image` flag was provided
+- empty string (the marker line is omitted) — if no `--reference-image` flag was provided
+
+`{{REFERENCE_IMAGES_INSTRUCTION}}` is replaced with one of:
+- `"Parse the REFERENCE-IMAGES marker per your EXPLORE Step 1; pass the validated paths to huashu-design as visual anchors (NOT clone targets) per your EXPLORE Step 2 reference-image bullet."` — if reference images were provided
+- empty string — if no images
 
 ### Step 4: Present directions to user (human gate)
 
@@ -162,13 +188,16 @@ After user picks direction N, the orchestrator dispatches the Designer again:
 
 > --- MODE: EXPLORE ---
 > --- PICK: direction-<N> ---
+> {{REFERENCE_IMAGES_MARKER}}
 >
-> You are being re-dispatched in EXPLORE mode for the hi-fi prototype pass per your EXPLORE Step 8. Read `.harness/design/directions/direction-<N>.html` and `directions-summary.md` to recover the chosen direction's philosophy and intent. Construct a hi-fi huashu-design prompt. Invoke `Skill(huashu-design)`. Confirm Playwright validation ran. Write `.harness/design/prototype/prototype.html` (single self-contained HTML) and `.harness/design/prototype/prototype-notes.md`. Exit.
+> You are being re-dispatched in EXPLORE mode for the hi-fi prototype pass per your EXPLORE Step 8. Read `.harness/design/directions/direction-<N>.html` and `directions-summary.md` to recover the chosen direction's philosophy and intent. Construct a hi-fi huashu-design prompt. {{REFERENCE_IMAGES_INSTRUCTION_HIFI}} Invoke `Skill(huashu-design)`. Confirm Playwright validation ran. Write `.harness/design/prototype/prototype.html` (single self-contained HTML) and `.harness/design/prototype/prototype-notes.md`. Exit.
 >
 > Working directory contract: your cwd is the project root; never read or write `.worktrees/current/.harness/`.
 >
 > Original user intent:
 > <intent string from arguments>
+
+`{{REFERENCE_IMAGES_MARKER}}` carries forward the same paths from Step 3 — the hi-fi pass should keep the same anchors so the prototype stays consistent with the picked direction's image-influenced palette/vibe. `{{REFERENCE_IMAGES_INSTRUCTION_HIFI}}` is `"Continue passing the REFERENCE-IMAGES paths to huashu-design as visual anchors during hi-fi generation; the prototype should preserve the image-influenced palette/vibe from the picked direction."` if any images were attached, else empty.
 
 ### Step 6: Present hi-fi prototype to user
 
@@ -197,17 +226,26 @@ Done.
 
 ---
 
-## Subcommand: `reroll "<feedback>"`
+## Subcommand: `reroll "<feedback>" [--reference-image <path>]...`
 
-Re-runs direction generation with user feedback as additional constraint. Requires a prior EXPLORE round to have written `directions-summary.md`.
+Re-runs direction generation with user feedback as additional constraint, history-aware (avoids every prior round's philosophies, not just the most recent), with a hard cap of 5 rounds. Requires a prior EXPLORE round to have written `directions-summary.md`.
 
-### Step 1: Validate feedback + precondition
+Optionally accepts up to 3 `--reference-image <path>` flags (same syntax + validation as `explore`). Newly-attached images supplement prior history — if the user originally explored with one image and now rerolls with a different image, the new one anchors the next round (the prior images are NOT carried forward by the orchestrator; this round's flag is the active anchor set).
 
-Strip the leading `reroll` token from `$ARGUMENTS`; the remainder is the feedback (strip surrounding quotes). If empty, tell the user:
+### Step 1: Validate feedback + parse reference-image flags + precondition
+
+Strip the leading `reroll` token from `$ARGUMENTS`. Parse the remainder for:
+
+- The user's **feedback string** (typically wrapped in quotes — strip them; everything that isn't a flag is part of the feedback).
+- Zero or more `--reference-image <path>` (or `--reference-image=<path>`) flags. Collect into a list.
+
+If feedback is empty, tell the user:
 
 > Feedback is required. Example: `/harness:design reroll "all three felt corporate, push more experimental"`. Run again with feedback.
 
 …and exit.
+
+**Reference-image pre-checks** (only if at least one flag was provided): identical to `explore` Step 1's reference-image pre-checks (cap at 3, expand `~`, resolve relative to absolute, existence check, extension check, capture as `${REFERENCE_IMAGES}`). On any validation failure, abort with the same error messages.
 
 Verify `.harness/design/directions/directions-summary.md` exists. If not, tell the user:
 
@@ -225,18 +263,27 @@ The orchestrator dispatches the Designer via the Agent tool:
 
 > --- MODE: REROLL ---
 > --- FEEDBACK: <feedback text> ---
+> {{REFERENCE_IMAGES_MARKER}}
 >
-> You are being dispatched in REROLL mode. Read inputs per your REROLL Step 1 (same as EXPLORE plus prior `directions-summary.md`). Parse the FEEDBACK marker per your REROLL Step 2. Construct a feedback-injected huashu-design prompt per your REROLL Step 3. Invoke `Skill(huashu-design)`. Write 3 NEW differentiated HTML samples (avoiding prior round's philosophies) to `.harness/design/directions/direction-{1,2,3}.html` (overwriting prior) plus a new `directions-summary.md`. Halt at the user-pick gate.
+> You are being dispatched in REROLL mode. Read inputs per your REROLL Step 1 (same as EXPLORE plus prior `directions-summary.md` — parse the `## Reroll History` section if present, accumulate the full ban list across all prior rounds, compute the round counter, and HALT with the budget-exhausted message if round > 5). Parse the FEEDBACK marker per your REROLL Step 2 (translate raw feedback into a structured Vibe / Palette / Layout / References / Anti-adjacency constraint block before passing to huashu — not just the raw string). {{REFERENCE_IMAGES_INSTRUCTION_REROLL}} Construct a history-injected huashu-design prompt per your REROLL Step 3 (round number + accumulated ban list + translated constraints + verbatim feedback). Invoke `Skill(huashu-design)`. Write 3 NEW differentiated HTML samples (avoiding ALL prior rounds' philosophies, not just the most recent round's) to `.harness/design/directions/direction-{1,2,3}.html` (overwriting prior) plus an updated `directions-summary.md` with the new `## Reroll History` entry appended. Halt at the user-pick gate.
+>
+> Working directory contract: your cwd is the project root; never read or write `.worktrees/current/.harness/`.
+
+`{{REFERENCE_IMAGES_MARKER}}` and `{{REFERENCE_IMAGES_INSTRUCTION_REROLL}}` are replaced as in the `explore` subcommand:
+- `--- REFERENCE-IMAGES: <path1>, <path2>, ... ---` if any flag provided, else omitted.
+- `"Parse the REFERENCE-IMAGES marker per your REROLL Step 1.5; pass the validated paths to huashu-design as visual anchors (NOT clone targets). New images on a reroll override prior — the prior round's images are NOT carried forward unless re-attached."` if any flag provided, else empty.
 
 ### Step 3: Present + gate (same as explore Steps 4–6)
 
 The user-pick UX after a REROLL is identical to after an EXPLORE round:
 
-- Step 4 (Present): same panel as `explore` Step 4, with a header line noting this is a REROLL round and quoting the feedback that shaped it.
+- Step 4 (Present): same panel as `explore` Step 4, with a header line noting this is a REROLL round and quoting the feedback that shaped it. If `directions-summary.md` shows `Round N of 5` in `## Caveats`, surface that line in the panel so the user sees how close they are to the budget cap.
 - Step 5 (Re-dispatch on pick): same as `explore` Step 5 (hi-fi pass).
 - Step 6 (Present prototype): same as `explore` Step 6.
 
-If the user is not satisfied with the REROLL round either, they can run `/harness:design reroll "<new feedback>"` again. There is no hard cap on reroll rounds in v1, but Designer's REROLL anti-patterns flag pure-vague feedback explicitly so the user gets a recommendation rather than infinite churn.
+**Round-budget halt handling**: if Designer halts because the round counter exceeded 5 (Designer's REROLL Step 1 budget check), surface Designer's halt message verbatim to the user — it lists the 3 explicit options (accept-existing / fresh-explore / explore-with-reference-image). Do NOT silently re-dispatch or treat the halt as a failure; the cap is a feature.
+
+If the user is not satisfied with the REROLL round either, they can run `/harness:design reroll "<new feedback>"` again — provided they're below round 5. The hard cap at 5 rounds is enforced by the Designer subagent (REROLL Step 1.6); the orchestrator does not need to track round count itself, but it should expect Designer to halt with the budget message at round 6 and surface that halt to the user with the 3 options.
 
 ---
 
@@ -496,6 +543,8 @@ Done.
 - `teach`: Designer writes only `.harness/design/DESIGN.md`. Does NOT touch source code, spec files, or any path outside `.harness/design/`. PRODUCT.md is intentionally deferred — if impeccable's teach flow tries to leak a PRODUCT.md to project root, the Designer removes it.
 - `audit` subcommand: Designer writes only `.harness/design/audits/audit-<feature-id>-<n>.md`. NEVER touches source code, spec files, or anything outside `.harness/design/audits/`. The user-invoked variant is presentational — it does NOT auto-loop on P0 (that auto-loop lives in `/harness:sprint`'s post-Evaluator-PASS path); the user-invoked variant just reports findings.
 - `extract` subcommand: Designer in EXTRACT mode is **read-only against source code**. The Designer reads files under `src/`, `app/`, `pages/`, `components/`, `package.json`, and theme/CSS files to scan the design language, but writes ONLY to `.harness/design/extraction/extracted-tokens.md`. The Designer does NOT modify any source file, does NOT run `npm install`, does NOT touch `package.json` / lockfiles / build configs / `.env`, and does NOT consolidate duplicate components (that is impeccable's own `extract` flow's behaviour, which BELCORT's EXTRACT mode explicitly does NOT invoke — it invokes impeccable's `document` flow in scan mode instead). Source-write ownership stays with the Generator; if the extraction report's `## Notes for the Generator (post-codify)` section flags duplicates worth consolidating, that is a future Sprint's BUILD-pass concern, not Designer's.
+- **Reference images** (`--reference-image <path>` flag on `explore` and `reroll`): user-provided visual anchors that constrain palette / vibe / typography influence. Read-only inputs — the Designer never modifies, copies, or rewrites them; the orchestrator only validates path readability and extension, then passes absolute paths to the Designer subagent via the `--- REFERENCE-IMAGES: ... ---` dispatch marker. The Designer passes the same paths to huashu-design with an explicit anchor-not-clone instruction. Up to 3 images per command; supported extensions `.jpg` / `.jpeg` / `.png` / `.webp`. Reference images do NOT relax the 3-distinct-philosophies rule (the diversity rule still applies; the image bounds the palette/vibe space, not the philosophy axis). The Designer never generates images — it only consumes user-attached ones.
+- **Reroll budget cap**: REROLL is hard-capped at 5 rounds (the Designer's REROLL Step 1 enforces). At round 6, Designer halts with an explicit-options message (accept-existing / fresh-explore / explore-with-reference-image) instead of running the round. The orchestrator surfaces this halt verbatim to the user — the cap is a feature, not a failure mode.
 
 ---
 
@@ -505,12 +554,28 @@ Done.
 ═══════════════════════════════
   /harness:design — Subcommands
 ═══════════════════════════════
-explore "<intent>"   Generate 3 visual directions, pick, then hi-fi prototype.
-                     Example: /harness:design explore "Modern SaaS dashboard"
+explore "<intent>" [--reference-image <path>]...
+                     Generate 3 visual directions, pick, then hi-fi prototype.
+                     Optionally attach up to 3 reference images as visual
+                     anchors (.jpg/.jpeg/.png/.webp; ~ and relative paths
+                     supported). References constrain palette/vibe; the
+                     3 directions still land in 3 distinct philosophies.
+                     Examples:
+                       /harness:design explore "Modern SaaS dashboard"
+                       /harness:design explore "Editorial blog" --reference-image ~/Pictures/inspo.jpg
+                       /harness:design explore "..." --reference-image a.png --reference-image b.jpg
 
-reroll "<feedback>"  Regenerate 3 directions with feedback. Requires a prior
-                     explore round on file.
+reroll "<feedback>" [--reference-image <path>]...
+                     Regenerate 3 directions with feedback. History-aware:
+                     avoids every prior round's philosophies (not just the
+                     most recent). Hard cap at 5 rounds — at round 6 the
+                     Designer halts with explicit options (accept-existing
+                     / fresh-explore / attach-reference-image). Optional
+                     --reference-image flag: newly-attached images override
+                     prior (re-attach if you want them carried). Requires a
+                     prior explore round on file.
                      Example: /harness:design reroll "all three felt corporate"
+                     Example: /harness:design reroll "more editorial" --reference-image ~/Pictures/dieter.jpg
 
 teach                Codify prototype into .harness/design/DESIGN.md (tokens +
                      principles + anti-patterns + motion + accessibility) so
@@ -541,5 +606,6 @@ extract              Scan a brownfield project's source for design tokens
                      Example: /harness:design extract
 
 All design artifacts land under .harness/design/. Source code is never touched.
+Reference images (when used) are read-only inputs — Designer never modifies them.
 ═══════════════════════════════
 ```
