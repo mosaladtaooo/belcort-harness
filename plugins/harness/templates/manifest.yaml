@@ -73,6 +73,15 @@ state:
   # history was truncated and the budget is already exhausted — halt.
   # Schema migration safe-default (per harness.version comment): treat as 0
   # if absent on legacy manifests.
+  #
+  # Canonical form: an UNQUOTED non-negative integer (e.g., `0`, `3`).
+  # Do NOT write the value as `"0"` (quoted string) or leave it bare-null
+  # (`design_reroll_round:` with no value) — every read site validates the
+  # extracted value is a non-negative integer and halts otherwise (round-3
+  # FIX #5). The orchestrator's increment/reset writers always emit the
+  # canonical form; if a user hand-edits the manifest, keep the value
+  # unquoted and integer-only, or delete the line entirely (legacy
+  # safe-default kicks in).
   design_reroll_round: 0
 
 features:

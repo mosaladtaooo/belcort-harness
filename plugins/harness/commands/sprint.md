@@ -422,6 +422,30 @@ if [ "$DESIGN_PRESENT" = "1" ]; then
     echo "Auto-audit-gate: state.current_feature is empty in manifest. Skipping audit gate (no feature in progress)."
     DESIGN_PRESENT=0  # short-circuit gate — falls through to skip block below
   fi
+
+  # FEATURE_ID format guard (round-3 FIX #6 — path-traversal sanitization).
+  # The sed extraction above is forgiving of the manifest's value shape, so
+  # a manifest with `current_feature: "../../etc"` survives the empty-check
+  # and reaches the audit-gate's glob expansion below
+  # (`ls .harness/design/audits/audit-${FEATURE_ID}-*.md`), which then
+  # resolves to `audit-../../etc-*.md` — escaping the .harness/design/audits/
+  # directory. The TIER A2 empty-check blocked the empty case but not the
+  # malformed case.
+  #
+  # Canonical Planner-emitted format (planner.md §"Build Contract" / "Folder
+  # naming"): `NNN-feature-name` where NNN is a 3-digit number and
+  # feature-name is a lowercase kebab-case slug. Example: `001-bookmark-crud`.
+  # Reject anything else as corrupted. The regex is deliberately strict —
+  # path-traversal payloads (`../`, `/`, `~`), whitespace, uppercase, and
+  # missing-prefix all fail, AND the pattern must START with the 3-digit
+  # prefix (so `..-evil` cannot pass). 1-128 char total length keeps the
+  # downstream glob and any path concatenation bounded.
+  if [ "$DESIGN_PRESENT" = "1" ]; then
+    if ! [[ "$FEATURE_ID" =~ ^[0-9]{3}-[a-z][a-z0-9-]{0,124}$ ]]; then
+      echo "Auto-audit-gate: FEATURE_ID '${FEATURE_ID}' is not a valid feature-id (expected NNN-kebab-name format, e.g., '001-bookmark-crud', lowercase alphanumeric + hyphens, 1-128 chars). Manifest may be corrupted or hand-edited. Skipping audit gate — repair state.current_feature in .harness/manifest.yaml before re-running."
+      DESIGN_PRESENT=0  # short-circuit gate — refuses to glob with a malformed id
+    fi
+  fi
 fi
 
 if [ "$DESIGN_PRESENT" = "1" ]; then
@@ -783,7 +807,7 @@ git worktree remove .worktrees/current 2>/dev/null
 
 Then the orchestrator (via Edit tool) updates:
 - `ROADMAP.md` — move feature to "✅ Shipped".
-- `.harness/manifest.yaml` — `features.completed` append, `features.in_progress = ""`, `state.current_feature = ""` (Agent 3 M3: clear current_feature on merge so the next sprint's audit gate doesn't reuse the just-merged feature-id), `state.phase = "complete"`, `state.retry_count = 0`, `state.design_reroll_round = 0` (TIER A5: reset reroll counter — a new sprint starts fresh).
+- `.harness/manifest.yaml` — `features.completed` append, `features.in_progress = ""`, `state.current_feature = ""` (Agent 3 M3: clear current_feature on merge so the next sprint's audit gate doesn't reuse the just-merged feature-id), `state.phase = "complete"`, `state.retry_count = 0`, `state.design_reroll_round = 0` (TIER A5: reset reroll counter — a new sprint starts fresh; round-3 FIX #5 — emit canonical form `  design_reroll_round: 0`, unquoted integer with two-space indent; never write `"0"` or bare-null since every read site validates the value is a non-negative integer and halts otherwise).
 
 Print scores + completion message. If the auto-audit-gate ran (i.e., `.harness/design/` was present), the completion message also surfaces: total audit attempts (max(N) of `audit-${FEATURE_ID}-N.md`), final audit verdict (PASS / FAIL — force-merged), and any P1+ findings that were logged for later. If the gate did not run (no `.harness/design/`), the completion message is unchanged from v2.2.
 

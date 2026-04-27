@@ -313,24 +313,57 @@ optional_plugin_check "huashu-design"     "Designer EXPLORE+REROLL wrap this ski
 optional_plugin_check "impeccable"        "Designer TEACH+AUDIT+EXTRACT wrap this skill (v2.2+ design loop). Required for /harness:design teach, /harness:design audit, /harness:design extract, and the auto-audit-gate in /harness:sprint." \
   "/plugin marketplace add https://github.com/pbakaus/impeccable && /plugin install impeccable"
 
-# v2.2+ impeccable version probe (Agent 2 C2 finding A4) — Designer wraps the
-# document/teach/audit/extract flows which only exist in impeccable v3+. v2.x
-# had different skill names entirely; the substring match in optional_plugin_check
-# above passes against either v2.x or v3.x indiscriminately, so we add a
-# content probe here that reads SKILL.md and confirms the v3 flow names are
-# present. Without this, /harness:design teach/audit/extract will fail at runtime
-# with a confusing skill-not-found error rather than at preflight with a clear fix.
+# v2.2+ impeccable version probe (Agent 2 C2 finding A4; round-3 hardening) —
+# Designer wraps the document/teach/audit/extract flows which only exist in
+# impeccable v3+. v2.x exposed only craft/teach/extract (3 modes) and had a
+# different skill structure; v3 introduced the multi-flow `argument-hint` and
+# the `## Commands` section that lists every flow.
+#
+# The previous regex (`grep -qE 'document|teach|audit|extract'`) matched on any
+# common-English-word occurrence anywhere in the file, so a v2.1.x SKILL.md
+# whose description naturally contains "audit your designs" or "extract
+# components" trivially passed — false PASS, user thinks v3 is installed when
+# v2 is, and `/harness:design teach/audit/extract` then fails at runtime with
+# a confusing skill-not-found error.
+#
+# Round-3 fix: anchor on three independently-strong v3 signals and require
+# at least two to agree. Each signal lives in a structured spot v2.x does NOT
+# have, so a v2.x file cannot fake them all by accident:
+#   (S1) frontmatter `version: 3.x.x` — explicit version pin (v2.x reads 2.x.x)
+#   (S2) frontmatter `argument-hint:` containing one of the v3-only flow names
+#        (`clarify`, `distill`, `harden`, `onboard`, `optimize`, `polish`,
+#        `animate`, `bolder`, `colorize`, `delight`, `layout`, `overdrive`,
+#        `quieter`, `typeset`, `live`, `document`) — none of these appear in
+#        v2.1.x's argument-hint of "[craft|teach|extract]"
+#   (S3) a `## Commands` heading — v3 introduced this; v2.x used `## Craft Mode`
+#        / `## Teach Mode` / `## Extract Mode` instead.
+# Two of three is enough to defeat both an accidental match and a user who
+# manually edited a v2.x SKILL.md to add a v3-style word in one place.
 check_impeccable_v3() {
-  local skill_md
+  local skill_md signals=0
   skill_md=$(find "$CLAUDE_HOME/plugins" "$CLAUDE_HOME/skills" -path "*impeccable*/SKILL.md" 2>/dev/null | sort -V | tail -1)
   [ -z "$skill_md" ] && return  # already covered by optional_plugin_check WARN above
-  if grep -qE '^name:[[:space:]]*impeccable\b' "$skill_md" \
-     && grep -qE 'document|teach|audit|extract' "$skill_md"; then
-    add_result "RECOMMEND" "PASS" "impeccable v3+ flows" "document/teach/audit/extract present in $skill_md"
+  if ! grep -qE '^name:[[:space:]]*impeccable\b' "$skill_md"; then
+    add_result "RECOMMEND" "FAIL" "impeccable v3+ flows" \
+      "$skill_md is not an impeccable SKILL.md (missing 'name: impeccable' frontmatter)." \
+      "Reinstall: /plugin install impeccable@latest. Verify version with: grep -E '^version:' $skill_md"
+    return
+  fi
+  # S1: explicit v3 version pin in frontmatter
+  grep -qE '^version:[[:space:]]*3\.[0-9]+\.[0-9]+' "$skill_md" && signals=$((signals + 1))
+  # S2: argument-hint contains a v3-only flow name (token-bounded so a description
+  #     containing "audit" doesn't false-positive — these are pipe-delimited inside
+  #     argument-hint quotes).
+  grep -qE '^argument-hint:.*\b(clarify|distill|harden|onboard|optimize|polish|animate|bolder|colorize|delight|layout|overdrive|quieter|typeset|live|document)\b' "$skill_md" \
+    && signals=$((signals + 1))
+  # S3: structured `## Commands` section (v3 routing root); v2.x has `## Craft Mode` etc.
+  grep -qE '^##[[:space:]]+Commands\b' "$skill_md" && signals=$((signals + 1))
+  if [ "$signals" -ge 2 ]; then
+    add_result "RECOMMEND" "PASS" "impeccable v3+ flows" "v3 flow-declaration syntax detected in $skill_md ($signals/3 signals)"
   else
     add_result "RECOMMEND" "FAIL" "impeccable v3+ flows" \
-      "$skill_md does not expose v3 flows (document/teach/audit/extract). v2.x had different skill names. /harness:design teach/audit/extract will fail at runtime." \
-      "Reinstall to pin v3+: /plugin install impeccable@latest"
+      "$skill_md does not look like impeccable v3+ ($signals/3 signals matched: version/argument-hint/Commands-heading). v2.x exposed only craft/teach/extract; /harness:design teach/audit/extract require v3+." \
+      "Verify version: grep -E '^version:' $skill_md  # expect 3.x.x. Upgrade: /plugin install impeccable@latest (or /plugin marketplace add https://github.com/pbakaus/impeccable && /plugin install impeccable)"
   fi
 }
 check_impeccable_v3
@@ -411,6 +444,46 @@ else
     "Generator BUILD will likely prompt-or-block on npm/npx/pnpm — the pause protocol handles this gracefully, but it interrupts autonomous runs" \
     "Run in Claude Code: /allow Bash(npm *) Bash(npx *) Bash(pnpm *) Bash(node *)  — or edit .claude/settings.json → permissions.allow"
 fi
+
+# ─────────────────────────────────────────────────────────────
+# RECOMMENDED: filesystem case-sensitivity probe (round-3 FIX #8)
+# ─────────────────────────────────────────────────────────────
+# macOS APFS and HFS+ default to case-insensitive (CI), so `DESIGN.md` and
+# `design.md` resolve to the same inode. The harness writes uppercase
+# canonical filenames (DESIGN.md, PRODUCT.md, ROADMAP.md, README.md) and
+# subagents read them by exact name; on a CI volume, a user's `design.md`
+# (lowercase) silently aliases the harness's DESIGN.md and the next write
+# clobbers their content under the harness name. Discover this at preflight
+# instead of at write-time.
+#
+# Probe: write a file named `CaseTest` in a temp dir, then check whether
+# `casetest` (lowercase) resolves as the same file. If it does, the FS is
+# case-insensitive. WARN (not CRITICAL) — most teams work fine on CI as
+# long as they're disciplined about canonical names; we just surface the
+# risk so they know.
+check_fs_case_sensitivity() {
+  local case_test_dir
+  # Probe project root, not /tmp — /tmp on macOS is on a separate volume
+  # and may have different case-sensitivity than the project's volume.
+  # Use a hidden subdir under cwd so the test artifacts can't collide
+  # with anything the user is working on.
+  case_test_dir="$(pwd)/.harness-case-test-$$"
+  if ! mkdir -p "$case_test_dir" 2>/dev/null; then
+    # Can't write to project root (read-only mount, permissions, etc.).
+    # Skip the probe rather than fail — this isn't a check we can rescue.
+    return
+  fi
+  : > "$case_test_dir/CaseTest"
+  if [ -f "$case_test_dir/casetest" ]; then
+    add_result "RECOMMEND" "WARN" "Filesystem case-sensitivity" \
+      "$(pwd) is on a case-insensitive filesystem (macOS APFS/HFS+ default). The harness writes canonical-case filenames (DESIGN.md, PRODUCT.md, ROADMAP.md, README.md) and subagents read by exact name; on CI, a user's lowercase 'design.md' silently aliases the harness's 'DESIGN.md' and the next write clobbers it." \
+      "Two options: (a) create a case-sensitive APFS volume for harness work via Disk Utility (File → New Image → Image Format: 'sparse bundle disk image', or Disk Utility → Volume → '+' → Format: 'APFS (Case-sensitive)'), then move the project there; OR (b) ensure all team members use the canonical uppercase names exactly as documented. Option (b) is fine for solo work; option (a) is safer for teams."
+  else
+    add_result "RECOMMEND" "PASS" "Filesystem case-sensitivity" "case-sensitive filesystem at $(pwd) (DESIGN.md ≠ design.md)"
+  fi
+  rm -rf "$case_test_dir" 2>/dev/null
+}
+check_fs_case_sensitivity
 
 # ─────────────────────────────────────────────────────────────
 # OUTPUT

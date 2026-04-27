@@ -51,6 +51,8 @@ Optionally accepts up to 3 `--reference-image <path>` flags (or `--reference-ima
 
 `/harness:design explore` starts a fresh exploration. Before any other work, the orchestrator resets `state.design_reroll_round` in `.harness/manifest.yaml` to 0 (Edit-tool or sed/awk; the field has safe-default 0 if absent on legacy manifests). This pairs with `/harness:design reroll`'s post-dispatch increment (see reroll Step 5) and the merge-time reset in sprint.md to keep the manifest counter aligned with the file-based `## Reroll History` count Designer maintains.
 
+**Canonical write form (round-3 FIX #5)**: emit the line as `  design_reroll_round: 0` exactly — unquoted integer, two-space leading indent (under `state:`). Do NOT write `  design_reroll_round: "0"` (quoted) or `  design_reroll_round:` (bare null) — every read site (Designer REROLL Step 1.6) validates that the extracted value is a non-negative integer and halts otherwise. The Edit tool's exact-string replacement preserves canonical form when the prior line was canonical; if the user hand-edited the manifest into a non-canonical form, the next reader halts and asks the user to repair, which is the intended behaviour (no auto-repair — auto-repair hides bugs).
+
 This reset happens BEFORE Step 1 — even if the user later cancels at the human gate, a fresh explore should imply a fresh budget. If `.harness/manifest.yaml` doesn't exist (the harness hasn't been initialized), skip silently — there's no field to reset.
 
 ### Step 1: Validate intent + parse reference-image flags
@@ -297,6 +299,8 @@ If the user is not satisfied with the REROLL round either, they can run `/harnes
 After Designer returns successfully (i.e., it did NOT halt with a budget-exhausted message — a halt path means no new round was added), the orchestrator increments `state.design_reroll_round` in `.harness/manifest.yaml` by 1. This mirrors the file-based `## Reroll History` count that Designer just appended to in REROLL Step 6, so a tamper-detection cross-check (Designer REROLL Step 1.6) can later compare the two and halt if they diverge with `manifest_round >= 5`.
 
 The orchestrator updates the field via Edit tool (or sed/awk for resilience). For a manifest entry like `  design_reroll_round: 0`, increment to `  design_reroll_round: 1`, etc. If the field is missing (legacy manifest), the orchestrator first inserts it under `state:` with safe-default 0 then increments to 1.
+
+**Canonical write form (round-3 FIX #5)**: emit the incremented line as `  design_reroll_round: <N>` — unquoted integer, two-space leading indent. Same rule as Step 0's reset writer: never quote the integer, never leave the value bare-null. Before incrementing, the orchestrator MUST run the canonical normalize-and-validate snippet (see designer.md REROLL Step 1.6) on the current value — if the field is corrupted (quoted, null, non-numeric), halt with the same "manifest field corrupted, repair or delete" message rather than silently writing `0+1` over a string. Auto-repair on increment would mask the bug Designer's read-site is designed to catch.
 
 This update is mechanical and does NOT involve a subagent — it's a local manifest field tracking a counter, not a spec edit. Per the v2 ownership rule, `state.*` is the orchestrator's writer territory, so this stays in scope.
 
