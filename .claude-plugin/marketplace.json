@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "BELCORT Harness Engine — Planner → Generator → Evaluator pipeline for Claude Code",
-    "version": "2.1.9"
+    "version": "2.2.0"
   },
   "plugins": [
     {
       "name": "harness",
       "source": "./plugins/harness",
-      "description": "Planner → Generator → Evaluator harness pipeline adapted from Anthropic's long-running agent research. Orchestrates planning, contract negotiation, TDD implementation, and adversarial evaluation via fresh subagents.",
-      "version": "2.1.9",
+      "description": "Planner → Generator → Evaluator harness pipeline adapted from Anthropic's long-running agent research. Orchestrates planning, contract negotiation, TDD implementation, and adversarial evaluation via fresh subagents. v2.2 adds Designer subagent + /harness:design command for prototype-first → MVP workflow.",
+      "version": "2.2.0",
       "category": "workflow",
       "keywords": ["harness", "planner", "generator", "evaluator", "tdd", "orchestration", "agent"]
     }
