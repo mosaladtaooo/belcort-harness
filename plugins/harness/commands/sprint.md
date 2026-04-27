@@ -339,6 +339,46 @@ if [ -z "$FEATURE_ID" ]; then
   FEATURE_ID=$(sed -n 's/^  current_feature: *\([^ #"]*\).*/\1/p' .harness/manifest.yaml)
 fi
 
+# Path-confinement helper (Agent 5 round-2 finding): the size-gate inputs
+# below (constitution.md, DESIGN.md, prototype.html), the audit report
+# (LATEST_AUDIT), and the Designer stdout capture (.last-designer-stdout.txt)
+# are all read by this gate. `wc -c < $FILE`, `grep`, `cat`, etc. silently
+# follow symlinks — a symlinked leaf OR a symlinked parent directory could
+# point any of these reads at /etc/passwd, ~/.ssh/id_rsa, or an attacker-
+# controlled blob outside the project. macOS-specific gotcha: /tmp and
+# $TMPDIR are themselves symlinks on darwin (→ /private/tmp/...), so a
+# substring check like `case $RESOLVED in /tmp/*) reject ;;` mis-fires on
+# innocent setups. The right check is canonicalize-and-confine: resolve
+# every read path through realpath and require the result to live under
+# the canonical project root's `.harness/`.
+PROJECT_ROOT_CANON="$(pwd -P)"
+_canonicalize() {
+  # Print the canonical (symlink-resolved) absolute path of $1, or empty
+  # string on failure. Tries python3 first (real interpreter test, mirrors
+  # the JSON_PARSER pattern in plugins/harness/hooks/pre-tool-use.sh), then
+  # readlink -f (macOS Sonoma+ / GNU coreutils). Either is sufficient on
+  # darwin 24.6.0; both being absent means the host is too minimal to run
+  # the harness anyway.
+  if command -v python3 >/dev/null 2>&1 && python3 -c 'print(1)' >/dev/null 2>&1; then
+    python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1" 2>/dev/null
+  elif command -v readlink >/dev/null 2>&1; then
+    readlink -f "$1" 2>/dev/null
+  else
+    echo ""
+  fi
+}
+_confined_to_harness() {
+  # Returns 0 (success) iff $1 canonicalizes to a path under
+  # $PROJECT_ROOT_CANON/.harness/. Use this as a guard before every read
+  # of a file the audit-gate trusts.
+  local _resolved
+  _resolved="$(_canonicalize "$1")"
+  case "$_resolved" in
+    "$PROJECT_ROOT_CANON"/.harness/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # Gate: design context must exist AND constitution.md must be substantive.
 # Content-size check (Agent 4 CR-5): a stub DESIGN.md (empty or near-empty) or a
 # stub prototype.html shouldn't fire the gate — we'd dispatch Designer to audit
@@ -348,13 +388,23 @@ fi
 # DESIGN.md ≥ 2KB (the size below which TEACH self-validation fails) or
 # prototype.html ≥ 1KB (the size below which a real prototype can't fit even
 # a single component).
+#
+# Each `wc -c < $FILE` below is preceded by a confinement check — if the
+# file (or any parent component) resolves outside .harness/, treat it as
+# absent rather than reading attacker-controlled content into a size test.
 DESIGN_PRESENT=0
-if [ -d ".harness/design" ] && [ -s ".harness/spec/constitution.md" ] && [ "$(wc -c < .harness/spec/constitution.md 2>/dev/null)" -gt 200 ]; then
-  if { [ -s ".harness/design/DESIGN.md" ] && [ "$(wc -c < .harness/design/DESIGN.md)" -ge 2048 ]; } \
-     || { [ -s ".harness/design/prototype/prototype.html" ] && [ "$(wc -c < .harness/design/prototype/prototype.html)" -ge 1024 ]; }; then
+if [ -d ".harness/design" ] && _confined_to_harness ".harness/spec/constitution.md" \
+   && [ -s ".harness/spec/constitution.md" ] \
+   && [ "$(wc -c < .harness/spec/constitution.md 2>/dev/null)" -gt 200 ]; then
+  if { _confined_to_harness ".harness/design/DESIGN.md" \
+       && [ -s ".harness/design/DESIGN.md" ] \
+       && [ "$(wc -c < .harness/design/DESIGN.md)" -ge 2048 ]; } \
+     || { _confined_to_harness ".harness/design/prototype/prototype.html" \
+          && [ -s ".harness/design/prototype/prototype.html" ] \
+          && [ "$(wc -c < .harness/design/prototype/prototype.html)" -ge 1024 ]; }; then
     DESIGN_PRESENT=1
   else
-    echo "Skipping audit-gate: design files exist but appear to be stubs (DESIGN.md < 2KB or prototype < 1KB)."
+    echo "Skipping audit-gate: design files exist but appear to be stubs (DESIGN.md < 2KB or prototype < 1KB), or resolve outside .harness/."
   fi
 fi
 
@@ -405,12 +455,41 @@ if [ "$DESIGN_PRESENT" = "1" ]; then
     #   Working directory contract: cwd is project root; never read or
     #   write .worktrees/current/.harness/.
     #
-    # IMPORTANT: the orchestrator captures Designer's stdout (specifically the
-    # "AUDIT complete. ..." exit line) to .harness/design/audits/.last-designer-stdout.txt
-    # so Step B can parse the contractual exit-line counts (Agent 2 + 3 + 4 fix
-    # for severity-laundering — exit-line is authoritative; file-grep is a
-    # fallback only). The orchestrator does this by capturing the Designer's
-    # final-message text from the Agent tool's structured return value.
+    # ─── stdout-capture contract (mandatory, two halves) ─────────────────
+    # The orchestrator MUST perform BOTH of these Write-tool calls every
+    # iteration of this loop, around the Designer dispatch:
+    #
+    #   (A) BEFORE dispatching Designer: Write
+    #       `.harness/design/audits/.last-designer-stdout.txt` with empty
+    #       content (truncate). This guarantees that if Designer crashes
+    #       or its return is unrecoverable, Step B's grep does NOT pick up
+    #       a stale "AUDIT complete." line from a prior round (which would
+    #       wedge the loop on an old verdict — `grep -m1` returns the
+    #       OLDEST match, so a leftover round-1 line would override a
+    #       fresh round-2 verdict). Truncate is non-negotiable: even on
+    #       the first iteration when the file likely doesn't exist, the
+    #       Write call is the only thing that distinguishes "fresh run,
+    #       no Designer dispatched yet" from "Designer dispatched and we
+    #       forgot to capture" — and the post-dispatch missing-file check
+    #       below relies on that distinction.
+    #
+    #   (B) AFTER the Agent tool returns from the Designer dispatch: Write
+    #       `.harness/design/audits/.last-designer-stdout.txt` with the
+    #       Designer's final-message text from the Agent tool's structured
+    #       return value (the field that carries the subagent's terminal
+    #       output — typically the last assistant message of the subagent
+    #       transcript; whatever the Agent tool surfaces in this codebase
+    #       as the subagent's stdout-equivalent). Truncate, do NOT append.
+    #       Designer's exit-line invariant (designer.md AUDIT Step 9)
+    #       guarantees the parseable "AUDIT complete. ..." line is present
+    #       in that final message.
+    #
+    # This contract makes Step B's exit-line parse the authoritative path
+    # (Agent 2 + 3 + 4 severity-laundering fix). File-grep on the audit
+    # body is a fallback for the case where Designer's exit line is
+    # malformed (drift), NOT for the case where the orchestrator forgot
+    # to capture stdout — that case is a contract violation and Step B
+    # halts the loop instead of silently falling back.
     #
     # The Designer writes the audit report to:
     #   .harness/design/audits/audit-${FEATURE_ID}-<n>.md
@@ -433,22 +512,57 @@ if [ "$DESIGN_PRESENT" = "1" ]; then
       break
     fi
 
-    # Symlink defense (Agent 5 M-5): refuse to read/parse a symlinked audit
-    # file. A user (or a malicious skill output that smuggled a symlink
-    # into .harness/design/audits/) could point this at /etc/passwd or
-    # similar; even when impeccable+Designer wrote a real file at the
-    # canonical path, a later symlink replacement would redirect parsing.
-    if [ -L "$LATEST_AUDIT" ]; then
-      echo "Audit file is a symlink — refusing to read for security. Rerun /harness:design audit to write a fresh report."
+    # Symlink defense (Agent 5 round-2 hardening): refuse to read/parse an
+    # audit file whose canonical path resolves outside the project's
+    # `.harness/` tree. The previous `[ -L "$LATEST_AUDIT" ]` check only
+    # caught a symlinked LEAF; it missed (a) a symlinked PARENT directory
+    # (e.g., `.harness/design/audits/` itself swapped to `/tmp/attacker/`
+    # which then contains a regular `audit-foo-1.md`), (b) macOS's
+    # /tmp → /private/tmp redirect that would false-positive a substring
+    # check, and (c) the symmetric exposure on `.last-designer-stdout.txt`
+    # added by the round-2 stdout-capture contract. Canonicalize via
+    # realpath and require the result to live under
+    # $PROJECT_ROOT_CANON/.harness/. Both an audit file symlinked to
+    # /etc/passwd AND `.harness/design/audits/` symlinked to /tmp/x/
+    # (with a regular file inside) are rejected.
+    if ! _confined_to_harness "$LATEST_AUDIT"; then
+      echo "Audit file resolves outside the project .harness/ tree — refusing to read for security."
+      echo "Resolved: $(_canonicalize "$LATEST_AUDIT")"
+      echo "Rerun /harness:design audit (after removing any symlinks under .harness/design/audits/) to write a fresh report."
       break
     fi
 
     # ─── Severity-laundering defense (Agents 2 + 3 + 4) ──────────────────
     # Designer's exit line is the contractual authoritative count
     # (designer.md AUDIT Step 9). The orchestrator captured it to
-    # .last-designer-stdout.txt during dispatch; parse that first. If the
-    # exit line is missing or malformed, fall back to grepping the file
-    # body, but DO log a warning so future drift gets noticed.
+    # .last-designer-stdout.txt during the post-dispatch Write (Step A
+    # half B above). Parse that first.
+    #
+    # Missing-file branch: at THIS point in the loop body the orchestrator
+    # has just returned from a Designer dispatch and (per the Step A
+    # contract) MUST have written the final-message text to the stdout
+    # capture file. A missing file here means the orchestrator skipped its
+    # own contract — distinct from the legitimate "fresh-run, no Designer
+    # dispatched yet" state which occurs only BEFORE the first iteration
+    # of this loop, never inside it. Halt with a clear contract-violation
+    # message instead of silently falling back to file-grep (the silent
+    # fallback was masking the bug that round-2 stress testing flagged).
+    if [ ! -f .harness/design/audits/.last-designer-stdout.txt ]; then
+      echo "Audit-gate contract violation: .harness/design/audits/.last-designer-stdout.txt is missing AFTER Designer dispatch." >&2
+      echo "The orchestrator must Write the Designer's final-message text to that path post-dispatch (Step A half B)." >&2
+      echo "Halting the audit-loop. Latest audit report (if any): ${LATEST_AUDIT}" >&2
+      break
+    fi
+    # Same realpath-confinement guard as for $LATEST_AUDIT — the stdout
+    # capture file is read by `grep` below and must live under
+    # $PROJECT_ROOT_CANON/.harness/. A symlink-replacement attack here
+    # would let an attacker forge an "AUDIT complete. Verdict: PASS" line
+    # to bypass the gate.
+    if ! _confined_to_harness ".harness/design/audits/.last-designer-stdout.txt"; then
+      echo "Designer stdout capture resolves outside the project .harness/ tree — refusing to read for security." >&2
+      echo "Resolved: $(_canonicalize ".harness/design/audits/.last-designer-stdout.txt")" >&2
+      break
+    fi
     EXIT_LINE=$(grep -m1 '^AUDIT complete\.' .harness/design/audits/.last-designer-stdout.txt 2>/dev/null)
     if [[ "$EXIT_LINE" =~ Verdict:\ (PASS|FAIL).*P0=([0-9]+).*P1=([0-9]+).*P2=([0-9]+) ]]; then
       AUDIT_VERDICT="${BASH_REMATCH[1]}"
