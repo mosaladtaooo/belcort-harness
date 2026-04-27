@@ -23,6 +23,7 @@ Before any subcommand, the orchestrator runs:
 mkdir -p .harness/design
 mkdir -p .harness/design/directions
 mkdir -p .harness/design/prototype
+mkdir -p .harness/design/audits
 ```
 
 This is idempotent. If `.harness/` itself doesn't exist (the harness has never been initialized in this project), tell the user "No `.harness/` in this project. Run `/harness:setup` first to initialize the harness." and exit. The Designer can run on a project that hasn't gone through `/harness:sprint` yet (you can explore design before specifying anything), but it does need `.harness/` to write into.
@@ -287,13 +288,98 @@ Done.
 
 ## Subcommand: `audit`
 
-Implemented in Step 3 of v1. When audit lands, this subcommand will dispatch Designer in AUDIT mode to review existing UI against `impeccable` principles and file findings.
+Runs impeccable's 5-dimension design audit against the built application or the validated prototype, cross-checks every finding against `.harness/spec/constitution.md`, and produces a P0–P3 punch list at `.harness/design/audits/audit-<feature-id>-<n>.md`. Useful for: re-auditing without rebuilding, auditing the prototype before any sprint runs, ad-hoc design checks. The user-invoked variant is presentational only — it does NOT auto-loop on P0 (that auto-loop is sprint.md's job after Evaluator PASS). User-invoked audits report findings to the user; the user decides what to do.
 
-For now: tell the user
+The full AUDIT procedure lives in the Designer's system prompt. The orchestrator's job is dispatch + present-after-return.
 
-> `/harness:design audit` is implemented in Step 3 of the v1 design loop. Not yet available on this branch.
+### Step 1: Pre-checks
 
-…and exit.
+Verify at least one criterion file exists, plus one audit target. The Designer cannot audit without something to grade against AND something to grade.
+
+Criterion files (need at least ONE):
+- `.harness/design/DESIGN.md` — project-specific design system. Without it the audit grades against impeccable's generic baseline.
+- `.harness/design/prototype/prototype.html` — visual contract from `/harness:design explore`. Implicitly carries criteria.
+
+If NEITHER exists, abort with:
+> `/harness:design audit` requires either a `DESIGN.md` (run `/harness:design teach` first) or a prototype (run `/harness:design explore` first). Neither found in `.harness/design/`.
+
+Constitution file (REQUIRED — the floor):
+- `.harness/spec/constitution.md` — the constitutional floor. AUDIT promotes constitution-clause violations to P0 regardless of impeccable's score.
+
+If `.harness/spec/constitution.md` does NOT exist, abort with:
+> `/harness:design audit` requires `.harness/spec/constitution.md` (the constitutional floor). Run `/harness:setup` first.
+
+### Step 2: Determine target
+
+Parse the rest of `$ARGUMENTS` (everything after the leading `audit` token) for a target hint:
+
+- `--target build` (or `--target=build`) → audit the built app. Verify `.harness/init.sh` exists; if not, abort with: *"--target build requested but no `.harness/init.sh` found. Run `/harness:sprint` first to build a feature."*
+- `--target prototype` (or `--target=prototype`) → audit the prototype. Verify `.harness/design/prototype/prototype.html` exists; if not, abort with: *"--target prototype requested but no prototype on file. Run `/harness:design explore` first."*
+- No `--target` flag → default rule:
+  - If a feature has been built — read `.harness/manifest.yaml`, look for `state.phase = "complete"` AND `.harness/init.sh` exists — default to `build`.
+  - Otherwise default to `prototype`.
+
+Capture the chosen target as `${AUDIT_TARGET}` (either a URL placeholder or the prototype path) and the rationale (`build (feature complete in manifest)` / `prototype (no build yet)` / `build (--target build)` / `prototype (--target prototype)`) for the dispatch prompt.
+
+### Step 3: Dispatch Designer in AUDIT mode
+
+The orchestrator dispatches the Designer via the Agent tool:
+
+- **subagent_type**: `harness:designer`
+- **description**: `"AUDIT: 5-dim design audit + constitution cross-check"`
+- **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
+
+> --- MODE: AUDIT ---
+> --- AUDIT TARGET: ${AUDIT_TARGET} ---
+>
+> You are being dispatched in AUDIT mode by `/harness:design audit` (user-invoked, presentational — no auto-loop on P0). Run impeccable's 5-dimension audit against the target above. Cross-check every finding against `.harness/spec/constitution.md` — constitution-clause violations are auto-promoted to P0 with a `(constitution §N)` tag.
+>
+> Working directory contract: your cwd is the project root; never read or write `.worktrees/current/.harness/`.
+>
+> Read inputs per your AUDIT Step 1–2 (target identification + criteria). Construct the impeccable audit prompt per Step 3. Invoke `Skill(impeccable)`. Map output to BELCORT P0–P3 per Step 5. Run constitution cross-check per Step 6. Write the audit report to `.harness/design/audits/audit-<feature-id>-<n>.md` per Step 7. Self-validate per Step 8. Print the parseable exit-message line per Step 9. See your system prompt for the full AUDIT procedure.
+>
+> Target rationale: ${AUDIT_RATIONALE}
+
+Where `${AUDIT_TARGET}` is either the URL the orchestrator expects `bash .harness/init.sh` to expose (or `<URL from init.sh>` as a placeholder for the Designer to resolve) OR the absolute path to `prototype.html`, and `${AUDIT_RATIONALE}` is the one-line "why this target" string from Step 2.
+
+### Step 4: After dispatch returns
+
+The Designer subagent writes the audit report and prints a parseable exit line. The orchestrator:
+
+1. Parses Designer's stdout for the `AUDIT complete. Verdict: ...` line. Capture P0/P1/P2/P3 counts and the report path.
+2. Verifies the audit file exists at the reported path. If not, surface the failure to the user verbatim — the Designer's exit message will explain what went wrong.
+3. Reads the P0 section of the audit report (e.g., `head -30` of the `## Punch List` → `### P0` block via Bash, or use Read with limit) for the excerpt below.
+4. Presents to the user:
+
+```
+═══════════════════════════════
+  Harness — Design Audit
+═══════════════════════════════
+Target: <URL or prototype.html path>
+Rationale: <build / prototype / overridden via --target>
+Verdict: <PASS | FAIL>
+
+P0 (must fix):  <count>
+P1 (should fix): <count>
+P2 (nice-to-fix): <count>
+P3 (polish):     <count>
+
+Constitution violations: <count> (each promoted to P0)
+
+Report: .harness/design/audits/audit-<feature-id>-<n>.md
+
+--- P0 excerpt (first 30 lines of the P0 punch list) ---
+<excerpt>
+--- End excerpt ---
+
+This is a user-invoked audit (presentational only — no auto-loop).
+If you want findings fixed, run /harness:sprint or /harness:resume — the
+sprint flow's auto-audit-gate will re-dispatch BUILD when P0 findings
+exist (capped at 2 retries).
+═══════════════════════════════
+```
+
+If verdict is PASS (no P0), replace the excerpt block with `_No P0 findings — design audit passed._` and the closing line with the simpler "Review the report for P1+ findings if any." Done.
 
 ---
 
@@ -316,6 +402,7 @@ For now: tell the user
 - The orchestrator does NOT dispatch Planner / Generator / Evaluator from `/harness:design`. Design is a separate axis from build; cross-axis interaction happens at the user's discretion (the user runs `/harness:sprint` after the design loop completes if they want to build).
 - The orchestrator does NOT auto-progress past human gates. The user-pick gate after EXPLORE/REROLL Step 4 is the only place humans steer the design loop; respect it.
 - `teach`: Designer writes only `.harness/design/DESIGN.md`. Does NOT touch source code, spec files, or any path outside `.harness/design/`. PRODUCT.md is intentionally deferred — if impeccable's teach flow tries to leak a PRODUCT.md to project root, the Designer removes it.
+- `audit` subcommand: Designer writes only `.harness/design/audits/audit-<feature-id>-<n>.md`. NEVER touches source code, spec files, or anything outside `.harness/design/audits/`. The user-invoked variant is presentational — it does NOT auto-loop on P0 (that auto-loop lives in `/harness:sprint`'s post-Evaluator-PASS path); the user-invoked variant just reports findings.
 
 ---
 
@@ -337,7 +424,18 @@ teach                Codify prototype into .harness/design/DESIGN.md (tokens +
                      /harness:sprint can ground specs in the design language.
                      Requires a prior explore round.
 
-audit                Review existing UI vs impeccable. [Step 3 — not yet shipped]
+audit [--target build|prototype]
+                     Run impeccable's 5-dim audit (Accessibility / Performance
+                     / Theming / Responsive / Anti-Patterns) on the built app
+                     or prototype, cross-check constitution, write a P0–P3
+                     punch list to .harness/design/audits/. User-invoked:
+                     presentational, no auto-loop. /harness:sprint runs the
+                     same audit automatically after Evaluator PASS and loops
+                     BUILD on P0 (capped at 2 retries).
+                     Examples:
+                       /harness:design audit
+                       /harness:design audit --target prototype
+
 extract              Extract tokens from brownfield.   [Step 4 — not yet shipped]
 
 All design artifacts land under .harness/design/. Source code is never touched.

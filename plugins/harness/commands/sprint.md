@@ -316,6 +316,181 @@ Orchestrator reads `.harness/features/${FEATURE}/eval-report.md`, extracts the `
 
 ### If PASS
 
+**5-pre-audit. Auto-audit-gate (v1 design loop integration) — conditional, only fires when `.harness/design/` exists**
+
+After the Evaluator's functional PASS but BEFORE the tuning check (5a-pre), the orchestrator dispatches Designer in AUDIT mode to run impeccable's 5-dimension design audit + constitution cross-check on the just-built feature. If the audit reports **P0 findings**, the orchestrator re-dispatches BUILD (Step 3) with the audit findings as feedback, capped at `AUDIT_MAX_RETRIES = 2` audit-retries. If only P1+ findings are reported, the audit results are surfaced to the user but the loop continues to merge.
+
+This gate is **fully conditional** — it fires ONLY when `.harness/design/` exists with at least `DESIGN.md` or `prototype.html` AND `.harness/spec/constitution.md` exists. Sprints without design context (no `/harness:design teach` ever ran, no prototype) skip this entire section and proceed directly to `5a-pre` unchanged from v2.2 behaviour.
+
+The audit-retry counter (`AUDIT_RETRY_COUNT`) is **separate** from the functional retry counter (`state.retry_count` in manifest.yaml). A feature that hits functional FAIL 3 times AND audit FAIL 2 times does NOT double-count — they are independent budgets. `AUDIT_RETRY_COUNT` is bash-local (ephemeral); the audit-retry record persists via the audit files in `.harness/design/audits/audit-<feature-id>-N.md` (count of attempts = max(N) for the feature).
+
+```bash
+# Auto-audit-gate — only fires when a design context exists.
+AUDIT_RETRY_COUNT=0
+AUDIT_MAX_RETRIES=2
+
+# Read the feature-id from the manifest. The orchestrator already has ${FEATURE}
+# from Step 3 (negotiate / build); re-extract here for clarity in this self-
+# contained block. The sed pattern strips the surrounding quotes and ignores
+# any inline "# e.g., ..." YAML comment that follows the value.
+FEATURE_ID=$(sed -n 's/^  current_feature: *"\([^"]*\)".*/\1/p' .harness/manifest.yaml)
+if [ -z "$FEATURE_ID" ]; then
+  # Fallback: handle unquoted-value case (some manifests may not quote).
+  FEATURE_ID=$(sed -n 's/^  current_feature: *\([^ #"]*\).*/\1/p' .harness/manifest.yaml)
+fi
+
+# Gate: design context must exist AND constitution.md must exist.
+DESIGN_PRESENT=0
+if [ -d ".harness/design" ] && { [ -f ".harness/design/DESIGN.md" ] || [ -f ".harness/design/prototype/prototype.html" ]; } && [ -f ".harness/spec/constitution.md" ]; then
+  DESIGN_PRESENT=1
+fi
+
+if [ "$DESIGN_PRESENT" = "1" ]; then
+  mkdir -p .harness/design/audits
+
+  while [ "$AUDIT_RETRY_COUNT" -le "$AUDIT_MAX_RETRIES" ]; do
+    # ─── Step A: Dispatch Designer in AUDIT mode ───────────────────────────
+    # The orchestrator (NOT this bash block) dispatches the Designer subagent
+    # via the Agent tool with subagent_type: harness:designer, description:
+    # "AUDIT: 5-dim design audit + constitution cross-check (sprint auto-gate)",
+    # and a prompt containing:
+    #
+    #   --- MODE: AUDIT ---
+    #   --- AUDIT TARGET: <URL from bash .harness/init.sh, OR
+    #       .harness/design/prototype/prototype.html if no build yet> ---
+    #
+    #   You are being dispatched by /harness:sprint's auto-audit-gate after
+    #   Evaluator PASS. Run the full AUDIT procedure per your system prompt
+    #   (Steps 1-9). Print the parseable exit-message line. Note: this is
+    #   the auto-loop dispatch — P0 findings will trigger a BUILD retry.
+    #
+    #   Working directory contract: cwd is project root; never read or
+    #   write .worktrees/current/.harness/.
+    #
+    # The Designer writes the audit report to:
+    #   .harness/design/audits/audit-${FEATURE_ID}-<n>.md
+    # where <n> is the attempt count it computes from the highest existing N.
+    #
+    # On return, the Designer prints exactly:
+    #   AUDIT complete. Verdict: <PASS|FAIL>. P0=<n>, P1=<n>, P2=<n>, P3=<n>. Report: .harness/design/audits/audit-<feature-id>-<n>.md
+
+    # ─── Step B: Parse the latest audit file for P0/P1 counts ─────────────
+    LATEST_AUDIT=$(ls -t .harness/design/audits/audit-${FEATURE_ID}-*.md 2>/dev/null | head -1)
+    if [ -z "$LATEST_AUDIT" ] || [ ! -f "$LATEST_AUDIT" ]; then
+      # Designer dispatch failed to produce a report. Surface to user; do
+      # NOT silently treat as PASS — that bypasses the gate.
+      echo "Design audit dispatch did not produce a report. Manual investigation required."
+      echo "Options: re-run /harness:design audit manually, OR proceed with merge by typing 'force-merge'."
+      break
+    fi
+
+    P0_COUNT=$(grep -c '^- \*\*\[P0\]' "$LATEST_AUDIT" 2>/dev/null || echo "0")
+    P1_COUNT=$(grep -c '^- \*\*\[P1\]' "$LATEST_AUDIT" 2>/dev/null || echo "0")
+    P2_COUNT=$(grep -c '^- \*\*\[P2\]' "$LATEST_AUDIT" 2>/dev/null || echo "0")
+    P3_COUNT=$(grep -c '^- \*\*\[P3\]' "$LATEST_AUDIT" 2>/dev/null || echo "0")
+
+    # ─── Step C: PASS branch — no P0, exit the loop and proceed to merge ──
+    if [ "$P0_COUNT" -eq 0 ]; then
+      echo "Design audit passed (no P0). P1=${P1_COUNT}, P2=${P2_COUNT}, P3=${P3_COUNT} logged for review."
+      # Surface P1+ to the user before tuning check (presentational only;
+      # the loop has finished, control falls through to 5a-pre).
+      break
+    fi
+
+    # ─── Step D: Cap reached — escalate to user, do not loop further ─────
+    if [ "$AUDIT_RETRY_COUNT" -ge "$AUDIT_MAX_RETRIES" ]; then
+      echo "Design audit found ${P0_COUNT} P0 finding(s) after ${AUDIT_RETRY_COUNT} retr(ies). Audit cap (${AUDIT_MAX_RETRIES}) reached."
+      echo "Latest report: $LATEST_AUDIT"
+      echo "Options for the user:"
+      echo "  1. Force-merge with known P0 issues (the audit report stays on disk as the record)"
+      echo "  2. /harness:edit DESIGN.md to soften the criteria the audit grades against, then re-run /harness:design audit manually"
+      echo "  3. Manually fix the P0 findings and re-run /harness:resume (will pick up from evaluating phase)"
+      echo "  4. Abandon this sprint"
+      # Halt the auto-loop. The orchestrator surfaces the options above to the
+      # user via the user-gate UI; the user picks one explicitly. Do NOT
+      # auto-merge with open P0 — that defeats the gate.
+      break
+    fi
+
+    # ─── Step E: P0 found, retries available — re-dispatch BUILD ─────────
+    AUDIT_RETRY_COUNT=$((AUDIT_RETRY_COUNT + 1))
+    echo "Design audit found ${P0_COUNT} P0 finding(s). Retrying BUILD (attempt ${AUDIT_RETRY_COUNT}/${AUDIT_MAX_RETRIES})."
+
+    # Construct AUDIT_FEEDBACK to append to the BUILD dispatch prompt.
+    # This mirrors the existing eval-report.md feedback pattern (Step 3's
+    # --- EVALUATOR FEEDBACK --- block) — the Generator already knows how to
+    # consume a "fix these findings" feedback block.
+    AUDIT_FEEDBACK="
+--- DESIGN AUDIT FEEDBACK (FIX P0 findings, audit-retry ${AUDIT_RETRY_COUNT} of ${AUDIT_MAX_RETRIES}) ---
+
+The design audit found ${P0_COUNT} P0 (must-fix) finding(s) in your build. The Evaluator's functional checks PASSED, so this retry is design-driven only — focus on the P0 findings below; do not regress the functional behaviour the Evaluator already approved.
+
+The full audit report is at: ${LATEST_AUDIT}
+
+Inline content of the report (read this and act on EACH P0):
+
+$(cat \"${LATEST_AUDIT}\")
+
+Fix every P0 listed above. Each P0 entry has a 'Where:' location and a 'Fix:' instruction — apply the Fix at the Where. P0s tagged with (constitution §N) are constitutional violations and MUST be fixed; constitution wins over DESIGN.md and over functional convenience.
+
+After this BUILD pass, the audit will re-run automatically. If P0 findings persist for the audit-retry cap (${AUDIT_MAX_RETRIES}), the orchestrator will escalate to the user.
+--- END DESIGN AUDIT FEEDBACK ---"
+
+    # ─── Step F: Re-dispatch Generator BUILD with audit feedback ─────────
+    # The orchestrator re-dispatches the Generator via the Agent tool with the
+    # SAME BUILD-mode prompt from Step 3 (subagent_type: harness:generator,
+    # BUILD mode), with ${AUDIT_FEEDBACK} appended to the dispatch prompt
+    # AFTER the existing eval-report-feedback block (if any) and AFTER the
+    # design-build-context block. The Generator treats audit findings as a
+    # feedback channel separate from Evaluator feedback — both can be
+    # present on the same retry.
+    #
+    # Note: state.retry_count in manifest.yaml is NOT incremented here.
+    # Audit-retries use AUDIT_RETRY_COUNT (this loop's counter only).
+    # Functional retries (state.retry_count vs config.max_retries) remain
+    # the Evaluator's domain.
+
+    # ─── Step G: Re-dispatch Evaluator (functional check on the rebuilt) ─
+    # The orchestrator re-dispatches the Evaluator via the Agent tool with
+    # the SAME EVALUATE-mode prompt from Step 4 (subagent_type:
+    # harness:evaluator, EVALUATE mode). The audit-driven re-build must
+    # still pass the functional checks — if Evaluator returns FAIL on the
+    # audit-retry, that is a functional regression and goes through the
+    # existing FAIL branch (5b/5c with state.retry_count). Audit-retries
+    # do NOT bypass the functional gate.
+    #
+    # If Evaluator returns PASS again, the loop continues at the top
+    # (re-audit), checking whether the P0 findings were actually fixed.
+    # If Evaluator returns FAIL, exit this audit-loop (the FAIL branch
+    # below handles it; the audit gate doesn't fire again until functional
+    # PASS).
+
+    # End of loop body — control returns to the `while` condition above.
+    # On the next iteration: dispatch AUDIT again (Step A), re-parse counts,
+    # decide.
+  done
+fi
+```
+
+**Outside the bash block (orchestrator behaviour in prose):**
+
+- The bash block above is illustrative — it shows the control flow and the parsing patterns. The orchestrator implements each step using the Agent tool (for AUDIT / BUILD / EVALUATE re-dispatches) and Bash + Read tools (for the parsing). Treat the bash as pseudocode for the loop shape; the actual dispatches go through the Agent tool the same way the rest of sprint.md does.
+- Step A (dispatch AUDIT): use the same Agent-tool pattern as the user-invoked `/harness:design audit` subcommand, with one extra line in the dispatch prompt noting "this is the sprint auto-gate, the loop will retry BUILD on P0".
+- Step F (re-dispatch BUILD): reuse the existing BUILD dispatch from Step 3. Append `${AUDIT_FEEDBACK}` (constructed in Step E) to the end of the dispatch prompt — AFTER the existing `--- EVALUATOR FEEDBACK ---` block (if any from a prior functional retry; usually absent in the post-PASS path) and AFTER the `${DESIGN_BUILD_CONTEXT}` block. The Generator already handles a feedback block at the prompt tail; the AUDIT feedback is structurally identical to the EVALUATOR feedback pattern.
+- Step G (re-dispatch EVALUATE): reuse the existing EVALUATE dispatch from Step 4. The audit-retry's functional PASS becomes the gate for the next AUDIT iteration. If the audit-driven re-build regresses functionally (Evaluator FAIL), the existing FAIL branch (5b — retries < max OR 5c — retries ≥ max) handles it; the audit-loop does NOT consume `state.retry_count` itself, but the BUILD it triggers uses the regular Evaluator path and that path may consume `state.retry_count` if it FAILs.
+
+**Why a separate counter (AUDIT_RETRY_COUNT)**: functional retries (`state.retry_count`, capped by `config.max_retries`, default 3) cover the Evaluator's functional FAIL → fix → re-evaluate cycle. Audit retries (`AUDIT_RETRY_COUNT`, capped at 2) cover the audit's design-violation → fix → re-audit cycle. Mixing the counters would let a feature that's functionally fine but design-broken consume the functional-retry budget (or vice versa). Keeping them separate means the user sees two distinct failure modes with two distinct remediation paths.
+
+**No persistent manifest field**: `AUDIT_RETRY_COUNT` is ephemeral (lives in this bash loop only). The persistent record of audit attempts is the file count at `.harness/design/audits/audit-${FEATURE_ID}-N.md` (max(N) = total attempts ever for this feature, including failed retries). This avoids adding a new manifest schema field per the v1 Step 3 constraint.
+
+**If the auto-loop exits with cap-reached and user picks "force-merge"**: proceed to 5a-pre (tuning check) and onward to merge. The audit report stays on disk under `.harness/design/audits/` as the permanent record; the merge happens with known P0s.
+
+**If the auto-loop exits with cap-reached and user picks "manually fix and resume"**: halt the sprint. The user fixes manually, then runs `/harness:resume` which picks up from the evaluating phase (existing resume behaviour); on next functional PASS the auto-loop re-fires. (The audit-retry counter starts at 0 in the new sprint dispatch — it's per-dispatch ephemeral.)
+
+After the auto-loop exits cleanly (P0 = 0) OR with cap+force-merge, control falls through to **5a-pre. Tuning check** below.
+
+---
+
 **5a-pre. Tuning check — capture human-Evaluator divergence (automatic)**
 
 This implements the Anthropic-documented tuning loop. Present the Evaluator's judgment to the user:
@@ -360,7 +535,7 @@ Then the orchestrator (via Edit tool) updates:
 - `ROADMAP.md` — move feature to "✅ Shipped".
 - `.harness/manifest.yaml` — `features.completed` append, `features.in_progress = ""`, `state.phase = "complete"`, `state.retry_count = 0`.
 
-Print scores + completion message.
+Print scores + completion message. If the auto-audit-gate ran (i.e., `.harness/design/` was present), the completion message also surfaces: total audit attempts (max(N) of `audit-${FEATURE_ID}-N.md`), final audit verdict (PASS / FAIL — force-merged), and any P1+ findings that were logged for later. If the gate did not run (no `.harness/design/`), the completion message is unchanged from v2.2.
 
 ### If FAIL and retries < max
 
