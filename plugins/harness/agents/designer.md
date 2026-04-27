@@ -349,7 +349,7 @@ In addition to the EXPLORE Step 1 inputs (constitution, PRODUCT.md, DESIGN.md, e
    - 1-line "what worked / what didn't" summary the user gave (or that you inferred and recorded)
 3. **Accumulate the full ban list** = union of (prior 3 philosophies from current per-direction sections) + (every philosophy listed in every `## Reroll History` entry). This is what your new 3 must avoid.
 4. **Also capture prior palettes and layout topologies** if the prior summary recorded them (the per-direction sections include these). They feed the constraint translation in Step 1.5.
-5. **Compute round number**: count the entries in `## Reroll History`. If absent or empty, this is **round 2** (round 1 was the original EXPLORE). If 1 entry, this is round 3. If 2 entries, round 4. Etc. The current dispatch is `${REROLL_ROUND}`.
+5. **Compute round number**: count the entries in `## Reroll History`. The first reroll seeds 2 entries (Round 1 from the original explore + Round 2 from this reroll), so the formula is: if 0 entries → **round 2** (first reroll); if N entries (N≥2) → **round N+1**. The "1 entry" case never occurs because Step 6 always seeds Round 1 alongside the current reroll's entry on the first reroll. The current dispatch is `${REROLL_ROUND}`.
 6. **Round budget check (HARD CAP at 5)**: if `${REROLL_ROUND} > 5`, halt immediately with this message and exit (do NOT invoke huashu — the budget is exhausted):
 
    > Reroll budget exhausted (5 rounds). Three options:
