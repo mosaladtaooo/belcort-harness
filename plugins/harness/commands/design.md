@@ -55,6 +55,8 @@ Optionally accepts up to 3 `--reference-image <path>` flags (or `--reference-ima
 
 This reset happens BEFORE Step 1 — even if the user later cancels at the human gate, a fresh explore should imply a fresh budget. If `.harness/manifest.yaml` doesn't exist (the harness hasn't been initialized), skip silently — there's no field to reset.
 
+**Audit-trail entry (M1 method-D framing)**: after writing the reset, the orchestrator appends a one-line entry to `.harness/progress/changelog.md` (creating the file if absent) recording the reset event. Format: `[YYYY-MM-DD HH:MM] /harness:design explore — reroll counter reset from <prior_value> to 0. Intent: <user's $ARGUMENTS>`. Replace `<prior_value>` with the value read before reset (`0` on first run is fine — still write the line so the trail is complete). This entry is what makes the budget-as-soft-heuristic philosophy auditable: a user who wonders "when did I last decide to start fresh on this design?" can scan the changelog instead of reading git diffs. See `agents/designer.md` REROLL Step 6 sub-bullet "Philosophy" for the framing this entry supports — the budget is a focus nudge, not a hard cap, and the changelog turns deliberate overrides into traceable decisions.
+
 ### Step 1: Validate intent + parse reference-image flags
 
 Strip the leading `explore` token from `$ARGUMENTS`. Parse the remainder for:
