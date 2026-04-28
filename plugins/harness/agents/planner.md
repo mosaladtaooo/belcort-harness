@@ -238,8 +238,61 @@ Explicitly list what is OUT of scope (≥3 items).
 ```markdown
 # [Product Name] — Product Requirements Document
 
+## Plain-English Summary
+
+<!--
+MANDATORY first content section (v2.2-staging UX-r1 / FIX A1).
+
+This section is what the orchestrator's human gate prints to the user BEFORE
+the engineering metadata (FR/NFR/AC counts, V1-V16 pass count, etc.). The
+user is non-technical: they cannot evaluate "should there be 7 FRs or 9?"
+or what "16/16 self-validation passed" means. They CAN evaluate "does this
+match what I asked for, in my own words?"
+
+Hard rules for this section:
+- 3-5 sentences in the "What we're building" paragraph.
+- IN-SCOPE bullets: 3-5 items, written in user-facing product terms.
+- OUT-OF-SCOPE bullets: 3-5 items, CONCRETE — never "TBD", never "to be
+  determined later", never "future work". If you don't know, ask via
+  AskUserQuestions; don't punt.
+- The closing "If you proceed" line names the next concrete artefact the
+  user will see (a clickable prototype, the first failing test being
+  written, an architecture diagram, etc.) — set the right expectation.
+- ZERO jargon: no "FR", "NFR", "AC", "EC", "UJ", "ADR", "P0/P1/P2",
+  "constitution", "rubric", "TDD", framework names, or library names.
+  If a sentence doesn't read like something the founder would say to a
+  friend at coffee, rewrite it.
+- This section is gated by V0 in the 16-point self-validation. The
+  orchestrator's human gate (sprint.md Step 2) cats this section verbatim.
+-->
+
+**What we're building**: [3-5 sentences in plain language. No jargon, no
+acronyms, no framework names. Describe the product the way the user would
+describe it to a friend.]
+
+**What's IN scope** (the things this sprint will produce):
+- [3-5 user-facing bullets. e.g., "Users can sign up with email and
+  password", NOT "FR-001: Email/password authentication via NextAuth"]
+- [...]
+- [...]
+
+**What's explicitly OUT of scope** (NOT building these — call them out so
+you're not surprised later):
+- [3-5 concrete exclusions. e.g., "Social login (Google/Apple)",
+  "Forgot-password flow", "Mobile app". Never "TBD" or "future work".]
+- [...]
+- [...]
+
+**If you proceed, you'll see next**: [one sentence — the next concrete
+artefact. e.g., "the Generator and Evaluator negotiating the build plan,
+then the first failing test being written" or "a clickable prototype in
+your browser before any production code is touched".]
+
+---
+
 ## Executive Summary
-[3-4 sentences: what, who, why, key differentiator]
+[3-4 sentences: what, who, why, key differentiator. This is the engineering-
+audience summary; the Plain-English Summary above is the user-audience one.]
 
 ## Vision & Differentiators
 [What makes this different? Why build this?]
@@ -318,6 +371,27 @@ Same defaults as before — 17 enforceable principles covering code quality, tes
 # PASS 2: High-Level Technical Direction
 
 **Read your own Pass 1 output (prd.md + constitution.md) before starting Pass 2.**
+
+**Read detected stack from manifest before writing architecture (FIX B1 — brownfield).**
+Before proposing any framework/runner choices, read `.harness/manifest.yaml` and
+inspect the `project:` block for `src_dir`, `test_runner`, and `stack_family`
+(populated by `setup.sh` at install time). On a brownfield project, these reflect
+the existing codebase's conventions — your architecture MUST respect them rather
+than override. Specifically:
+
+- If `stack_family` is set (e.g., `nextjs`, `astro`, `vite`, `python`, `rust`),
+  pick framework/library choices that fit that family. Do NOT propose a Vite
+  rebuild on a Next.js project.
+- If `test_runner` is detected (e.g., `jest`), use that in the Stack table —
+  do NOT silently switch to vitest because it's the harness default. If the
+  detected runner is `(none — please configure manually)`, you may propose one
+  and document it as an ADR.
+- If `src_dir` is `app` (Next.js app-router), `lib`, or `.` (flat), respect it
+  in any directory commentary you write. The Generator's NEGOTIATE phase will
+  fill in the actual paths; your job is to not contradict the existing layout.
+
+If a detected value conflicts with what the user requested, surface the conflict
+in `## Open Questions` rather than silently overriding.
 
 ## Architecture: `.harness/spec/architecture.md`
 
@@ -650,6 +724,20 @@ Then stop — surface the split to the human at the `/harness:analyze` gate for 
 Run EVERY check before declaring planning complete. If ANY fails, fix before finishing.
 
 ## PRD Quality
+- [ ] **V0: Plain-English Summary present** (v2.2-staging UX-r1 / FIX A1) —
+      `prd.md` opens with a `## Plain-English Summary` section as its FIRST
+      content section (above Executive Summary). The section contains: a
+      "What we're building" paragraph (3-5 sentences), an IN-scope list
+      (3-5 bullets), an OUT-of-scope list (3-5 bullets), and a closing
+      "If you proceed, you'll see next" sentence. NO jargon — the section
+      is rejected if it contains any of: "FR-", "NFR-", "AC-", "EC-", "UJ-",
+      "ADR-", "P0", "P1", "P2", "constitution", "rubric", "TDD", a framework
+      name, or a library name. OUT-of-scope bullets are CONCRETE (each one
+      is a specific exclusion the user could recognize) — `TBD`, `future
+      work`, `to be determined`, `not sure yet`, or any placeholder string
+      fails this check. This section is the user-facing approval surface —
+      the orchestrator's human gate prints it before any engineering
+      metadata, and the user approves the spec based on it.
 - [ ] **V1: Completeness** — Every FR has ≥2 ACs and ≥1 EC
 - [ ] **V2: SMART NFRs** — Every NFR is Specific and Measurable
 - [ ] **V3: Traceability** — Every FR → UJ. Every AC has unique ID.
@@ -690,8 +778,12 @@ Run EVERY check before declaring planning complete. If ANY fails, fix before fin
       "failing work" descriptions with named anti-patterns. Criteria would produce 
       noticeably different Generator output vs a template-default version.
 
-**All 16 checks pass → write all files, report to orchestrator.**
+**All 17 checks pass → write all files, report to orchestrator.**
 **Any fail → fix, re-check, then report.**
+
+(V0 was added in v2.2-staging UX-r1 / FIX A1 to fix the non-technical-
+founder approval gate failure mode. The "16-point" name is retained in
+older docs for historical continuity; the actual count is now 17.)
 
 ---
 

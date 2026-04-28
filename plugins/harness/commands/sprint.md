@@ -26,6 +26,126 @@ If `.harness/brainstorm-current.md` exists from a prior brainstorm session, trea
 
 ---
 
+## 0.5. Intent classifier — route the prompt to the right tool (UX-r1 / FIX A2)
+
+Before spending Planner tokens, classify the user's prompt. Three real-world failure modes prompted this gate:
+
+- *"make the homepage feel more premium"* — design intent. Running the full TDD pipeline produces code that looks the same; the audit-gate doesn't fire (no `.harness/design/`); user gets back essentially the same UI and feels the harness wasted their money.
+- *"fix the cart total bug on mobile Safari"* — bug-fix on existing code. Running full PRD + constitution + architecture is massively over-spec'd for a 1-line fix. The user pays per token; this is the worst kind of overcharge.
+- *"add Stripe checkout"* (truly new feature) — standard sprint intent. Proceeds normally.
+
+The classifier is **conservative**: when uncertain, default to **Standard** (don't block). False positives here block real work; false negatives just waste a sprint that would have been wasted anyway. So we'd rather miss a design-intent and let the user notice mid-sprint than block a legitimate sprint.
+
+### Classification rules
+
+Apply these checks to `$ARGUMENTS` (lowercased, with leading/trailing whitespace stripped) **in order**. First match wins; falling through all → Standard.
+
+**Design intent** (route to `/harness:design explore`):
+
+Heuristic: the prompt is asking the product to LOOK or FEEL different, not DO different things.
+
+Match if BOTH conditions hold:
+- The prompt contains at least one of these patterns (regex/substring match on the lowered prompt):
+  - `make .* (feel|look|seem) `
+  - `redesign`, `re-design`
+  - `prettier`, `nicer-looking`, `better looking`, `more beautiful`
+  - `more premium`, `more polished`, `more modern`, `more refined`, `more elegant`, `more luxurious`, `more upscale`
+  - `cleaner`, `more minimal`, `tighter`
+  - `polish (the|this|our) ` (e.g., "polish the landing page")
+  - `feel more `, `look more `
+  - `give it a (.*) feel`, `give it a (.*) look`
+  - `visual refresh`, `design refresh`
+  - `aesthetic`, `vibe`
+- AND the prompt does NOT contain any of these functional verbs as a leading or primary action:
+  - `add`, `create`, `implement`, `build`, `ship`, `deliver`
+  - `fix`, `repair`, `patch`
+  - `migrate`, `port`, `convert`
+  - `integrate`, `connect`, `wire up`
+  - `support` (as in "support OAuth")
+
+If both conditions hold → **Design intent**. Halt the sprint with this message verbatim:
+
+```
+This sounds like a design iteration, not a code change.
+
+The right tool is:
+  /harness:design explore "<your intent>"
+
+It produces a clickable HTML prototype in ~5 minutes for ~$3 (estimate).
+You'll see 3 differentiated visual directions, pick one, and iterate
+with /harness:design reroll "<feedback>" before any production code is
+touched. If you like the prototype, /harness:design teach codifies it
+into a design system the next sprint reads as visual contract.
+
+If you really want to run the full code pipeline anyway (e.g., the
+prompt is shorthand for a deeper change you can't articulate yet),
+type 'force-sprint' to continue.
+```
+
+Wait for `force-sprint` (literal, case-insensitive) or a new prompt. Anything else → exit.
+
+**Bug-fix intent** (route to `/harness:quick`):
+
+Heuristic: the prompt is asking to fix something that already exists, not add something new.
+
+Match if ALL three conditions hold:
+- The prompt contains at least one of these signals:
+  - `fix`, `bug`, `broken`, `breaks`, `doesn't work`, `does not work`, `not working`, `stopped working`, `regression`, `wrong`, `incorrect`, `crashes`, `errors out`, `throws`, `500s`, `404s`
+- AND the prompt names a CONCRETE locus — a noun that refers to a specific existing thing. Heuristic: the prompt contains a definite article (`the`, `our`, `my`) followed within 5 words by a non-generic noun (`button`, `form`, `cart`, `checkout`, `login`, `signup`, `header`, `footer`, `modal`, `page`, `endpoint`, `api`, `query`, `route`, `total`, `price`, `validation`, `redirect`, etc.) OR the prompt contains a specific selector pattern (e.g., a route path like `/cart`, a component name in CamelCase, a CSS selector, a function name, a file path).
+- AND the project is **brownfield** — `.harness/manifest.yaml` exists AND `features.completed` is non-empty (i.e., at least one feature has shipped through this harness, OR the user has run `/harness:design extract` confirming existing source). Greenfield projects can't have bugs in shipped code yet, so the bug-fix route doesn't apply.
+
+If all three hold → **Bug-fix intent**. Halt the sprint with this message verbatim:
+
+```
+This sounds like a bug fix on existing code.
+
+The right tool is:
+  /harness:quick "<your description>"
+
+It skips PRD generation and the full architecture pass, writes a
+minimal 2-4 AC contract inline, and goes straight to reproduce-then-
+fix via the Generator → Evaluator loop. Roughly 5x faster and 5x
+cheaper than a full sprint for a scoped fix.
+
+If the bug actually needs a full investigation (it touches the data
+model, requires architectural changes, or the root cause isn't
+obvious), type 'force-sprint' to continue with the full pipeline.
+```
+
+Wait for `force-sprint` (literal, case-insensitive) or a new prompt. Anything else → exit.
+
+**Standard intent** (proceed normally):
+
+Everything else — the prompt either:
+- Names a new capability (`add`, `create`, `implement`, `build`, `support`)
+- Is a greenfield-style request on an empty manifest
+- Mixes intents in a way the rules above don't cleanly classify (uncertainty → default Standard)
+
+Standard intent → continue to Step 0 (doctor). No message, no halt.
+
+### Examples (for the orchestrator's calibration)
+
+| Prompt | Class | Why |
+|---|---|---|
+| "make the homepage feel more premium" | Design | "make X feel Y" + no functional verb |
+| "redesign the dashboard with a cleaner look" | Design | "redesign" + "cleaner" + no functional verb |
+| "polish the onboarding flow" | Design | "polish the" + no functional verb |
+| "fix the cart total bug on mobile Safari" | Bug-fix (if brownfield) | "fix" + "the cart total" (concrete locus) + brownfield |
+| "the login button doesn't work after the last deploy" | Bug-fix (if brownfield) | "doesn't work" + "the login button" + brownfield |
+| "add Stripe checkout" | Standard | functional verb "add" |
+| "build a habit tracker for night-owl freelancers" | Standard | functional verb "build", greenfield |
+| "fix the way the homepage feels" | Standard | "fix" present but no concrete locus + design-y framing — uncertain → Standard |
+| "make checkout faster" | Standard | "make X Y" but "faster" is a functional/perf concern, not visual; uncertain → Standard |
+| "add a polish pass to the settings page" | Standard | functional verb "add" wins over "polish" |
+
+### Implementation note
+
+The orchestrator implements this in its own reasoning, not via a shell script — the rules above are a decision procedure the orchestrator applies before dispatching anything. The classifier produces one of three outcomes and either halts (with the verbatim user message) or falls through to Step 0.
+
+This step exists at line ordering 0.5 (between Step 0a brainstorm and Step 0 doctor) deliberately: brainstorm-check runs first because it can REPHRASE a vague prompt into a concrete one (which would then be classifiable), and doctor runs after because a misclassified prompt that gets halted here doesn't need a doctor pass at all.
+
+---
+
 ## 0. Doctor — environment preflight (mandatory, blocking)
 
 Before dispatching any subagent, run the doctor:
@@ -115,12 +235,49 @@ Then wait for the human gate in Step 2.
 
 ## 2. Human gate — present summary, wait for approval
 
-Summarise what was planned:
+This is the only mandatory human gate. The user is non-technical: they cannot judge whether 7 FRs is the right count or what "16/16 self-validation passed" means, but they CAN judge whether the plain-English description matches what they asked for. Surface the **plain-English description first**, the engineering metadata second (collapsed under an "advanced" header).
+
+**Step 2a — Read and print the Plain-English Summary verbatim** (UX-r1 / FIX A1):
+
+The orchestrator uses the Read tool on `.harness/spec/prd.md` and extracts the `## Plain-English Summary` section (everything from that heading up to but not including the next `##` heading, which by Planner contract is `## Executive Summary`). Print the extracted block verbatim under a clear header so the user reads it before anything else:
 
 ```
-═══════════════════════════════
-  Harness — Planning Complete
-═══════════════════════════════
+═══════════════════════════════════════════════════════════════
+  Harness — Planning Complete · Here's what was planned
+═══════════════════════════════════════════════════════════════
+
+[verbatim contents of prd.md § Plain-English Summary — preserved as
+the Planner wrote it: the "What we're building" paragraph, the IN-scope
+bullets, the OUT-of-scope bullets, and the closing "If you proceed,
+you'll see next" sentence]
+
+═══════════════════════════════════════════════════════════════
+  Does this match what you asked for?
+═══════════════════════════════════════════════════════════════
+
+  • approved                 → continue to negotiate + build
+  • /harness:clarify         → I have questions before approving
+  • /harness:amend "<your words>"
+                             → describe in plain English what to change
+                                Example: /harness:amend "the OUT-of-scope
+                                list is missing — we should NOT support
+                                guest checkout in this sprint"
+  • /harness:edit "<your words>"
+                             → bigger rewording that touches multiple parts
+                                Example: /harness:edit "swap the database
+                                from Postgres to SQLite to keep things
+                                simple"
+  • /harness:rewind planning → throw it out, plan from scratch
+```
+
+If the Planner failed to write a `## Plain-English Summary` section (V0 should have caught this — but if it slipped through), halt the gate and ask the user to run `/harness:rewind planning` or `/harness:amend "add the Plain-English Summary section per V0"` before approving. Do NOT proceed to fall back on engineering metadata as the primary surface — that's the failure mode this fix exists to close.
+
+**Step 2b — Engineering metadata, behind an "Advanced" header** (presentational only, the user can ignore it):
+
+After the Plain-English block and the approval menu above, the orchestrator prints the engineering metadata under a collapsed/secondary header so a curious user can verify the spec's structural shape without it dominating the gate:
+
+```
+─── Technical detail (advanced — safe to skip) ────────────────
 Project: [name]
 Complexity: [small/medium/large] ([N] FRs)
 Stack: [framework + db]
@@ -130,18 +287,12 @@ Architecture: [N] components, Context7 verified.
 Contract: [strategy], [N] deliverables, [N] ACs.
 Files: ✓ spec/prd.md, ✓ spec/constitution.md, ✓ spec/architecture.md,
        ✓ evaluator/criteria.md, ✓ features/NNN/contract.md, ✓ init.sh.
-Planner self-validation: [N/16 passed].
-
-Next:
-  • approved               → negotiate + build
-  • /harness:clarify       → surface ambiguities, answer, auto-patch
-  • /harness:amend "<X>"   → targeted tweak
-  • /harness:edit "<X>"    → multi-file spec edit
-  • /harness:rewind planning → fundamental re-plan
-═══════════════════════════════
+Planner self-validation: [N/17 passed]  (V0 = Plain-English Summary +
+                                          V1-V16 per planner.md)
+───────────────────────────────────────────────────────────────
 ```
 
-**Do NOT proceed until the user explicitly approves.** This is the only mandatory human gate.
+**Do NOT proceed until the user explicitly approves.** Approval = the literal string `approved` (case-insensitive) or one of the explicit command alternatives above.
 
 If the user wants changes, route through a command — never edit spec files from this orchestrator's context (see SKILL.md § File Ownership Contract).
 
@@ -160,6 +311,16 @@ Orchestrator updates `.harness/manifest.yaml` → `state.phase = "negotiating"` 
 ## 2c. Negotiate — Generator ↔ Evaluator agree on sprint contract (automatic)
 
 Three dispatches in sequence. The orchestrator reads `state.current_feature` from manifest.yaml before each dispatch to get the `${FEATURE}` value.
+
+**Pre-iteration visibility** (UX-r1 / FIX A3 part 2): before each negotiation round, the orchestrator prints a one-line status to the user so the loop is no longer silent. The user sees the round count, knows the cost is accruing, and knows how to stop:
+
+```
+Negotiation round N of 3 — Generator and Evaluator are aligning on HOW.
+Each round adds ~$1 cost (estimate). Sprint cost so far: ~$${ESTIMATED_COST_USD}.
+Type Ctrl-C and run /harness:abort if you want to stop.
+```
+
+The orchestrator emits this line BEFORE dispatching Round 1 (with N=1), and BEFORE every re-dispatch in the iterate step below (with N=2, N=3). It is NOT emitted only on cap-exhaustion — the whole point is the user sees retry visibility from the first round, not as a surprise at the end. After the line, the orchestrator immediately dispatches; it does NOT wait for user input (Ctrl-C is the user's escape hatch, not a confirmation prompt). The cost increments per the rules in the cost-surface block at the end of this file.
 
 **Round 1: Generator writes proposal.md** — the orchestrator dispatches via the Agent tool:
 
@@ -654,6 +815,13 @@ if [ "$DESIGN_PRESENT" = "1" ]; then
 
     # ─── Step E: P0 found, retries available — re-dispatch BUILD ─────────
     AUDIT_RETRY_COUNT=$((AUDIT_RETRY_COUNT + 1))
+    # UX-r1 / FIX A3 part 2: emit the user-facing retry visibility line BEFORE
+    # the engineering-style "Retrying BUILD..." log. The line tells the user
+    # what failed, what the retry costs (estimate), and how to stop. Matches
+    # the same pattern as the negotiate loop (2c) and functional retry (5b).
+    # Reads ESTIMATED_COST_USD from the manifest via the cost-surface block at
+    # the end of this file.
+    echo "Design audit retry ${AUDIT_RETRY_COUNT} of ${AUDIT_MAX_RETRIES} — found ${P0_COUNT} P0 issue(s) last round. This retry adds ~\$3-5 cost (estimate). Sprint cost so far: ~\$\${ESTIMATED_COST_USD}. Type Ctrl-C and run /harness:abort to stop."
     echo "Design audit found ${P0_COUNT} P0 finding(s). Retrying BUILD (attempt ${AUDIT_RETRY_COUNT}/${AUDIT_MAX_RETRIES})."
 
     # Construct AUDIT_FEEDBACK to append to the BUILD dispatch prompt.
@@ -799,7 +967,13 @@ If the retrospective itself fails (subagent errors, malformed output), do NOT si
 **5b. Merge**
 
 ```bash
-git checkout main
+# Read the project's default branch from manifest (FIX B1 — set by setup.sh
+# stack detection; falls back to "main" on legacy manifests per harness.version
+# schema-migration safe-default).
+MAIN_BRANCH=$(sed -n 's/^[[:space:]]*main_branch:[[:space:]]*"\([^"]*\)".*/\1/p' .harness/manifest.yaml | head -1)
+[ -z "$MAIN_BRANCH" ] && MAIN_BRANCH="main"
+
+git checkout "$MAIN_BRANCH"
 git merge --squash "harness/build/${FEATURE}"
 git commit -m "[harness:merge] ${FEATURE}: [one-line summary]"
 git worktree remove .worktrees/current 2>/dev/null
@@ -807,13 +981,25 @@ git worktree remove .worktrees/current 2>/dev/null
 
 Then the orchestrator (via Edit tool) updates:
 - `ROADMAP.md` — move feature to "✅ Shipped".
-- `.harness/manifest.yaml` — `features.completed` append, `features.in_progress = ""`, `state.current_feature = ""` (Agent 3 M3: clear current_feature on merge so the next sprint's audit gate doesn't reuse the just-merged feature-id), `state.phase = "complete"`, `state.retry_count = 0`, `state.design_reroll_round = 0` (TIER A5: reset reroll counter — a new sprint starts fresh; round-3 FIX #5 — emit canonical form `  design_reroll_round: 0`, unquoted integer with two-space indent; never write `"0"` or bare-null since every read site validates the value is a non-negative integer and halts otherwise).
+- `.harness/manifest.yaml` — `features.completed` append, `features.in_progress = ""`, `state.current_feature = ""` (Agent 3 M3: clear current_feature on merge so the next sprint's audit gate doesn't reuse the just-merged feature-id), `state.phase = "complete"`, `state.retry_count = 0`, `state.design_reroll_round = 0` (TIER A5: reset reroll counter — a new sprint starts fresh; round-3 FIX #5 — emit canonical form `  design_reroll_round: 0`, unquoted integer with two-space indent; never write `"0"` or bare-null since every read site validates the value is a non-negative integer and halts otherwise), `state.estimated_cost_usd = "0.00"` (UX-r1 / FIX A3 — reset cost accumulator on merge; canonical form is a quoted decimal string with two decimal places per the cost-surface block below).
 
 Print scores + completion message. If the auto-audit-gate ran (i.e., `.harness/design/` was present), the completion message also surfaces: total audit attempts (max(N) of `audit-${FEATURE_ID}-N.md`), final audit verdict (PASS / FAIL — force-merged), and any P1+ findings that were logged for later. If the gate did not run (no `.harness/design/`), the completion message is unchanged from v2.2.
+
+The completion message also includes a final cost line (UX-r1 / FIX A3 part 3): `Sprint cost: ~$${PRE_RESET_ESTIMATED_COST_USD}  (estimate based on Anthropic API pricing as of 2026-04; actual billing may differ ~10-20%)`. The orchestrator captures the value from the manifest BEFORE writing the reset, so the printed figure reflects what the just-completed sprint actually cost.
 
 ### If FAIL and retries < max
 
 Orchestrator updates `manifest.yaml` → `state.retry_count += 1`, `state.phase = "building"`. Prints failing scores + critical findings. Auto-loops back to Step 3 (BUILD dispatch).
+
+**Pre-iteration visibility** (UX-r1 / FIX A3 part 2): immediately AFTER incrementing `state.retry_count` and BEFORE re-dispatching the BUILD, the orchestrator emits a one-line status so the user sees the retry as it starts (not after exhaustion):
+
+```
+Build retry N of M — last attempt failed [N_AC] acceptance criteria.
+This retry adds ~$3-5 cost (estimate). Sprint cost so far: ~$${ESTIMATED_COST_USD}.
+Type Ctrl-C and run /harness:abort if you want to stop.
+```
+
+Where `N` is the new `state.retry_count` (after the +=1), `M` is `config.max_retries`, and `[N_AC]` is the count of failed acceptance criteria from the eval-report's `**Result: FAIL**` block (heuristic: count `- [ ] AC-` lines that the report marks as failing). The line is presentational — the orchestrator does NOT wait for input; the user uses `/harness:abort` if they want to stop.
 
 Before retry: run the same tuning check from 5a-pre, but with the reversed framing: "Do you agree the Evaluator should have failed this?" Log divergences. Proceed to retry regardless.
 
@@ -824,6 +1010,57 @@ Present the user with options:
 2. Manually fix and re-run `/harness:resume` (picks up from evaluating phase).
 3. Increase `config.max_retries` and continue.
 4. Abandon.
+
+---
+
+## Cost surface (UX-r1 / FIX A3 part 3) — minimal estimate, not full telemetry
+
+The user pays per token and currently has zero visibility into sprint cost. This block specifies the orchestrator's responsibility to maintain a directional cost estimate at `manifest.yaml → state.estimated_cost_usd`. The estimate appears in every retry-counter line above (negotiate / functional / audit), in the abort/pause preview, and in the final sprint completion summary.
+
+### What the orchestrator does
+
+After EACH major subagent dispatch (Planner / Generator / Evaluator / Designer — including their NEGOTIATE, REVIEW-PROPOSAL, FINALIZE-CONTRACT, BUILD, EVALUATE, AUDIT modes), the orchestrator:
+
+1. **Estimates input tokens for the dispatch** using the prompt size it just sent. Heuristic: characters ÷ 4 ≈ tokens (the standard tokenization rule of thumb for English; close enough for a directional figure). The orchestrator already has the dispatch prompt string in hand.
+2. **Reads output tokens from the Agent tool's structured return** if available; otherwise estimates as characters-of-final-message ÷ 4.
+3. **Computes the USD delta** using the rates for the model in `harness.model` (default `claude-opus-4-7`):
+   - Sonnet 4.x: input $3/M, output $15/M
+   - Opus 4.x: input $15/M, output $75/M
+   - (Rates as of 2026-04 per Anthropic API public pricing. If the user has switched to a different model, the orchestrator uses the rates for that model — those are common knowledge for a model-deployment context.)
+4. **Increments the field** via the Edit tool on `.harness/manifest.yaml`. Read the current `state.estimated_cost_usd` value (a quoted decimal string), parse to float, add the delta, format back to two decimals as a quoted string, write the new value.
+5. **Does NOT block the dispatch** on cost-estimation errors — if any step fails (model not in the rate table, parse error on the existing value, manifest write race), the orchestrator logs a one-line warning and proceeds with the sprint. The cost surface is best-effort, never load-bearing.
+
+### Where the figure is surfaced (read sites)
+
+The orchestrator reads `state.estimated_cost_usd` and substitutes it into the `~$${ESTIMATED_COST_USD}` placeholder in:
+
+- The **negotiate-round visibility line** in §2c (before each round 1, 2, 3).
+- The **functional-retry visibility line** in §5b (after each `state.retry_count += 1`).
+- The **audit-retry visibility line** in §5-pre-audit Step E (after each `AUDIT_RETRY_COUNT += 1`).
+- The **abort/pause preview** in `commands/abort.md` Step 3.
+- The **final sprint completion summary** at §5b (merge step) — added to the existing scores + completion message:
+
+  ```
+  Sprint cost: ~$${ESTIMATED_COST_USD}  (estimate based on Anthropic API
+                                          pricing as of 2026-04;
+                                          actual billing may differ ~10-20%)
+  ```
+
+### Reset semantics
+
+`state.estimated_cost_usd` is reset to `"0.00"` only at **merge** (in §5b alongside `state.retry_count = 0`). It is NOT reset on:
+- Abort or pause (those preserve the figure so the user sees what the abandoned attempt cost).
+- Retries within the same sprint (the figure is cumulative across retries — that's the whole point).
+
+Schema migration: legacy manifests without this field treat absent as `"0.00"` and the orchestrator's first increment writes the field into existence.
+
+### Disclaimer the user sees
+
+Wherever the figure is surfaced beyond the one-line retry visibility (i.e., the abort preview and the completion summary), the orchestrator includes the disclaimer text *"estimate based on Anthropic API pricing as of 2026-04; actual billing may differ ~10-20%"* so the user understands this is a directional figure, not their invoice.
+
+### Why this is at the orchestrator level (not in the subagents)
+
+`agents/generator.md:381` documents an intentional decision: the Generator is silent during BUILD. Adding cost-emission to the Generator would violate that contract and re-introduce the noise the silence rule exists to prevent. The cost surface lives at the orchestrator (this file) precisely because the orchestrator is already the layer the user sees outputs from — adding one more line of orchestrator output is in-character; adding mid-build chatter from the Generator is not.
 
 ---
 

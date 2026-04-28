@@ -360,6 +360,7 @@ Mnemonic: **analyze** = consistency, **validate** = completeness, **audit** = de
 |---|---|
 | `/harness:negotiate` | Standalone Generator↔Evaluator negotiation (normally auto-invoked by sprint). |
 | `/harness:rewind <phase>` | Archive-based reset to `planning` \| `analyzing` \| `negotiating` \| `building` \| `evaluating`. Files move to `.archive/TIMESTAMP/`, never deleted. Requires typed confirmation. |
+| `/harness:abort` | Mid-flight stop for a running sprint. `abort` discards uncommitted worktree changes (stashed, recoverable) and resets to last clean phase; `pause` saves state and exits cleanly so `/harness:resume` picks up. Use when Cmd+C is too crude. v2.2-staging+. |
 | `/harness:tune-evaluator` | Review Evaluator divergence patterns from `tuning-log.md`; propose new calibration examples or (rarely) prompt edits. |
 | `/harness:setup` | Project-local install: creates `.harness/` + `./CLAUDE.md` activation block. Idempotent. |
 | `/harness:doctor` | Environment preflight. Blocks on CRITICAL failures (missing MCPs, no jq/python, outdated Node). Auto-runs at sprint/quick start. |
