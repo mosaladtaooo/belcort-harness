@@ -26,7 +26,21 @@ If `.harness/brainstorm-current.md` exists from a prior brainstorm session, trea
 
 ---
 
-## 0. Doctor — environment preflight (mandatory, blocking)
+## 0b. 1M-context confirmation (recommended — prevents Generator BUILD truncation)
+
+Before dispatching any subagent, the orchestrator confirms the user's Claude Code session is on the 1M-context Opus variant. Multi-stratum sprints (foundation features, full-stack work) routinely exceed the default 200K Opus context during BUILD; truncation produces no `implementation-report.md` and forces a re-dispatch.
+
+Print this prompt and wait for user input:
+
+> This sprint can dispatch Generator BUILD for 30+ minutes on multi-stratum work. Confirm Claude Code was launched with `claude --model claude-opus-4-7[1m]` for the 1M-context variant. (Y to proceed / N to relaunch first.)
+
+On `N`: print *"Relaunch Claude Code with: `claude --model claude-opus-4-7[1m]`, then re-run /harness:sprint"* and exit. On `Y`: continue to Step 0c. On any other input: re-prompt once, then proceed cautiously with a logged warning in `progress/changelog.md`.
+
+Rationale: Claude Code does not currently expose `--model` to plugin scripts, so this is user-confirmation, not mechanical detection. See `docs/superpowers/specs/2026-04-28-belcort-audit-and-refine-design.md` § 6.1 for why.
+
+---
+
+## 0c. Doctor — environment preflight (mandatory, blocking)
 
 Before dispatching any subagent, run the doctor:
 
@@ -61,7 +75,7 @@ The orchestrator dispatches the Planner via the Agent tool:
 
 > You are being dispatched in PLAN mode (see your system prompt for the full role and 2-pass procedure).
 >
-> Produce the full specification per PASS 1 + PASS 2. Write only the files your output sections list: spec/*, evaluator/criteria.md, features/NNN-name/contract.md, per-FR story files under features/NNN-name/stories/, init.sh, manifest.yaml, ROADMAP.md, progress/*. DO NOT write source code or implementation files — those are for the Generator. Run your 16-point self-validation before exiting and report the pass count.
+> Produce the full specification per PASS 1 + PASS 2. Write only the files your output sections list: spec/*, evaluator/criteria.md, features/NNN-name/contract.md, init.sh, manifest.yaml, ROADMAP.md, progress/*. DO NOT write source code or implementation files — those are for the Generator. Run your 16-point self-validation before exiting and report the pass count.
 >
 > User request:
 > $ARGUMENTS
@@ -70,7 +84,7 @@ The orchestrator dispatches the Planner via the Agent tool:
 
 **After Planner returns, the orchestrator (not a subagent) performs these housekeeping steps using the Bash/Edit tools. These are natural-language instructions — not a shell script:**
 
-1. Verify the Planner actually wrote the expected files (spec/, evaluator/criteria.md, features/NNN-name/contract.md, stories/, init.sh, manifest.yaml, ROADMAP.md). If any is missing, halt and ask the user.
+1. Verify the Planner actually wrote the expected files (spec/, evaluator/criteria.md, features/NNN-name/contract.md, init.sh, manifest.yaml, ROADMAP.md). If any is missing, halt and ask the user.
 2. If `.harness/brainstorm-current.md` still exists and the feature folder now exists, move the brainstorm file into the feature folder as `brainstorm.md`.
 3. Make `.harness/init.sh` executable. The Planner has no Bash tool, so it cannot chmod its own output.
 
@@ -153,7 +167,13 @@ Three dispatches in sequence. The orchestrator reads `state.current_feature` fro
 >
 > PRD is NOT needed at this stage — the contract already contains the NFR targets. Write your review to `.harness/features/${FEATURE}/review.md` per the canonical template at `@templates/features/review.md.txt` with a VERDICT line (agreed | needs-revision).
 
-**Iterate**: if verdict is `needs-revision`, re-dispatch Generator via the Agent tool (same `harness:generator` subagent_type, NEGOTIATE mode prompt) to revise proposal.md; then Evaluator reviews again. Max 3 rounds (per `config.max_negotiation_rounds` in manifest). If no agreement at round 3, escalate to human.
+**Iterate**: if verdict is `needs-revision`, re-dispatch Generator via the Agent tool (same `harness:generator` subagent_type, NEGOTIATE mode prompt) to revise proposal.md; then Evaluator reviews again. Max 3 rounds (per `config.max_negotiation_rounds` in manifest). By round 3, continued disagreement signals an unclear upstream contract (the Planner's what/why is ambiguous), not a negotiation problem. More agent rounds won't resolve a values or clarity gap; human judgment will.
+
+**If no agreement after 3 rounds, escalate to human with this structure:**
+
+- **The blocker** (one sentence): what Generator wants vs what Evaluator wants, at the narrowest point of disagreement.
+- **Why it's stuck** (one sentence): which upstream artifact is ambiguous — usually the draft contract, sometimes the architecture or constitution.
+- **The decision being asked of you**: pick (a) force Generator's proposal as-is, (b) force Evaluator's asks as-is, (c) rewrite the draft contract to resolve the ambiguity (run `/harness:amend` or `/harness:edit`), (d) abandon the feature.
 
 **Final: Generator writes the negotiated contract** — the orchestrator dispatches via the Agent tool:
 
@@ -179,7 +199,7 @@ git worktree add .worktrees/current -b "harness/build/${FEATURE}" 2>/dev/null ||
 
 **Note on the worktree's stale `.harness/`:** the checkout includes a frozen snapshot of `.harness/` at `.worktrees/current/.harness/` as a git-worktree side-effect. It is stale and must not be read or written by any agent or orchestrator step. The live `.harness/` is at project root. See SKILL.md § File Ownership Contract → Working directory and `.harness/` location. The dispatch prompt below restates this rule inline so the Generator has it in its fresh context.
 
-Assemble the dispatch context. The Generator reads most files via its own Read tool — the inline file list in the prompt is a hint, not authoritative. Prefer per-FR story reads per TDD cycle over the full aggregate contract.
+Assemble the dispatch context. The Generator reads most files via its own Read tool — the inline file list in the prompt is a hint, not authoritative. Prefer per-FR section reads (grep by FR-NNN ID against contract.md) per TDD cycle over the full aggregate contract.
 
 If `.harness/features/${FEATURE}/eval-report.md` exists (this is a retry), the orchestrator reads its content and appends it to the Agent prompt under a `--- EVALUATOR FEEDBACK (fix these) ---` marker before the user-request block.
 
@@ -193,13 +213,12 @@ The orchestrator dispatches the Generator via the Agent tool:
 >
 > **Working directory contract (v2.1.8):** your cwd is the project root. All `.harness/...` paths below resolve from project root. The `.worktrees/current/.harness/` folder exists (git-worktree side-effect) but is a stale frozen snapshot — never read or write it. Source code goes into `.worktrees/current/src/...`; spec and report files stay under project-root `.harness/`. If you `cd .worktrees/current` for a Bash command, `cd` back before any `.harness/` Read/Write, or use `$CLAUDE_PROJECT_DIR/.harness/...` absolute paths.
 >
-> Implement the negotiated contract via TDD (use superpowers:test-driven-development for the RED → GREEN → REFACTOR cycle; see your Phase 2 instructions). Read per-FR stories at .harness/features/${FEATURE}/stories/FR-NNN.md per cycle — that's your canonical per-cycle context.
+> Implement the negotiated contract via TDD (use superpowers:test-driven-development for the RED → GREEN → REFACTOR cycle; see your Phase 2 instructions). For each FR's RED step, locate that FR's section in .harness/features/${FEATURE}/contract.md (grep by FR ID) — the contract is your per-cycle context.
 >
 > Key files (read via Read tool as needed, always from project-root `.harness/`):
 > - .harness/spec/constitution.md
 > - .harness/spec/architecture.md
 > - .harness/features/${FEATURE}/contract.md (final, negotiated)
-> - .harness/features/${FEATURE}/stories/*.md
 > - .harness/evaluator/criteria.md
 >
 > [If `.harness/features/${FEATURE}/eval-report.md` exists, the orchestrator appends its full content here under a `--- EVALUATOR FEEDBACK (fix these) ---` marker before invoking the Agent tool.]
@@ -215,7 +234,7 @@ Loop (up to `MAX_PAUSES = 3`):
 2. Collect answers. Each answer is either a user response, "accept default", or "skip" (marks FR partial).
 3. Archive the pause file: move to `.harness/features/${FEATURE}/paused-history/pause-N-TIMESTAMP.md`.
 4. Orchestrator increments `manifest.yaml → config.calibration_metrics.agent_checkins` by 1 using the Edit tool.
-5. Re-dispatch Generator BUILD via the Agent tool (same `subagent_type: harness:generator`, same BUILD-mode prompt from Step 3), with the collected answers appended to the end of the prompt under a `--- PAUSE ANSWERS ---` marker.
+5. Re-dispatch Generator BUILD via the Agent tool (same `subagent_type: harness:generator`, same BUILD-mode prompt from Step 3), with TWO blocks appended to the end of the prompt: (a) the `## State at pause` section verbatim from `pause-questions.md` under a `--- PAUSE STATE SNAPSHOT (authoritative — prefer over manifest if they disagree) ---` marker, and (b) the collected answers under a `--- PAUSE ANSWERS ---` marker.
 6. If a new `pause-questions.md` appears after the re-dispatch, loop again.
 
 After `MAX_PAUSES`, escalate: "Generator has paused N times on this sprint — the contract is likely under-determined. Recommend `/harness:rewind negotiating` to re-spec the affected FR(s) before continuing." Halt the sprint.

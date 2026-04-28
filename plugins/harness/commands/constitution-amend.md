@@ -33,7 +33,7 @@ Orchestrator reads `.harness/manifest.yaml`. If `features.in_progress` is non-em
 
 On `1` or `3`: exit with appropriate message. On `2`: require a second typed confirmation `PROCEED-ANYWAY` before continuing.
 
-### Step 3: Dispatch Planner in CONSTITUTION-AMEND mode
+### Step 3: Dispatch Planner in EDIT mode (CONSTITUTION AMENDMENT marker)
 
 The orchestrator dispatches the Planner via the Agent tool:
 
@@ -41,12 +41,24 @@ The orchestrator dispatches the Planner via the Agent tool:
 - **description**: `"Amend constitution: <short summary of $ARGUMENTS>"`
 - **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
 
-> You are being dispatched in CONSTITUTION-AMEND mode. Read .harness/spec/constitution.md, prd.md, architecture.md, and (via Read tool) sampled completed features' contract.md files.
+> You are being dispatched in EDIT mode (see your system prompt's MODE ROUTING table — EDIT is the unified post-PLAN spec-patches mode).
 >
-> Amendment reason from user:
+> --- CONSTITUTION AMENDMENT ---
 > $ARGUMENTS
 >
-> Produce structured patches to .harness/constitution-amend-patches.md per your CONSTITUTION-AMEND mode procedure. Do NOT apply. Do NOT renumber principles (§-numbers are stable references).
+> --- CONTEXT ---
+> Read via Read tool: .harness/spec/constitution.md, .harness/spec/prd.md, .harness/spec/architecture.md. Sample (orchestrator may include up to 10 most recent): completed features' contract.md files.
+>
+> --- CONSTRAINTS (CONSTITUTION AMENDMENT-specific) ---
+> - ONLY patch spec/constitution.md. NEVER touch any other spec file from this marker (cascade implications go in OUT-OF-SCOPE → /harness:edit after this command lands).
+> - Preserve §-numbers strictly. Adding: append at next §-number. Changing: in-place. Removing: delete the §-block but DO NOT renumber subsequent §-numbers (deleted § becomes a permanent gap; past contracts and ADRs reference §-numbers).
+> - Reject non-testable principles. If the amendment translates to a vibe ("code should be clean" / "follow best practices"), flag as UNCLEAR and push back.
+> - Use Context7 if the principle references a framework or library standard.
+> - Include a `## Conflict check` section: enumerate any principle conflicts with the proposed change.
+> - Include a `## Impact assessment` section: which §-numbers modified directly + indirectly + which architecture sections potentially affected.
+> - Output: .harness/constitution-amend-patches.md (top-level, global) per the universal MODE: EDIT patches template + the CONSTITUTION-specific extras above.
+>
+> Do NOT apply patches.
 
 ### Step 4: Present patches + conflict check
 
@@ -150,7 +162,7 @@ Finally delete `.harness/spec/constitution.md.proposed` and the per-feature anal
 
 | File | Writer |
 |---|---|
-| `.harness/constitution-amend-patches.md` | Planner CONSTITUTION-AMEND mode |
+| `.harness/constitution-amend-patches.md` | Planner EDIT mode (CONSTITUTION AMENDMENT marker) |
 | `.harness/spec/constitution.md.proposed` | Orchestrator TEMP copy (deleted at Step 10) |
 | `.harness/features/${FEATURE:-_global}/analysis-report.md` | Orchestrator (Step 6 — new-constitution vs current-spec analyze) |
 | `.harness/.revalidation-${TS}/${FEATURE}.md` | Evaluator REVALIDATE mode (one per sampled feature) |

@@ -23,7 +23,15 @@ For small tasks where planning overhead is more than the work itself. The prompt
 
 ## Procedure
 
-### 0. Doctor — environment preflight (mandatory, blocking)
+### 0a. 1M-context confirmation (one-line check)
+
+`/quick` is short by design, so the 1M-context need is softer than for `/sprint`. Print one line:
+
+> Quick mode: confirm Claude Code is on `claude --model claude-opus-4-7[1m]` if this fix touches more than ~5 files. (Press Enter to proceed.)
+
+Do not block. Continue to Step 0b on any input.
+
+### 0b. Doctor — environment preflight (mandatory, blocking)
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh"
@@ -73,7 +81,7 @@ The orchestrator reads `state.current_feature` from `.harness/manifest.yaml` (ca
 - **description**: `"Quick build ${FEATURE}"`
 - **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
 
-> You are being dispatched in BUILD mode for a /harness:quick sprint. The contract at .harness/features/${FEATURE}/contract.md is minimal — 2-4 ACs. Implement via TDD (use superpowers:test-driven-development). This is NOT the full sprint path: there is no proposal/review, no per-FR stories. Keep scope tight. If the work grows beyond the contract, stop and tell the user to escalate to /harness:sprint.
+> You are being dispatched in BUILD mode for a /harness:quick sprint. The contract at .harness/features/${FEATURE}/contract.md is minimal — 2-4 ACs. Implement via TDD (use superpowers:test-driven-development). This is NOT the full sprint path: there is no proposal/review. Keep scope tight. If the work grows beyond the contract, stop and tell the user to escalate to /harness:sprint.
 
 ### 3. Evaluate — single pass (no retry)
 
@@ -104,5 +112,5 @@ No new machinery, no new file, no flag. Prose discipline. User has agency. Simpl
 
 - No tuning check on quick (single-pass, insufficient calibration signal).
 - No automatic retrospective on quick (no rich spec); Step 4.5 is the lightweight substitute.
-- No per-FR stories, no negotiation, no multi-round iteration.
+- No negotiation, no multi-round iteration.
 - If the task turned out larger than estimated, next time run `/harness:sprint` for similar work — the heuristic was wrong.

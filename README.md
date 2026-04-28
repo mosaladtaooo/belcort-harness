@@ -25,6 +25,18 @@ BELCORT is a production-grade implementation of that harness, shipped as a Claud
 
 ## Quick start
 
+### Recommended launch
+
+For sprints touching multi-stratum work (foundation features, full-stack scaffolding, multi-adapter ingestion), launch Claude Code with the 1M-context Opus variant:
+
+```
+claude --model claude-opus-4-7[1m]
+```
+
+Without this flag, the agent frontmatter `model: inherit` resolves to the default 200K Opus context. A multi-stratum Generator BUILD dispatch can exceed 200K mid-work and truncate, producing no `implementation-report.md` and requiring re-dispatch. The 1M variant absorbs the same work without truncation.
+
+`/harness:sprint` will print a confirmation prompt before dispatching subagents (see `commands/sprint.md` § 0b).
+
 ### Install
 
 In Claude Code:
@@ -77,7 +89,7 @@ Plus one Trustworthy-Agents principle:
 
 | Agent | Subagent type | Job | Tools | Modes |
 |---|---|---|---|---|
-| **Planner** | `harness:planner` | Expands a 1-4 sentence prompt into a product-grade spec (PRD + constitution + architecture + evaluator criteria + per-FR stories + build contract) | Read, Write, Context7 MCP | PLAN, CLARIFY-QUESTIONS, CLARIFY-APPLY, AMEND, EDIT, CONSTITUTION-AMEND |
+| **Planner** | `harness:planner` | Expands a 1-4 sentence prompt into a product-grade spec (PRD + constitution + architecture + evaluator criteria + build contract) | Read, Write, Context7 MCP | PLAN, CLARIFY-QUESTIONS, CLARIFY-APPLY, AMEND, EDIT, CONSTITUTION-AMEND |
 | **Generator** | `harness:generator` | Negotiates the contract's HOW, then implements it via TDD. Delegates RED→GREEN→REFACTOR to `superpowers:test-driven-development`. Atomic per-FR commits. | Read, Write, Bash, Context7 MCP | NEGOTIATE, FINALIZE-CONTRACT, BUILD |
 | **Evaluator** | `harness:evaluator` | Adversarial tester. Runs the built app through Playwright, grades against 4 criteria with hard thresholds, runs git-archaeology reward-hacking scan, produces pass/fail verdict with specific findings. | Read, Write, Bash, Playwright MCP | REVIEW-PROPOSAL, EVALUATE, REVALIDATE |
 
@@ -89,7 +101,7 @@ Each agent has a `<SUBAGENT-CONTEXT>` block at the top of its system prompt that
 /harness:sprint "<prompt>"
   │
   ├─ doctor preflight (blocks on CRITICAL env failures)
-  ├─ Planner (PLAN mode, 2 passes: Pass 1 PRD+constitution, Pass 2 architecture+criteria+contract+stories)
+  ├─ Planner (PLAN mode, 2 passes: Pass 1 PRD+constitution, Pass 2 architecture+criteria+contract)
   ├─ analyze (automatic cross-artifact consistency)
   ├─ HUMAN GATE — approve | /clarify | /amend | /edit | /rewind planning
   ├─ Generator (NEGOTIATE) → proposal.md
@@ -105,7 +117,7 @@ Each agent has a `<SUBAGENT-CONTEXT>` block at the top of its system prompt that
 
 ---
 
-## The 17 commands
+## The 16 commands
 
 ### Entry points
 
@@ -145,7 +157,6 @@ Mnemonic: **analyze** = consistency, **validate** = completeness, **audit** = de
 
 | Command | Purpose |
 |---|---|
-| `/harness:negotiate` | Standalone Generator↔Evaluator negotiation (normally auto-invoked by sprint). |
 | `/harness:rewind <phase>` | Archive-based reset to `planning` \| `analyzing` \| `negotiating` \| `building` \| `evaluating`. Files move to `.archive/TIMESTAMP/`, never deleted. Requires typed confirmation. |
 | `/harness:tune-evaluator` | Review Evaluator divergence patterns from `tuning-log.md`; propose new calibration examples or (rarely) prompt edits. |
 | `/harness:setup` | Project-local install: creates `.harness/` + `./CLAUDE.md` activation block. Idempotent. |
@@ -164,7 +175,6 @@ Every file under `.harness/` has exactly one writer. If you're not the designate
 | `evaluator/criteria.md`, `evaluator/examples.md` | Planner (init), orchestrator (during tuning check) |
 | `features/NNN/contract.md` — draft | Planner |
 | `features/NNN/contract.md` — final | Generator FINALIZE-CONTRACT (overwrites draft, MUST include `**Negotiated**:` marker) |
-| `features/NNN/stories/FR-NNN.md` | Planner Pass 2; Generator BUILD may refine |
 | `features/NNN/proposal.md` | Generator NEGOTIATE |
 | `features/NNN/review.md` | Evaluator REVIEW-PROPOSAL |
 | `features/NNN/implementation-report.md` | Generator BUILD |
@@ -286,7 +296,6 @@ None are required; each enhances a specific phase.
 │   └── tuning-log.md          # Evaluator-human divergence log
 ├── features/NNN-feature-name/
 │   ├── contract.md            # Draft (Planner) → Final (Generator FINALIZE)
-│   ├── stories/FR-NNN.md      # Per-FR build context (Planner Pass 2)
 │   ├── proposal.md            # Generator's HOW (NEGOTIATE mode)
 │   ├── review.md              # Evaluator's review of proposal
 │   ├── implementation-report.md  # Generator's handoff after BUILD
@@ -344,6 +353,10 @@ Run `/reload-plugins`. If that doesn't work, restart Claude Code (close + reopen
 ### Generator seems to skip TDD
 
 Superpowers plugin missing. Install: `/plugin install superpowers@claude-plugins-official`. Generator BUILD mode delegates the RED→GREEN→REFACTOR cycle to `superpowers:test-driven-development`.
+
+### Generator BUILD truncated / no implementation-report.md produced
+
+The session likely exhausted the default 200K Opus context. Relaunch Claude Code with the 1M-context variant — see [Recommended launch](#recommended-launch) — and re-run the sprint via `/harness:resume`. The harness's scaffold-checkpoint commits + state-at-pause snapshot allow recovery from the last checkpoint without re-doing completed work.
 
 ### Sprint interrupted mid-build
 

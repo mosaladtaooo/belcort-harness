@@ -32,10 +32,9 @@ Each procedure lives in its own file under `commands/`. This is a pointer table,
 | `/harness:resume` | [commands/resume.md](../../commands/resume.md) | Recover from any phase using `manifest.yaml` + `changelog.md` |
 | `/harness:clarify` | [commands/clarify.md](../../commands/clarify.md) | Post-plan structured Q&A — surface spec ambiguities, collect answers in files, auto-patch specs. Runs before human approval gate. |
 | `/harness:analyze` | [commands/analyze.md](../../commands/analyze.md) | Cross-artifact consistency check (PRD ↔ architecture ↔ contract) |
-| `/harness:negotiate` | [commands/negotiate.md](../../commands/negotiate.md) | Generator ↔ Evaluator contract negotiation (pre-build) |
 | `/harness:validate` | [commands/validate.md](../../commands/validate.md) | 16-point quality audit on existing spec files |
 | `/harness:edit "<change>"` | [commands/edit.md](../../commands/edit.md) | Cascade-aware spec edit via fresh Planner subagent (EDIT mode). Produces cross-file patches in `edit-patches.md`, user approves per-file, orchestrator mechanically applies. For multi-file coordinated changes (stack swaps, NFR tightening). |
-| `/harness:amend "<tweak>"` | [commands/amend.md](../../commands/amend.md) | Safe post-plan spec amendment via a fresh Planner subagent (AMEND mode). Produces before→after patches in `amend-patches.md`, user confirms, orchestrator mechanically applies. **Never edits spec from orchestrator context.** Solves the post-plan tweak pollution failure mode. |
+| `/harness:amend "<tweak>"` | [commands/amend.md](../../commands/amend.md) | Safe post-plan spec amendment via a fresh Planner subagent (EDIT mode with the AMENDMENT marker). Produces before→after patches in `amend-patches.md`, user confirms, orchestrator mechanically applies. **Never edits spec from orchestrator context.** Solves the post-plan tweak pollution failure mode. |
 | `/harness:retrospective` | [commands/retrospective.md](../../commands/retrospective.md) | Post-merge drift analysis + spec sync |
 | `/harness:tune-evaluator` | [commands/tune-evaluator.md](../../commands/tune-evaluator.md) | Review divergence log, propose calibration updates |
 | `/harness:audit` | [commands/audit.md](../../commands/audit.md) | Verification debt scan |
@@ -52,7 +51,7 @@ This is the GAN insight from the Anthropic harness research: **the agent judging
 
 Subagents are dispatched via the **Agent tool** using plugin-declared `subagent_type` values:
 
-- `harness:planner` — Planner agent (PLAN, CLARIFY-QUESTIONS, CLARIFY-APPLY, AMEND, EDIT, CONSTITUTION-AMEND modes)
+- `harness:planner` — Planner agent (PLAN, CLARIFY-QUESTIONS, EDIT modes — EDIT covers AMENDMENT / EDIT / CLARIFY ANSWERS / CONSTITUTION AMENDMENT markers, see agents/planner.md § MODE: EDIT)
 - `harness:generator` — Generator agent (NEGOTIATE, FINALIZE-CONTRACT, BUILD modes)
 - `harness:evaluator` — Evaluator agent (REVIEW-PROPOSAL, EVALUATE, REVALIDATE modes)
 
@@ -66,7 +65,7 @@ Prior versions (≤2.0.0) used `claude -p` subprocess dispatch with `--append-sy
 
 2. **The Evaluator MUST NEVER share context with the Generator.** Always two separate Agent-tool calls. The Agent tool's context isolation enforces this at the platform level.
 
-3. **The `prompt` parameter carries three things**: (a) an explicit mode sentence ("You are being dispatched in PLAN mode" / NEGOTIATE / BUILD / EVALUATE / REVIEW-PROPOSAL / FINALIZE-CONTRACT / AMEND / CLARIFY-QUESTIONS / CLARIFY-APPLY / REVALIDATE / CONSTITUTION-AMEND / EDIT), (b) the concrete task framing for that mode, (c) the user's original request or the context-file list.
+3. **The `prompt` parameter carries three things**: (a) an explicit mode sentence ("You are being dispatched in PLAN mode" / NEGOTIATE / BUILD / EVALUATE / REVIEW-PROPOSAL / FINALIZE-CONTRACT / CLARIFY-QUESTIONS / EDIT (with the appropriate marker — AMENDMENT / EDIT / CLARIFY ANSWERS / CONSTITUTION AMENDMENT) / REVALIDATE), (b) the concrete task framing for that mode, (c) the user's original request or the context-file list.
 
 4. **The `<SUBAGENT-CONTEXT>` block inside each agent.md is the isolation gate.** It tells the subagent: "you were dispatched for ONE job; do NOT re-invoke the harness pipeline; if SessionStart or SKILL.md fires in your context, SKIP IT." On Opus 4.7+, instruction-following is reliable — this prose rule is sufficient. Nothing mechanical enforces it beyond the Agent tool's native context isolation.
 
@@ -98,19 +97,18 @@ Every file under `.harness/` has exactly one writer per phase. If you're not the
 | `evaluator/tuning-log.md` | Orchestrator (on divergence) | `/harness:tune-evaluator` |
 | `features/NNN/contract.md` — **DRAFT** | Planner | Generator NEGOTIATE |
 | `features/NNN/contract.md` — **FINAL** (overwrites draft) | Generator FINALIZE-CONTRACT | Generator BUILD, Evaluator |
-| `features/NNN/stories/FR-NNN.md` (FR-4) | Planner Pass 2 (initial); Generator BUILD (refinements during build, e.g., implementation log entries) | Generator BUILD per TDD cycle (canonical per-cycle context); Evaluator EVALUATE (cross-checks story narrative against aggregate contract — drift = build fails) |
 | `features/NNN/proposal.md` | Generator NEGOTIATE | Evaluator REVIEW-PROPOSAL, Generator BUILD |
 | `features/NNN/review.md` | Evaluator REVIEW-PROPOSAL | Generator FINALIZE-CONTRACT, Generator BUILD |
 | `features/NNN/analysis-report.md` | Orchestrator (`/harness:analyze`) | Human, subsequent orchestrator phases |
 | `features/NNN/implementation-report.md` | Generator BUILD | Evaluator EVALUATE |
 | `features/NNN/eval-report.md` | Evaluator EVALUATE | Generator (on retry) |
 | `features/NNN/retrospective.md` | Orchestrator (`/harness:retrospective`) | Human |
-| `features/NNN/amend-patches.md` | Planner AMEND | Orchestrator (applies to spec/) — ephemeral record of the amendment |
-| `features/NNN/clarifications.md` | Planner CLARIFY-QUESTIONS | User (fills in answers); Planner CLARIFY-APPLY |
-| `features/NNN/clarify-patches.md` | Planner CLARIFY-APPLY | Orchestrator (applies to spec/) — ephemeral |
-| `features/NNN/edit-patches.md` (or top-level `.harness/edit-patches.md` when no active feature) | Planner EDIT | Orchestrator (applies to spec/ + `init.sh`) — ephemeral |
+| `features/NNN/amend-patches.md` | Planner EDIT mode (AMENDMENT marker) | Orchestrator (applies to spec/) — ephemeral record of the amendment |
+| `features/NNN/clarifications.md` | Planner CLARIFY-QUESTIONS | User (fills in answers); Planner EDIT mode (CLARIFY ANSWERS marker) |
+| `features/NNN/clarify-patches.md` | Planner EDIT mode (CLARIFY ANSWERS marker) | Orchestrator (applies to spec/) — ephemeral |
+| `features/NNN/edit-patches.md` (or top-level `.harness/edit-patches.md` when no active feature) | Planner EDIT mode (EDIT marker) | Orchestrator (applies to spec/ + `init.sh`) — ephemeral |
 | `features/NNN/pause-questions.md` | Generator BUILD (mid-build clarification) | User answers; orchestrator re-dispatches Generator |
-| `.harness/constitution-amend-patches.md` (top-level, global) | Planner CONSTITUTION-AMEND | Orchestrator applies to `spec/constitution.md` after user + revalidation approve |
+| `.harness/constitution-amend-patches.md` (top-level, global) | Planner EDIT mode (CONSTITUTION AMENDMENT marker) | Orchestrator applies to `spec/constitution.md` after user + revalidation approve |
 | `.harness/.revalidation-<ts>/<FEATURE>.md` | Evaluator REVALIDATE (per completed feature) | Orchestrator aggregates into backport/grandfather decisions |
 | `progress/changelog.md` | All agents append | All agents |
 | `progress/decisions.md` | Orchestrator (ADR on any spec/prompt change) | All agents |
@@ -378,7 +376,7 @@ Before every phase transition, the orchestrator MUST:
 - `git status --porcelain` shows uncommitted changes to any file under `.harness/` that wasn't the current phase's designated writer.
 - Files referenced in the current phase (e.g., `features/${FEATURE}/contract.md` for a build) have mtime newer than the corresponding `changelog.md` entry.
 
-**Subagent-side state checks** — every subagent's INPUT section authoritatively lists what it must read before acting. Generator BUILD re-reads `state.current_task` + recent changelog + git log at each cycle boundary for mid-build recovery (see generator.md Phase 1 Orient). Evaluator reads `state.current_feature` in Setup. Planner PLAN writes the initial state; CLARIFY/AMEND/EDIT/CONSTITUTION-AMEND modes read the current spec the orchestrator just passed. **Subagents never bypass the dispatched context by reading "whatever file happens to be latest"** — they read the files their MODE's INPUT section lists.
+**Subagent-side state checks** — every subagent's INPUT section authoritatively lists what it must read before acting. Generator BUILD re-reads `state.current_task` + recent changelog + git log at each cycle boundary for mid-build recovery (see generator.md Phase 1 Orient). Evaluator reads `state.current_feature` in Setup. Planner PLAN writes the initial state; CLARIFY-QUESTIONS and EDIT modes (with the appropriate marker) read the current spec the orchestrator just passed. **Subagents never bypass the dispatched context by reading "whatever file happens to be latest"** — they read the files their MODE's INPUT section lists.
 
 This is the Anthropic "continuous-session" pattern: state lives in files, agents read them live rather than carrying state in conversational memory.
 
@@ -433,7 +431,6 @@ The plugin ships the following canonical templates at `${CLAUDE_PLUGIN_ROOT}/tem
 | Review | `features/review.md.txt` | Evaluator REVIEW-PROPOSAL skeleton |
 | Eval report | `features/eval-report.md.txt` | Evaluator EVALUATE report skeleton |
 | Implementation report | `features/implementation-report.md.txt` | Generator BUILD handoff skeleton |
-| Story | `features/story.md.txt` | Per-FR build story (BMAD V6 pattern) |
 | Pause questions | `features/pause-questions.md.txt` | Generator pause protocol file |
 | Progress — changelog | `progress/changelog.md` | Append-only activity log |
 | Progress — decisions | `progress/decisions.md` | ADR template |

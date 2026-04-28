@@ -333,6 +333,18 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────
+# CRITICAL (advisory): 1M context window for Generator BUILD
+# ─────────────────────────────────────────────────────────────
+# Claude Code does not currently expose --model to plugin scripts, so this
+# check cannot be mechanical. It prints an advisory banner reminding the user
+# that BUILD dispatches on multi-stratum features need the [1m] variant. The
+# check ALWAYS PASSES — it is a banner-with-status, not a blocker. Future
+# Claude Code versions exposing model info could promote it to a real check.
+add_result "RECOMMEND" "WARN" "1M context window (Opus 4.7[1m])" \
+  "BELCORT cannot mechanically detect the active Claude Code model. For sprints touching multi-stratum work (foundation, ingestion, full-stack features), the Generator BUILD dispatch can exceed the default 200K Opus context. Confirm Claude Code was launched with the 1M variant." \
+  "Relaunch Claude Code with: claude --model claude-opus-4-7[1m]"
+
+# ─────────────────────────────────────────────────────────────
 # OUTPUT
 # ─────────────────────────────────────────────────────────────
 

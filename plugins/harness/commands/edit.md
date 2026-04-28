@@ -43,15 +43,22 @@ The orchestrator dispatches the Planner via the Agent tool:
 - **description**: `"Cascade edit: <short summary of $ARGUMENTS>"`
 - **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
 
-> You are being dispatched in EDIT mode (see your system prompt's MODE ROUTING table).
+> You are being dispatched in EDIT mode (see your system prompt's MODE ROUTING table — EDIT is the unified post-PLAN spec-patches mode).
 >
 > --- EDIT REQUEST ---
 > $ARGUMENTS
 >
 > --- CONTEXT ---
-> Read via Read tool: .harness/spec/prd.md, .harness/spec/architecture.md, .harness/spec/constitution.md (read-only — NEVER patch this in EDIT mode), .harness/features/${FEATURE}/contract.md, .harness/evaluator/criteria.md, and .harness/init.sh if relevant.
+> Read via Read tool: .harness/spec/prd.md, .harness/spec/architecture.md, .harness/spec/constitution.md (read-only — NEVER patch from this marker), .harness/features/${FEATURE}/contract.md, .harness/evaluator/criteria.md, and .harness/init.sh if relevant.
 >
-> Identify every file the change affects — resist the pull to under-scope. Produce structured before→after patches, grouped by file, to .harness/features/${FEATURE}/edit-patches.md per your EDIT mode template. If state.current_feature is empty, use .harness/edit-patches.md (top-level) instead. Flag any UNCLEAR or OUT-OF-SCOPE items. Constitutional implications → flag as OUT-OF-SCOPE, suggest /harness:constitution-amend. Do NOT apply patches.
+> --- CONSTRAINTS (EDIT-specific) ---
+> - Multi-file cascade expected; identify ALL affected files (resist under-scoping). Stack swap → architecture.md + init.sh + relevant NFR section + sometimes evaluator/criteria.md.
+> - NEVER patch spec/constitution.md (route via OUT-OF-SCOPE → /harness:constitution-amend).
+> - Preserve all IDs.
+> - Use Context7 to verify any new framework/library API and that NFRs remain satisfiable.
+> - Output: .harness/features/${FEATURE}/edit-patches.md, OR .harness/edit-patches.md (top-level) if state.current_feature is empty. Group patches by file.
+>
+> Do NOT apply patches.
 
 If `state.current_feature` is empty (editing spec between features), the Planner writes patches to `.harness/edit-patches.md` (top-level) per its EDIT mode template. The orchestrator reads whichever path exists after the dispatch returns.
 
@@ -148,7 +155,7 @@ Append to `.harness/progress/changelog.md`:
 
 | File | Writer |
 |---|---|
-| `.harness/features/NNN/edit-patches.md` (or `.harness/edit-patches.md` if global) | Planner AMEND-mode cascade dispatch |
+| `.harness/features/NNN/edit-patches.md` (or `.harness/edit-patches.md` if global) | Planner EDIT mode (EDIT marker, cascade-aware) |
 | `spec/*.md`, `contract.md`, `init.sh` | Orchestrator applies Planner patches via Edit |
 | `progress/decisions.md` | Orchestrator appends ADR |
 | `progress/changelog.md` | Orchestrator appends |

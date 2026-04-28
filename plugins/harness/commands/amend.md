@@ -34,9 +34,9 @@ See SKILL.md § File Ownership Contract.
 
 The orchestrator reads `.harness/manifest.yaml` to get `state.current_feature` (call this `${FEATURE}`). Verify `.harness/features/${FEATURE}/contract.md` exists. If not, tell the user "No draft contract for ${FEATURE}. Run /harness:sprint first." and exit.
 
-If the contract already has the `**Negotiated**:` marker (negotiation complete), warn the user: "This contract was finalized through negotiation. Applying an amendment will require re-running `/harness:negotiate` to propagate changes. Continue?" On no → exit. On yes → continue; flag in changelog later.
+If the contract already has the `**Negotiated**:` marker (negotiation complete), warn the user: "This contract was finalized through negotiation. Applying an amendment will require re-running negotiation to propagate changes — use `/harness:rewind negotiating` after the amend lands. Continue?" On no → exit. On yes → continue; flag in changelog later.
 
-### Step 2: Dispatch fresh Planner in AMEND mode
+### Step 2: Dispatch fresh Planner in EDIT mode (AMENDMENT marker)
 
 The orchestrator dispatches the Planner via the Agent tool:
 
@@ -44,12 +44,21 @@ The orchestrator dispatches the Planner via the Agent tool:
 - **description**: `"Amend spec: <short summary of $ARGUMENTS>"`
 - **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
 
-> You are being dispatched in AMEND mode (see your system prompt's MODE ROUTING table).
+> You are being dispatched in EDIT mode (see your system prompt's MODE ROUTING table — EDIT is the unified post-PLAN spec-patches mode).
 >
-> The user wants this specific change applied to the spec:
+> --- AMENDMENT REQUEST ---
 > $ARGUMENTS
 >
-> Read the current spec via Read tool (paths: .harness/spec/prd.md, architecture.md, constitution.md, .harness/features/${FEATURE}/contract.md, .harness/evaluator/criteria.md). Produce structured before→after patches to .harness/features/${FEATURE}/amend-patches.md per your AMEND mode procedure. Do NOT apply patches — the orchestrator applies after user confirmation.
+> --- CONTEXT ---
+> Read via Read tool: .harness/spec/prd.md, .harness/spec/architecture.md, .harness/spec/constitution.md (read-only — NEVER patch from this marker), .harness/features/${FEATURE}/contract.md, .harness/evaluator/criteria.md.
+>
+> --- CONSTRAINTS (AMENDMENT-specific) ---
+> - Single file scope expected; if cascade needed (≥2 files), flag relevant parts as OUT-OF-SCOPE and recommend /harness:edit.
+> - NEVER patch spec/constitution.md (route via OUT-OF-SCOPE → /harness:constitution-amend).
+> - Preserve all IDs (FR-NNN, NFR-NNN, AC-NNN, EC-NNN, §-numbers).
+> - Output: .harness/features/${FEATURE}/amend-patches.md per the universal MODE: EDIT patches template.
+>
+> Do NOT apply patches — the orchestrator applies after user confirmation.
 
 ### Step 3: Read patches, present to user
 
@@ -89,7 +98,7 @@ Invoke `/harness:analyze`. CRITICAL findings → report + offer rollback or foll
 
 ### Step 6: Re-negotiation warning (if contract was FINAL)
 
-If Step 1 detected a finalized contract and the amendment modified it, tell the user: "Amendment applied to a previously-negotiated contract. The Generator's proposal and Evaluator's review may no longer match. Run `/harness:negotiate` to re-negotiate before building." Do NOT auto-run negotiate.
+If Step 1 detected a finalized contract and the amendment modified it, tell the user: "Amendment applied to a previously-negotiated contract. The Generator's proposal and Evaluator's review may no longer match. Run `/harness:rewind negotiating` to restart negotiation before building." Do NOT auto-rewind.
 
 ### Step 7: Log ADR
 
@@ -138,7 +147,7 @@ Orchestrator appends to `.harness/progress/changelog.md`:
 
 | File | Writer |
 |---|---|
-| `.harness/features/NNN/amend-patches.md` | Planner AMEND mode |
+| `.harness/features/NNN/amend-patches.md` | Planner EDIT mode (AMENDMENT marker) |
 | `spec/*.md` (or contract.md) | Orchestrator applies Planner patches via Edit |
 | `progress/decisions.md` | Orchestrator appends ADR |
 | `progress/changelog.md` | Orchestrator appends |

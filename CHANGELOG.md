@@ -6,6 +6,40 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## v2.2.0 — 2026-04-28 — Stale-assumption pruning + operational hardening
+
+Continues the v2.0 minimalist refactor logic, applied to four post-v2.0 stale-assumption targets plus two operational hardening items. Single-PR atomic merge. ~300 LoC net reduction. No user-facing command surface change beyond removing one redundant front door.
+
+### Removed
+
+- **Per-FR story files** (`features/NNN/stories/FR-NNN.md`) — the BMAD-V6 scoping assumption that drove inclusion in v2.0 has staled on Opus 4.7[1m]. The full contract is ~8k tokens out of 1M; per-cycle scoping is trivial without a separate file. The "drift = build fails" hash-check was Planner-asserted and Evaluator-unimplemented (v2.x inconsistency). Generator BUILD now reads the per-FR section of `contract.md` directly via grep on FR-IDs. Existing projects with `stories/` folders: ignored from v2.2 forward; safe to delete manually.
+- **`/harness:negotiate` standalone command** — 17 commands → 16. Procedure (Generator NEGOTIATE → Evaluator REVIEW-PROPOSAL → Generator FINALIZE-CONTRACT, ≤3 rounds) is canonical in `commands/sprint.md` § 2c; recovery from `negotiating` phase uses `/harness:resume`; restart uses `/harness:rewind negotiating`. Standalone command was almost never user-invoked.
+- **Planner mode duplication** — 6 modes → 3. CLARIFY-APPLY + AMEND + EDIT + CONSTITUTION-AMEND collapsed into one unified `MODE: EDIT` that reads a marker from the dispatch prompt (`AMENDMENT REQUEST` / `EDIT REQUEST` / `CLARIFY ANSWERS` / `CONSTITUTION AMENDMENT`). Mode-specific constraints (which files may be patched, scope expectations, etc.) now live in each command file's dispatch prompt — single source of truth per constraint. Net Planner LoC: -400. User-facing commands `/harness:amend`, `/harness:edit`, `/harness:clarify`, `/harness:constitution-amend` unchanged.
+
+### Added
+
+- **1M-context confirmation banner** in `doctor.sh` (advisory; mechanical detection deferred until Claude Code exposes `--model` to plugin scripts).
+- **1M-context confirmation prompt** in `commands/sprint.md` § 0b (blocking) and `commands/quick.md` § 0a (non-blocking one-liner).
+- **`### Recommended launch` section** in README.md Quick Start, promoting `claude --model claude-opus-4-7[1m]` from buried-in-Status to top-level. Also new troubleshooting entry "Generator BUILD truncated / no implementation-report.md produced" pointing to the same fix.
+- **`## State at pause` section** in `pause-questions.md` template — Generator authors a state snapshot (current FR, last completed FR, last commit SHA, working tree status, timestamp, reason category) at pause time. Snapshot is authoritative for the re-dispatched Generator's resume orientation, beating `manifest.yaml` if they disagree (manifest can move via interleaving commands).
+
+### Changed
+
+- **Planner feature-size sanity check** (planner.md § Feature-size sanity check) is reworded to be advisory-only with an explicit operational dependency note: trust-the-model stance assumes 1M-context launch.
+- `commands/sprint.md` § 3a pause re-dispatch now passes the State-at-pause snapshot through to the resumed Generator under a `--- PAUSE STATE SNAPSHOT (authoritative — prefer over manifest if they disagree) ---` marker.
+- `agents/generator.md` Phase 1 rule 3 prefers the snapshot over manifest for resume orientation.
+
+### Migration
+
+- **Existing projects with `.harness/features/NNN/stories/` folders**: harmless. Generator and Evaluator no longer read them. Safe to delete the folder; no migration script is provided. The hash-check that would have failed on drift was never enforced in code, so no spurious failures will occur from leaving them in place.
+- **Muscle-memory `/harness:negotiate` users**: the command now returns "command not found". Use `/harness:resume` (when in `negotiating` phase) or `/harness:rewind negotiating` (to restart from finalized contract).
+
+### Spec & ADR
+
+- Design spec: `docs/superpowers/specs/2026-04-28-belcort-audit-and-refine-design.md`
+- Implementation plan: `docs/superpowers/plans/2026-04-28-belcort-audit-and-refine.md`
+- ADR pending: append to `progress/decisions.md` after merge documenting the v2.0-spec contradiction (story files removed; v2.0 preserved them) and the trust-the-model stance.
+
 ## [2.1.9] — 2026-04-24
 
 ### Feature — Secrets-handling contract (two-file convention) + Evaluator setup gate

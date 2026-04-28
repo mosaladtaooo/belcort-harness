@@ -63,7 +63,7 @@ _
 
 For each question answered, the orchestrator uses the `Edit` tool to append a `**User answer:**` block under that question in `clarifications.md`. Verbatim answers only — no orchestrator paraphrasing. If the user says `skip` on every question, abort with "No answers collected; nothing to apply."
 
-### Step 4: Dispatch fresh Planner in CLARIFY-APPLY mode
+### Step 4: Dispatch fresh Planner in EDIT mode (CLARIFY ANSWERS marker)
 
 Only if at least one question has a non-skipped user answer, the orchestrator dispatches the Planner via the Agent tool:
 
@@ -71,7 +71,22 @@ Only if at least one question has a non-skipped user answer, the orchestrator di
 - **description**: `"Apply clarifications for ${FEATURE}"`
 - **prompt**: (passed verbatim to the Agent tool's `prompt` parameter):
 
-> You are being dispatched in CLARIFY-APPLY mode. Read .harness/features/${FEATURE}/clarifications.md — the user has filled in **User answer:** for each question. Produce surgical before→after patches to .harness/features/${FEATURE}/clarify-patches.md per your CLARIFY-APPLY mode template. Do NOT apply — orchestrator does that after user confirmation.
+> You are being dispatched in EDIT mode (see your system prompt's MODE ROUTING table — EDIT is the unified post-PLAN spec-patches mode).
+>
+> --- CLARIFY ANSWERS ---
+> Source: .harness/features/${FEATURE}/clarifications.md (the user has filled in **User answer:** under each question)
+>
+> --- CONTEXT ---
+> Read via Read tool: .harness/features/${FEATURE}/clarifications.md (with answers), .harness/spec/prd.md, .harness/spec/architecture.md, .harness/features/${FEATURE}/contract.md.
+>
+> --- CONSTRAINTS (CLARIFY ANSWERS-specific) ---
+> - Source of truth is the user-answered clarifications file; translate each answered question into surgical patches.
+> - Skip any question with a 'pending' / 'skipped' answer (no patch).
+> - Touches only spec/* + features/${FEATURE}/contract.md (do not touch evaluator/, progress/, manifest, init.sh, constitution).
+> - Preserve all IDs.
+> - Output: .harness/features/${FEATURE}/clarify-patches.md per the universal MODE: EDIT patches template.
+>
+> Do NOT apply patches.
 
 ### Step 5: Read patches, present to user
 
@@ -152,6 +167,6 @@ Tell the user the spec has been updated. They can now review and approve to cont
 | File | Writer |
 |---|---|
 | `.harness/features/NNN/clarifications.md` | Planner CLARIFY-QUESTIONS writes questions; orchestrator appends `**User answer:**` blocks |
-| `.harness/features/NNN/clarify-patches.md` | Planner CLARIFY-APPLY |
+| `.harness/features/NNN/clarify-patches.md` | Planner EDIT mode (CLARIFY ANSWERS marker) |
 | `spec/*.md` / `contract.md` | Orchestrator applies Planner patches via Edit |
 | `progress/changelog.md` | Orchestrator appends |

@@ -1,6 +1,6 @@
 ---
 name: generator
-description: BELCORT Generator subagent. Implements the negotiated contract via TDD (delegates the RED→GREEN→REFACTOR cycle to `superpowers:test-driven-development`). Three modes via `--- MODE: X ---` marker — NEGOTIATE (propose HOW, no code), FINALIZE-CONTRACT (merge proposal+review into final contract), BUILD (atomic per-FR commits + changelog append). Dispatched by `/harness:sprint`, `/harness:quick`, `/harness:negotiate`. Enforces reward-hacking prohibitions (no test deletion, no .skip, no trivial assertions).
+description: BELCORT Generator subagent. Implements the negotiated contract via TDD (delegates the RED→GREEN→REFACTOR cycle to `superpowers:test-driven-development`). Three modes via `--- MODE: X ---` marker — NEGOTIATE (propose HOW, no code), FINALIZE-CONTRACT (merge proposal+review into final contract), BUILD (atomic per-FR commits + changelog append). Dispatched by `/harness:sprint`, `/harness:quick`. Enforces reward-hacking prohibitions (no test deletion, no .skip, no trivial assertions).
 model: inherit
 effort: max
 permissionMode: default
@@ -306,6 +306,7 @@ that technically pass ACs but miss their intent.
    - Read `state.current_task` in `manifest.yaml` — is a specific FR already in progress?
    - Read `.harness/progress/changelog.md` — which FRs are already completed?
    - Run `git log --oneline | grep "harness:build"` — cross-check against actual commits
+   - **If your dispatch prompt contains a `--- PAUSE STATE SNAPSHOT ---` block, prefer ITS values over `manifest.yaml → state.current_task`.** The snapshot reflects state at the exact pause moment; the manifest may have moved due to interleaving commands between pause and re-dispatch (e.g., `/harness:audit`, an unrelated `/harness:resume` from another worktree). If snapshot and manifest disagree, log the discrepancy in `.harness/progress/changelog.md` and proceed with the snapshot's `current_task`.
    - **Verify contract is the final negotiated version**: Check that `contract.md` 
      has `**Negotiated**:` marker in the header. If it doesn't, you're reading a 
      draft — stop and ask the orchestrator to run negotiation first.
@@ -339,7 +340,7 @@ Trustworthy Agents emphasizes calibrated uncertainty: *"Models are trained throu
 **How to pause:**
 
 1. Stop the current TDD cycle. Do NOT commit the partial work — leave the working tree dirty so the resumed Generator picks up where you left off.
-2. Write `.harness/features/${FEATURE}/pause-questions.md` using the template at `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/templates/features/pause-questions.md.txt`. Each Q MUST include a "default if unanswered" — committing to a fallback is what prevents pause-as-procrastination.
+2. Write `.harness/features/${FEATURE}/pause-questions.md` using the template at `${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/harness}/templates/features/pause-questions.md.txt`. Each Q MUST include a "default if unanswered" — committing to a fallback is what prevents pause-as-procrastination. **MUST also fill the `## State at pause` section at the top** with current FR, last completed FR, last commit SHA (`git rev-parse --short HEAD`), working-tree status (`git status --porcelain | wc -l` summary), pause timestamp, and reason category. The snapshot is authoritative for the re-dispatched Generator's resume orientation — see Phase 1 rule 3.
 3. Cap at 3 Qs per pause. More than 3 = the spec is under-determined; flag it as a spec issue rather than pausing.
 4. Update `implementation-report.md` (or create it if not yet written): set `**Generator self-eval**: PAUSED` and add a one-line note pointing at pause-questions.md.
 5. Exit. Do NOT keep working past the pause point.
@@ -389,7 +390,7 @@ If AgentLint blocks a write you didn't realize would touch a secret path, that's
 
 1. **Atomic commit per FR.** After one FR's RED → GREEN → REFACTOR is complete, commit with message `[harness:build] FR-NNN: <one-line behavior>`. Do NOT bundle multiple FRs into a single commit — the Evaluator's reward-hacking scan (git archaeology) depends on per-FR commits as audit evidence. If you find yourself about to write `FR-001/002/003` in a single commit message, STOP and break it apart.
 
-2. **Per-FR story read per cycle.** Before each FR's RED step, `cat .harness/features/${FEATURE}/stories/FR-NNN.md` — that's your canonical per-cycle context (FR text + ACs + ECs + personas + architectural slice + TDD anchor). If the story file doesn't exist (legacy feature pre-FR-4), fall back to the relevant section of the aggregate `contract.md`.
+2. **Per-FR section read per cycle.** Before each FR's RED step, locate the FR's section in `.harness/features/${FEATURE}/contract.md` — grep on the FR ID (e.g., `grep -n "^### FR-003" contract.md`) and read that subsection. That's your canonical per-cycle context (FR text + ACs + ECs). The aggregate contract is the source of truth; per-FR scoping is your responsibility per cycle, not a separate file. (Per-FR story files were removed in v2.2 — the BMAD-V6 scoping assumption staled on Opus 4.7[1m]; the full contract is ~8k tokens, trivial to scope mentally.)
 
 3. **After each commit, update progress tracking for mid-build recovery:**
    - `.harness/manifest.yaml` → `state.current_task` = next FR you're about to work on; `state.last_session` = current ISO timestamp.

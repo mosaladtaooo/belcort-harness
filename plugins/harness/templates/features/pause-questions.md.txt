@@ -21,9 +21,22 @@
      work. Each Q below MUST commit to a default — that prevents pause-as-
      procrastination by forcing you to do the thinking even while asking. -->
 
+## State at pause (Generator-authored — authoritative for resume)
+
+**Note for the resuming Generator:** if your dispatch prompt contains a `--- PAUSE STATE SNAPSHOT ---` block, prefer THESE values over `manifest.yaml → state.current_task`. The manifest may have been moved by interleaving commands between pause and re-dispatch; the snapshot reflects state at exact pause time.
+
+- **Current FR (in flight):** FR-NNN
+- **Last completed FR:** FR-MMM (or "none" if pause is pre-first-FR)
+- **Last commit SHA:** <short hash, e.g., a1b2c3d>
+- **Working tree status:** <clean | dirty: N staged, M unstaged, K untracked>
+- **Pause timestamp (UTC):** <ISO 8601, e.g., 2026-04-28T14:23:11Z>
+- **Pause reason category:** <product-intent ambiguity | constitution-vs-AC conflict | other>
+
+---
+
 ## Q1 — {{short title, ≤7 words}}
 
-**What contract says**: "{{verbatim quote from contract.md or stories/FR-NNN.md}}"
+**What contract says**: "{{verbatim quote from the FR section of contract.md (grep by FR ID)}}"
 **Ambiguity**: {{specific — what's underdetermined that the contract didn't pin down}}
 **My default if unanswered**: {{a concrete, committed choice — NOT 'I would need to decide'.
                                 Examples: 'sort by created_at desc', 'use cookies not JWT',

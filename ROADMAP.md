@@ -20,6 +20,7 @@ See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 | Version | Date | Summary |
 |---|---|---|
+| 2.2.0 | 2026-04-28 | Stale-assumption pruning + operational hardening — story files removed, `/harness:negotiate` standalone removed, Planner mode collapse (6 → 3), pause snapshot, 1M-context banner |
 | 2.1.9 | 2026-04-24 | Secrets-handling contract (.env.example vs .env.local) + Evaluator setup-required gate |
 | 2.1.8 | 2026-04-24 | Worktree cwd contract — root `.harness/` authoritative, frozen worktree copy never read |
 | 2.1.7 | 2026-04-24 | Frontmatter tuning — `model: inherit`, `effort: max`, `maxTurns: 2000` on all three agents |
@@ -32,6 +33,15 @@ See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 | 2.1.0 | 2026-04-21 | Native Agent-tool subagent dispatch (migrated from `claude -p` subprocess) |
 | 2.0.0 | 2026-04-21 | Minimalist refactor — Planner → Generator → Evaluator pipeline rewrite |
 | 1.5.x | (prior) | Prior stable; see git tags |
+
+## v2.2.0 — Shipped 2026-04-28
+
+- Per-FR story files removed (stale BMAD-V6 assumption on Opus 4.7[1m])
+- `/harness:negotiate` standalone removed (procedure preserved in sprint.md § 2c)
+- Planner internal mode collapse (6 → 3; user-facing commands unchanged)
+- Generator pause `State at pause` snapshot for resume safety
+- Doctor + sprint 1M-context confirmation banner
+- Soft-only Planner feature-size gate (advisory; trust the model)
 
 ## In Progress
 
@@ -78,6 +88,18 @@ Deferred items with non-trivial value. Revisit when the "When to revisit" condit
 - **Why parked**: v2.1.8 ships prose + prompt-discipline fix (SKILL.md Working Directory Contract + dispatch prompts + resume.md guidance). Mechanical prevention via sparse-checkout adds Windows-compat fragility (path separators, case-sensitivity, git-for-Windows quirks) disproportionate to the confusion risk.
 - **When to revisit**: if the prose-level fix proves insufficient in practice (e.g., a subagent still reads the stale `.harness/` despite the contract), or if Anthropic's GAN-isolation philosophy evolves toward requiring mechanical enforcement of ownership contracts.
 - **Context**: discussed 2026-04-24. The `.gitignore` / `git rm --cached` approaches don't work (would cause squash-merge to delete main's `.harness/`); sparse-checkout is the correct mechanical path. See CHANGELOG v2.1.8 "Honest note on the mechanical fix that got deferred."
+
+---
+
+## v3 watch list
+
+Items deferred from the v2.2 audit that may become load-bearing on future model regressions or revealed-by-use:
+
+- **Stratum-splitting BUILD into N dispatches.** Premature on confirmed-1M sessions. Revisit only if truncation recurs after Change #1 lands.
+- **Pause-mechanic full unification** (Planner AskUserQuestions vs Generator file-based). Asymmetry is correct on current models; revisit if Planner sessions ever grow long enough to need file-based pauses.
+- **Mechanical 1M-context detection from doctor.sh.** Requires Claude Code to expose `--model` to plugin scripts. Track upstream and promote the v2.2 advisory banner to a real check when available.
+- **Audit-family merge** (`/analyze`, `/validate`, `/audit`, `/retrospective`, `REVALIDATE`). Each answers a distinct question per `SKILL.md` § Audit Commands. Revisit only if telemetry shows users running them in fixed pairs.
+- **Story-file deprecation grace period** (one-shot warning if existing project has `stories/` folder). Not worth the code; CHANGELOG migration note is sufficient.
 
 ---
 
