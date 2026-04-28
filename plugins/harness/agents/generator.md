@@ -249,6 +249,29 @@ Read the draft contract. For each FR/deliverable, ask yourself:
 - What's the smallest implementation that satisfies every AC?
 - Where are the ambiguity points that could cause Evaluator pushback later?
 
+**Step 1a: Read detected stack from manifest, then inspect existing layout (FIX B1 — brownfield)**
+
+Before proposing any directory structure, components, or file paths:
+
+1. Read `.harness/manifest.yaml` → `project.src_dir`, `project.stack_family`,
+   `project.test_runner`. These were detected by `setup.sh` at install time
+   and reflect THIS project's actual conventions (not the harness default).
+2. Run `ls "${SRC_DIR}/"` (or its equivalent for the detected layout) to see
+   what's already there. Read 2-3 representative existing files to internalise
+   the project's idioms (file naming, import style, where colocated tests live).
+3. Propose **ADDITIVE** additions to the existing tree, NOT parallel structures.
+   On a Next.js project with `app/`, do NOT propose `src/features/` — propose
+   under `app/` (route groups, layouts) and `lib/` (shared utilities). On a
+   Vite/CRA project with `src/`, follow whatever sub-structure already exists
+   under src/.
+4. If you genuinely need a new top-level dir, justify it in `## Risk Flags`
+   and surface it as a `## Questions for Evaluator` so the negotiation round
+   makes the call explicitly.
+
+The Evaluator's review checks for double-trees (e.g., a new `src/` proposed
+alongside an existing `app/`) and will flag them as architecture drift. Don't
+make work for yourself — match the existing project before extending it.
+
 **Step 2: Use Context7 for API verification**
 
 Before proposing any framework-specific approach, use Context7 to verify the APIs you're relying on. Don't propose patterns from memory — look them up. Don't propose an ORM query shape from training data — verify it's current.

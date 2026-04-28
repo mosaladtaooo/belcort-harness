@@ -17,6 +17,53 @@ In the full [sprint.md](sprint.md) flow, `/harness:analyze` runs automatically b
 ## Procedure
 
 1. Read `.harness/spec/prd.md`, `.harness/spec/architecture.md`, `.harness/spec/constitution.md`, `.harness/features/{current-feature}/contract.md`
+
+1a. **Criteria placeholder / unmodified-default check (FIX B2.2 — MANDATORY, halts on match)**
+
+The Planner is supposed to customise `.harness/evaluator/criteria.md` for the project's type during Pass 2 (e.g., set `Project type: SaaS` and raise Product Depth threshold for frontend-heavy work). Real-use sprints have surfaced a failure mode where the Planner ships criteria.md with the literal placeholder text intact (e.g., `Project type: [fill in: SaaS / e-commerce ...]`) AND the per-criterion thresholds unchanged from the template. The Evaluator then grades against the generic defaults, the user assumes the rubric was tailored, and FAIL-worthy work passes with a 6-floor.
+
+Run these checks against `.harness/evaluator/criteria.md`:
+
+```bash
+CRITERIA=".harness/evaluator/criteria.md"
+TEMPLATE="${CLAUDE_PLUGIN_ROOT}/templates/evaluator/criteria.md.txt"
+
+# A. Placeholder patterns — literal markers that should have been filled in
+HITS=$(grep -nE '\[fill in:|\[TBD\]|\[describe[^]]*\]' "$CRITERIA" 2>/dev/null)
+if [ -n "$HITS" ]; then
+  echo "PLACEHOLDER_HITS:"
+  echo "$HITS"
+fi
+
+# B. Threshold-default check — every threshold matches the template's default value
+# AND no custom Weighting Decision line ("Project type: SOMETHING_REAL"). If both
+# conditions hold, the Planner did not customise the rubric for this project.
+PROJECT_TYPE_LINE=$(grep -n '^Project type:' "$CRITERIA" 2>/dev/null | head -1)
+DEFAULTS_UNCHANGED=0
+if [ -f "$TEMPLATE" ]; then
+  # Compare just the threshold lines (lines starting with "- **<name>**: ").
+  TPL_THRESH=$(grep -E '^\- \*\*(Functionality|Code Quality|Test Coverage|Product Depth)\*\*:' "$TEMPLATE")
+  CUR_THRESH=$(grep -E '^\- \*\*(Functionality|Code Quality|Test Coverage|Product Depth)\*\*:' "$CRITERIA")
+  if [ "$TPL_THRESH" = "$CUR_THRESH" ]; then
+    DEFAULTS_UNCHANGED=1
+  fi
+fi
+```
+
+**Halt rules** (each is a CRITICAL finding; halt the analyze pipeline same as a constitutional violation):
+
+- **Placeholder pattern detected** (`[fill in:` / `[TBD]` / `[describe ...]` regex hits anywhere in the file):
+  > "criteria.md contains placeholder text — the Planner did not customise the rubric for this project. Run `/harness:clarify` or `/harness:amend "fill in evaluator criteria"` before proceeding. Matched lines:"
+  >
+  > followed by the line numbers + content from `$HITS`.
+
+- **All thresholds match template defaults AND Project type still says `[fill in: ...]`** (or is missing entirely):
+  > "criteria.md thresholds are all-default AND Project type is unset — the Planner did not customise the rubric for this project. Run `/harness:clarify` or `/harness:amend` to set Project type and adjust at least one threshold for this project's risk profile before proceeding."
+
+Show the matched lines so the user can see WHICH placeholder fired. Don't auto-fix; the Planner is the canonical writer of spec files (per SKILL.md File Ownership Contract) — `/harness:analyze` only halts and surfaces.
+
+If both checks pass (no placeholders AND at least one threshold differs from template OR Project type is set to something concrete), proceed to step 2.
+
 2. Run these checks:
    - **Requirement coverage**: Every FR in the PRD appears in the architecture traceability table AND in the contract deliverables
    - **AC coverage**: Every AC in the PRD appears in the contract's test criteria

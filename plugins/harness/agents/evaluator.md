@@ -202,7 +202,7 @@ Make a list of every principle (§-number + what it requires). For each, classif
 
 **Step 2: For each new/changed principle, audit the feature's source code**
 
-Use `Read` and `Bash` (with `grep`, `find`, etc.) to inspect actual code in `src/`. Examples by principle type:
+Use `Read` and `Bash` (with `grep`, `find`, etc.) to inspect actual code in the project's source directory. Read the source directory from `.harness/manifest.yaml` → `project.src_dir` (FIX B1, populated by setup.sh stack detection — `app/` for Next.js, `src/` for Vite/CRA, `.` for flat layouts). The audit greps below use `src/` as the historical example; substitute the detected dir when you run them. Examples by principle type:
 
 | Principle wording | How to audit |
 |---|---|
@@ -367,6 +367,14 @@ The Generator wrote `implementation-report.md` as its handoff to you. It contain
 # Get the current feature name from manifest
 FEATURE=$(grep 'current_feature:' .harness/manifest.yaml | awk '{print $2}' | tr -d '"')
 
+# Read the detected source directory from manifest (FIX B1 — populated by
+# setup.sh stack detection). Falls back to "src" on legacy manifests where
+# project.src_dir is absent. EVERY downstream grep that historically wrote
+# `src/` literally now uses ${SRC_DIR} so brownfield Next.js (app/) and flat
+# layouts (.) audit correctly instead of silently passing on an empty grep.
+SRC_DIR=$(sed -n 's/^[[:space:]]*src_dir:[[:space:]]*"\([^"]*\)".*/\1/p' .harness/manifest.yaml | head -1)
+[ -z "$SRC_DIR" ] && SRC_DIR="src"
+
 # CALIBRATE FIRST: read scoring anchors before reading anything to grade.
 # This prevents the Generator's framing from anchoring your scale.
 cat ".harness/evaluator/examples.md"
@@ -461,19 +469,22 @@ Read the source files and check against the constitution:
 
 ```bash
 # Check file lengths
-find src -name "*.ts" -o -name "*.tsx" | while read f; do
+# FIX B1: ${SRC_DIR} is the project's source root (read from manifest in Step 1).
+# Brownfield Next.js projects use "app", flat-layout projects use ".", greenfield
+# Vite/CRA use "src" (the historical default). All four greps below use it.
+find "${SRC_DIR}" -name "*.ts" -o -name "*.tsx" | while read f; do
   lines=$(wc -l < "$f")
   if [ "$lines" -gt 300 ]; then echo "VIOLATION: $f has $lines lines (max 300)"; fi
 done
 
 # Check for console.log
-grep -rn "console.log" src/ --include="*.ts" --include="*.tsx"
+grep -rn "console.log" "${SRC_DIR}/" --include="*.ts" --include="*.tsx"
 
 # Check for any types (TypeScript)
-grep -rn ": any" src/ --include="*.ts" --include="*.tsx"
+grep -rn ": any" "${SRC_DIR}/" --include="*.ts" --include="*.tsx"
 
 # Run linter
-npx eslint src/ 2>&1 | tail -20
+npx eslint "${SRC_DIR}/" 2>&1 | tail -20
 ```
 
 Also review manually:
@@ -526,13 +537,15 @@ Severity: **Critical** — counts as Test Coverage failure regardless of test co
 
 ### Step 3.6: Context7 coverage audit — MANDATORY (v2.2+)
 
-The Generator was instructed to use Context7 before every external API call AND to log every lookup in `implementation-report.md` § Context7 Coverage. The Planner did the same in `architecture.md` § Context7 Verification Log. **Verify it actually happened by cross-referencing actual imports in `src/` against those two logs.**
+The Generator was instructed to use Context7 before every external API call AND to log every lookup in `implementation-report.md` § Context7 Coverage. The Planner did the same in `architecture.md` § Context7 Verification Log. **Verify it actually happened by cross-referencing actual imports in `${SRC_DIR}/` (the detected source directory — see Step 1) against those two logs.**
 
 **Why this audit exists**: pre-v2.2, Context7 was a soft "MUST use" instruction. Real-use observation: agents claimed they used Context7 but produced no auditable record, then named outdated APIs / stale libraries. v2.2 makes the work auditable; this step is the gate that turns auditability into enforcement. Without it, the artifact sections become a checkbox the Generator fills with "yes I did it" placeholders.
 
 ```bash
-# A. Extract every external library imported in src/ (third-party only — strip ./ and ../)
-EXT_IMPORTS=$(grep -rhE "^(import|from) .* (from )?['\"][^./]" src/ 2>/dev/null \
+# A. Extract every external library imported in ${SRC_DIR} (third-party only — strip ./ and ../).
+# FIX B1: brownfield-aware. ${SRC_DIR} is read from manifest project.src_dir
+# in Step 1 setup; defaults to "src" on legacy manifests.
+EXT_IMPORTS=$(grep -rhE "^(import|from) .* (from )?['\"][^./]" "${SRC_DIR}/" 2>/dev/null \
   | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/" \
   | awk -F/ '{ if (substr($1,1,1) == "@") print $1"/"$2; else print $1 }' \
   | sort -u)
@@ -564,7 +577,7 @@ For each library in the UNVERIFIED list:
 - **Major**: the library is meaningful but not core (HTTP client, validation library, date utility) AND used in user-visible code paths.
 - **Minor**: the library is a small utility (lodash, uuid, classnames) AND used only in low-risk paths.
 
-For each library in the Planner log with Maintenance status `slow` or `stale` that's actually imported in src/:
+For each library in the Planner log with Maintenance status `slow` or `stale` that's actually imported in `${SRC_DIR}/`:
 - Verify the Stale-library justification subsection in architecture.md addresses this lib. If absent → **Major** finding (`stack-freshness audit failure: <lib> imported but justification missing`). If present → no finding (Planner already accepted the risk on the user's behalf).
 
 For each library in the implementation-report Context7 Coverage marked `⚠️ unverified`:
@@ -605,6 +618,41 @@ Evaluate:
 - Are critical paths covered?
 - Are tests deterministic (run twice, same result)?
 
+### Step 4.4: Mechanical AC↔Test cross-check (FIX B2.1 — MANDATORY, prior to Lens scoring)
+
+The Generator's `implementation-report.md` contains an AC→Test Map listing claims like `AC-007-3 | tests/auth.test.ts | passing`. Without verification, that's a self-report — the Generator can list a file that doesn't actually contain the AC ID, and Lens K4 (does the test verify the goal?) silently passes because the row "looks fine". This step is a hard, mechanical, judgment-free check that catches the Generator-listed-a-test-that-doesn't-actually-reference-the-AC reward-hacking pattern.
+
+**For every AC ID listed in `implementation-report.md` AC→Test Map:**
+
+```bash
+# Try the common test directory names. SRC_DIR was detected in Step 1; tests/
+# / __tests__/ / spec/ / e2e/ are stack-conventional and may all be empty on a
+# given project. The grep below silently no-ops for absent dirs.
+for AC in $(grep -oE 'AC-[0-9]+-[0-9]+' .harness/features/${FEATURE}/implementation-report.md | sort -u); do
+  HITS=$(grep -rln "$AC" tests/ test/ __tests__/ spec/ e2e/ "${SRC_DIR}/__tests__/" 2>/dev/null | wc -l | tr -d ' ')
+  echo "$AC: $HITS test file(s) reference this AC ID"
+done
+```
+
+**Hard rule (judgment-free):**
+
+1. If 0 matches found for an AC → flag the AC as **UNVERIFIED** in your eval report. Mark the corresponding FR's row in Part A `Met?` column as `N` (Not met) — even if the FR's user-facing behaviour appeared to work in Playwright. The Generator did not produce a test that mentions this AC ID by string, which means the AC→Test Map entry is fictional or referenced indirectly enough to defeat traceability.
+2. If ≥1 match found → proceed with Lens K4 (does the test actually verify the AC's user-observable goal?) judgment as normal.
+
+**Why this is a hard rule, not a heuristic:** the round-3 stress test demonstrated cases where the Evaluator gave PASS on a sprint where the AC ID appeared in the report but not in any test file. Lens K4's "does the test verify the goal?" is a judgment call that's vulnerable to leniency drift; this step is a precondition that closes the loophole — if you can't even find the AC ID in the test source, there is nothing for K4 to grade.
+
+**Reporting:**
+
+Add a new section in eval-report.md (under Reward-Hacking Findings or a new `## AC↔Test Cross-check (Step 4.4)` section). For each unverified AC, record:
+- AC ID
+- File the implementation-report claimed
+- Result of the grep (0 hits)
+- Verdict: UNVERIFIED → drives FR's Part A `Met? = N`
+
+Always include the section even when clean (write "All N ACs reference at least one test file by ID — verified") — this confirms the scan ran, same convention as Step 4.5.
+
+**Limitation note** (document in your prose so future tuning understands the design intent): this check verifies the AC ID *appears* in test source. It does NOT verify the test actually exercises the AC's goal — that's Lens K4's job. The two layers compose: Step 4.4 catches the Generator who didn't write a test at all but listed one; Lens K4 catches the Generator who wrote a test that mentions the AC but tests something else. Combined with Step 4.6 (route coverage, below), these form a 3-layer defense against single-path-façade reward hacking.
+
 ### Step 4.5: Reward-hacking scan — MANDATORY
 
 The Generator is trained to maximise the score you give it. That creates pressure to "pass" by making tests trivially satisfiable rather than by making the product correct. Anthropic's trustworthy-agents research identifies this as a systemic risk for generator-evaluator pipelines; this section is the explicit counter-measure.
@@ -622,16 +670,21 @@ git log --all --name-only --since="..." -- \
   | awk '/^commit/{c=$2} /\.(test|spec)\./{t=1; tc=c} /[^.](ts|tsx|js|jsx|py|go)$/ && t && tc==c {print c; t=0}' | head -20
 
 # C. Tests disabled via skip/xit/xdescribe
-grep -rn -E '(\.skip\(|\.only\(|xit\(|xdescribe\(|it\.skip|describe\.skip|@pytest\.mark\.skip)' src/ tests/ 2>/dev/null | head -20
+# FIX B1: ${SRC_DIR} is the manifest-detected source dir (Step 1). On flat
+# layouts (".") the trailing slash works fine; on Next.js "app" or "src", grep
+# walks the right tree. tests/ stays literal — test conventions are project-
+# specific but `tests/` is the cross-stack default; if absent the grep simply
+# yields nothing for that path which is the right "no findings" outcome.
+grep -rn -E '(\.skip\(|\.only\(|xit\(|xdescribe\(|it\.skip|describe\.skip|@pytest\.mark\.skip)' "${SRC_DIR}/" tests/ 2>/dev/null | head -20
 
 # D. Tests that assert only truthiness without actual expected values
-grep -rn -E 'expect\([^)]+\)\.(toBeTruthy|toBeDefined|not\.toBeUndefined|toBeTruthy\(\))' src/ tests/ 2>/dev/null | wc -l
+grep -rn -E 'expect\([^)]+\)\.(toBeTruthy|toBeDefined|not\.toBeUndefined|toBeTruthy\(\))' "${SRC_DIR}/" tests/ 2>/dev/null | wc -l
 
 # E. Commits whose message suggests tests were weakened
 git log --oneline --since="..." | grep -iE '(disable|skip|remove|delete|loosen|soften|adjust|update).{0,20}test' | head -10
 
 # F. Tests that exist only as ".toBe(true)" or similar no-op assertions
-grep -rn -E 'expect\(true\)\.toBe\(true\)|assert\(true\)' src/ tests/ 2>/dev/null | head -10
+grep -rn -E 'expect\(true\)\.toBe\(true\)|assert\(true\)' "${SRC_DIR}/" tests/ 2>/dev/null | head -10
 ```
 
 **Reporting rules:**
@@ -643,6 +696,49 @@ grep -rn -E 'expect\(true\)\.toBe\(true\)|assert\(true\)' src/ tests/ 2>/dev/nul
 - Suspicious commit messages → **MAJOR** until investigated; elevate to CRITICAL if the archaeology confirms weakening.
 
 Record every finding in the eval report under a new section called "Reward-Hacking Findings". Even when the scan produces no matches, include the section with "No reward-hacking patterns detected" — it confirms the scan ran.
+
+### Step 4.6: Playwright route coverage check (FIX B2.3 — MANDATORY)
+
+PRD FRs frequently name routes ("user can /login", "admin can access /admin/users"). Without a check, the Generator can ship a single happy-path Playwright test against `/` and the Evaluator's per-FR Playwright exercise can compensate happy-path-only — auxiliary auth/admin routes go untested and the eval-report says PASS. Round-3 stress tests demonstrated this pattern (forgot-password 500, admin route unguarded, both PASS-shipped).
+
+**Procedure:**
+
+```bash
+# A. Extract every route mentioned in PRD FRs. Match URL paths starting with /
+# followed by a lowercase letter (avoids matching /* in regex notation, /
+# alone, or markdown links). The pattern is intentionally conservative — false
+# negatives are recoverable (Lens K4 still fires); false positives would be
+# noisy and erode trust in the check.
+ROUTES=$(grep -oE '/[a-z][a-zA-Z0-9_/-]*' .harness/spec/prd.md 2>/dev/null \
+  | sort -u \
+  | grep -vE '^/(api/|tmp/|var/|etc/|usr/|home/)' )  # strip filesystem-y false positives
+
+echo "Routes extracted from PRD FRs:"
+echo "$ROUTES"
+
+# B. For each route, check whether ANY Playwright test contains a goto() to it.
+# Common Playwright test locations: tests/, e2e/, playwright/, test/. The check
+# is whitespace-flexible (page.goto( '/login' ) and page.goto("/login") both match).
+for ROUTE in $ROUTES; do
+  HITS=$(grep -rlE "page\.goto\(\s*['\"]${ROUTE}['\"]" tests/ e2e/ playwright/ test/ 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$HITS" -eq 0 ]; then
+    echo "ROUTE-UNCOVERED: $ROUTE — no Playwright test calls page.goto() against this route"
+  fi
+done
+```
+
+**Reporting rules:**
+
+For every route in the PRD that has zero Playwright `page.goto()` matches:
+1. Flag the originating FR(s) (the FR(s) whose body mentions that route) as **ROUTE-UNCOVERED** in your eval report.
+2. Mark the FR's Part A `Met?` column as `N` (Not met) — even if you exercised the happy path manually via Playwright MCP. An unwritten test means the regression-detection surface is missing; a working build today is not a covered build.
+3. Lower the Functionality score commensurately (a single uncovered route is at most a Major; multiple is Critical and likely already brings Functionality below threshold).
+
+**Limitation (document in eval-report.md prose):**
+
+> This step catches missing Playwright tests for stated routes; it does NOT verify the test actually exercises functionality on that route. A test that calls `page.goto('/login')` and then asserts nothing is mechanically covered here. Combined with Step 4.4 (AC↔Test ID cross-check) and Lens K4 (does the test verify the goal?), this step forms the third layer of a 3-layer defense against single-path-façade reward hacking. Each layer is mechanical and judgment-free; together they make it materially harder for a Generator to ship a build where auxiliary routes are silently broken.
+
+**Always include the section in eval-report.md** (write "All N PRD-stated routes have at least one Playwright `page.goto()` reference — verified" when clean) — same convention as Steps 4.4 / 4.5 / 3.6.
 
 ### Step 5: Spec Validation (cross-reference implementation report)
 

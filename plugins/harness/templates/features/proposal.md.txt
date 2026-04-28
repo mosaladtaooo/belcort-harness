@@ -16,13 +16,31 @@ Canonical source: this file. The inline copy in plugins/harness/agents/generator
 - {{component_name}} — {{one_line_responsibility}}
 
 ## Directory Structure
+
+<!--
+v2.2-staging+ (FIX B1): the Generator fills this section based on the project's
+DETECTED layout, not a hard-coded src/ tree. Read `.harness/manifest.yaml` →
+`project.src_dir` and `project.stack_family` first:
+
+  - Next.js (app-router): src_dir = "app". Add new pieces UNDER app/ and lib/,
+    NOT a parallel src/. e.g., `app/(marketing)/feature-x/page.tsx`,
+    `lib/feature-x/`.
+  - Vite/CRA/Remix:        src_dir = "src". Use src/features/, src/lib/.
+  - Flat layout:           src_dir = ".".  Mirror existing top-level conventions.
+  - Python/Rust/Go:        follow the language's idiomatic layout, NOT React.
+
+The example block below shows the React/Vite default. Replace it with the
+ACTUAL tree your proposal targets. Brownfield: propose ADDITIVE additions to
+the existing tree, never a parallel src/ alongside an existing app/ — that
+creates a double-tree the Evaluator will flag as architecture drift.
+-->
+
 ```
-src/
-├── features/
-│   ├── {{feature_1}}/
-│   └── {{feature_2}}/
-├── lib/
-└── api/
+{{src_dir}}/
+├── {{additive_dir_1}}/
+│   ├── {{file_1}}
+│   └── {{file_2}}
+└── {{additive_dir_2}}/
 ```
 
 ## Data Model Proposal
