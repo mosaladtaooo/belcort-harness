@@ -6,6 +6,31 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## v2.3.0 — 2026-04-29 — Agent-prompt deduplication + bash de-prescription
+
+Continues the v2.0/v2.2 minimalist refactor logic, applied to three accreted patterns surfaced on a follow-up audit of `agents/generator.md` and `agents/evaluator.md`. Single-PR atomic merge. ~50-55 LoC net reduction. No user-facing command surface change. No contract format change. All v2.2 invariants preserved.
+
+### Removed
+
+- **`## ANTI-PATTERNS` section in `plugins/harness/agents/generator.md`** (was lines 498-505). Every bullet (Test-after / Mega-commits / Stubbing / Guessing APIs / Skipping self-eval) was already a row in the `RED FLAGS` table at lines 144-167. Single-source-of-truth restoration.
+- **Agent-level `READ THIS CAREFULLY` leniency-bias warning in `plugins/harness/agents/evaluator.md`** (was lines 54-55). The same warning at line 261 (EVALUATE-mode-specific) is preserved. Reason: REVIEW-PROPOSAL has a different failure mode (rubber-stamping, addressed at line 151), REVALIDATE is binary (covered at line 246), only EVALUATE involves numeric leniency.
+
+### Changed
+
+- **`## REWARD-HACKING — FORBIDDEN` section in `plugins/harness/agents/generator.md` compressed** from 18 lines to ~6 lines. The 4 of 5 NEVER rules already appear in the RED FLAGS table; cross-reference replaces verbatim restatement. The 5th rule (modify test+code in same commit) and the corrective procedure are preserved.
+- **Step 1 Setup, Step 3 Code Quality Review, Step 4 Test Suite Analysis in `plugins/harness/agents/evaluator.md` converted from literal bash to natural-language intent**. Step 4.5 reward-hacking scan (six archaeological greps A-F) preserved literal — those regex patterns ARE the spec, not boilerplate. This aligns evaluator.md with the planner.md philosophy already at line 76 ("You do NOT have Bash. Planning is a read-and-write activity") — the framework already trusted the model in one agent; v2.3 brings the others into alignment.
+
+### Migration
+
+None required. All changes are agent-prompt content. No manifest format change, no contract format change, no command surface change. Existing v2.2 features, sprints, and feature folders work unchanged.
+
+### Spec
+
+- Design: `docs/superpowers/specs/2026-04-29-belcort-v2.3-agent-prompt-deduplication-design.md`
+- ADR: `docs/feature-contracts/v2.3-agent-prompt-deduplication.md`
+
+---
+
 ## v2.2.0 — 2026-04-28 — Stale-assumption pruning + operational hardening
 
 Continues the v2.0 minimalist refactor logic, applied to four post-v2.0 stale-assumption targets plus two operational hardening items. Single-PR atomic merge. ~300 LoC net reduction. No user-facing command surface change beyond removing one redundant front door.

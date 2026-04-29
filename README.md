@@ -47,7 +47,7 @@ In Claude Code:
 /reload-plugins
 ```
 
-Verify: `/plugin` → Installed tab → `harness@2.2.0`. `/agents` → three custom agents listed: `harness:planner`, `harness:generator`, `harness:evaluator`.
+Verify: `/plugin` → Installed tab → `harness@2.3.0`. `/agents` → three custom agents listed: `harness:planner`, `harness:generator`, `harness:evaluator`.
 
 ### Initialize a project
 
