@@ -6,6 +6,45 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## v2.4.0 — 2026-05-07 — Agent-driven workflow framing (remove human-team-timeline assumptions)
+
+The harness's positioning has always been "Planner → Generator → Evaluator pipeline for Claude Code" — an autonomous agent loop. But the Planner agent's spec language (and parts of Generator's RED FLAGS table, plus command/skill descriptions) inherited human-team agile vocabulary: "MVP must-have", "next sprint", "story points", ">15 min of work" as a sprint-vs-quick proxy. When the harness is run the way it's positioned to be run — autonomously by AI agents — these inherited framings produce unhelpful behaviour: P1 features get silently deferred to a "next sprint" that doesn't exist, MVP scoping cuts cohesion the user didn't ask to cut, time-budget questions interrupt for a wall-clock concern that isn't the user's binding constraint.
+
+This release reframes the workflow assumption explicitly: **time is not the binding constraint, product quality and coherence are.** MoSCoW prioritization (P0/P1/P2) survives, but with reframed reasoning. Defer is allowed only for real product / architectural / scope reasons, not for timeboxing. Sprint vs Quick path selection is by spec complexity, not by estimated minutes of work.
+
+No breaking changes. No manifest format change. No contract format change. Existing v2.3 features and feature folders work unchanged.
+
+### Added
+
+- **`## WORKFLOW ASSUMPTION` section in `plugins/harness/agents/planner.md`** (between `## INPUT` and `# PASS 1: Product Discovery`). Explicit "agent runs the work, optimize for product quality" framing with don't-think / think-instead table, MoSCoW reframing, defer-allowed-only-when criteria, and the two real cases where time matters (external deadlines + wall-clock UX). All other parts of planner.md and generator.md cross-reference this section.
+- **New RED FLAGS row in `plugins/harness/agents/planner.md`** for "Let's MVP this — full version next sprint" rationalization, mapped to "see § WORKFLOW ASSUMPTION; define complete coherent v1; phased framing only when user states an external deadline or real architecture-locking concern".
+
+### Changed
+
+- **`plugins/harness/agents/planner.md` Step 3**: "What does MVP 'done' look like?" → "What does the **complete coherent v1** look like? (No 'v2' or 'polish later' pass scheduled.)"
+- **`plugins/harness/agents/planner.md` Step 5 priority field**: P0/P1/P2 reframed from "MVP must-have / should-have / nice-to-have" to "essential to product value / enhances core value / polish that may dilute focus". Reasoning is coherence and surface-area cost, not timeboxing.
+- **`plugins/harness/agents/planner.md` "Challenge the Scope"**: clarified that demoting P0 → P1 is about coherence/focus, not timebox-fitting; demoted features still get built unless they actively dilute focus.
+- **`plugins/harness/agents/planner.md` existing TBD-later RED FLAGS row**: strengthened with "There is no scheduled 'later' — the harness assumes agent-driven autonomous runs, no sprints, no calendar".
+- **`plugins/harness/agents/generator.md` adjacent-refactor RED FLAGS row**: "later sprint" → "explicitly-scoped follow-up feature (not 'later sprint' — see Planner § WORKFLOW ASSUMPTION)".
+- **`plugins/harness/agents/generator.md` time-budget-question RED FLAGS row**: reasoning text updated to reference the agent-driven workflow assumption — wall-clock is not the user's binding constraint, product quality is.
+- **`plugins/harness/commands/sprint.md` description**: "Use for substantial features (>15 min of work)" → "Use for substantial features (multi-FR, needs spec coherence, architectural decisions). Path selection is by spec complexity, not wall-clock".
+- **`plugins/harness/commands/quick.md` description**: "Use when scope is obvious and under 30 minutes" → "Use when scope is self-evident (single FR, no architectural decisions). Path selection is by spec complexity, not wall-clock".
+- **`plugins/harness/skills/harness/SKILL.md` description**: substantial-task heuristic from "3+ components, >15 minutes of work" to "3+ components, multi-FR coordination, or architectural decisions needed". Added trailing sentence: "The harness assumes an agent-driven workflow — wall-clock time is not the binding constraint; product quality and coherence are (see Planner § WORKFLOW ASSUMPTION)".
+
+### Migration
+
+None required. All changes are agent-prompt content + command/skill descriptions. No manifest format change, no contract format change, no command surface change. Existing v2.3 features, sprints, and feature folders work unchanged.
+
+### Why now
+
+User-reported friction: when running harness via autonomous agents, the Planner's MVP/sprint language consistently produced "let's defer this to next sprint" suggestions. There is no next sprint in this workflow — agents complete the run, and "defer" is functionally "decide not to build, without saying so". This release surfaces and removes that vestigial framing.
+
+### Spec
+
+- Discussion: this PR (`feat/agent-driven-framing`)
+
+---
+
 ## v2.3.0 — 2026-04-29 — Agent-prompt deduplication + bash de-prescription
 
 Continues the v2.0/v2.2 minimalist refactor logic, applied to three accreted patterns surfaced on a follow-up audit of `agents/generator.md` and `agents/evaluator.md`. Single-PR atomic merge. ~50-55 LoC net reduction. No user-facing command surface change. No contract format change. All v2.2 invariants preserved.

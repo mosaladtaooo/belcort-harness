@@ -1,6 +1,6 @@
 ---
 name: harness
-description: BELCORT Planner → Generator → Evaluator pipeline. Invoke when the user runs a /harness:* slash command, when .harness/manifest.yaml is present, or when the user describes a substantial build task (3+ components, >15 minutes of work) and has not yet activated the harness. The procedure for each command lives in commands/*.md — this skill is the shared context: activation rules, agent communication protocol, subagent isolation, and TDD contract.
+description: BELCORT Planner → Generator → Evaluator pipeline. Invoke when the user runs a /harness:* slash command, when .harness/manifest.yaml is present, or when the user describes a substantial build task (3+ components, multi-FR coordination, or architectural decisions needed) and has not yet activated the harness. The procedure for each command lives in commands/*.md — this skill is the shared context: activation rules, agent communication protocol, subagent isolation, and TDD contract. The harness assumes an agent-driven workflow — wall-clock time is not the binding constraint; product quality and coherence are (see Planner § WORKFLOW ASSUMPTION).
 ---
 
 # BELCORT Harness Engine

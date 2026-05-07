@@ -1,5 +1,5 @@
 ---
-description: Full harness pipeline — plan (2-pass) → analyze → human gate → negotiate → build (TDD) → evaluate → tuning check → retry/retrospective → merge. Use for substantial features (>15 min of work).
+description: Full harness pipeline — plan (2-pass) → analyze → human gate → negotiate → build (TDD) → evaluate → tuning check → retry/retrospective → merge. Use for substantial features (multi-FR, needs spec coherence, architectural decisions). Path selection is by spec complexity, not wall-clock — see Planner § WORKFLOW ASSUMPTION.
 argument-hint: "<what to build, 1-4 sentences>"
 ---
 

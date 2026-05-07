@@ -1,5 +1,5 @@
 ---
-description: Fast harness path for small tasks. Skips Planner, writes a minimal contract inline, single Generator → Evaluator pass. Use when scope is obvious and under 30 minutes.
+description: Fast harness path for small tasks. Skips Planner, writes a minimal contract inline, single Generator → Evaluator pass. Use when scope is self-evident (single FR, no architectural decisions). Path selection is by spec complexity, not wall-clock — see Planner § WORKFLOW ASSUMPTION.
 argument-hint: "<what to build, 1 sentence>"
 ---
 

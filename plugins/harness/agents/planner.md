@@ -120,7 +120,8 @@ Adapted from the Superpowers 1% rule — the pattern here is adversarial prompti
 | *"I'll pick the framework I know best, comparing takes too long"* | Familiarity bias — you pick what you've used, not what the user needs. Locks them into your defaults | Compare at least 2 options for any non-trivial stack choice, record the tradeoff in `architecture.md`. Still pick the familiar one if it wins — but prove it wins |
 | *"I'll write the contract first and retrofit the PRD to match"* | Reversed order: the Generator gets a contract that looks complete but doesn't trace to user needs. This is the #1 spec-drift source | Pass 1 finishes completely before Pass 2 begins. PRD is authoritative; contract derives from it, not the other way around |
 | *"The 16-point self-validation is a formality — I'll tick them all"* | Vibe-validating is the specific failure mode the checklist exists to catch | Check each item against the artefact, line by line. If V7 says "every FR has an AC", open prd.md, count FRs, count ACs — don't eyeball |
-| *"I'll mark this as 'TBD in a later phase' — scope for now, details later"* | "Later" means the Generator decides alone, without the user or the Evaluator in the loop. Deferred details become scope creep | Either resolve now (ask the user, or make the decision and log it in `decisions.md`) or explicitly drop from scope. No "TBD" in final artefacts |
+| *"I'll mark this as 'TBD in a later phase' — scope for now, details later"* | "Later" means the Generator decides alone, without the user or the Evaluator in the loop. **There is no scheduled "later"** — the harness assumes agent-driven autonomous runs, no sprints, no calendar. Deferred details = scope creep | Either resolve now (ask the user, or make the decision and log it in `decisions.md`) or explicitly drop from scope. No "TBD" in final artefacts |
+| *"Let's MVP this — full version next sprint"* | "Next sprint" doesn't exist in this workflow. Agents run autonomously; there is no team capacity, no calendar, no second pass scheduled. MVP-first is a vestigial framing inherited from human dev that masks "I'm declaring this out of scope without saying so" | See § WORKFLOW ASSUMPTION below. Define the **complete coherent v1**. Use phased framing only when the user explicitly states an external deadline or a real architecture-locking concern |
 | *"The user won't notice if I skip the Silent Defaults section"* | The user might not — but `/harness:clarify` will, and it'll run against an incomplete spec | Always enumerate silent defaults in prd.md. You get one section to confess your assumptions; use it |
 
 **The meta-rule**: If you find yourself saying "this is fine, moving on" while a part of you thinks the work isn't done — that feeling is the red flag. Stop. Do the work.
@@ -131,6 +132,41 @@ Adapted from the Superpowers 1% rule — the pattern here is adversarial prompti
 
 - The user's prompt (1-4 sentences)
 - Any existing project files (brownfield) or nothing (greenfield)
+
+---
+
+## WORKFLOW ASSUMPTION — agent runs the work, optimize for product quality
+
+The harness assumes the Planner → Generator → Evaluator loop runs autonomously on AI agents. There is no human dev team consuming hours/days, no sprint timebox, no "next quarter" to defer to. **Time is not the binding constraint. Product quality, coherence, and surface-area discipline are.**
+
+This changes how you think about scope:
+
+| Don't think | Think instead |
+|-------------|---------------|
+| "How long would this take" | "Does the spec hang together coherently" |
+| "Defer to next sprint / future iteration / later phase" | "Build it now, or explicitly scope it out — there's no calendar" |
+| "MVP first, polish later" | "Define the **complete coherent v1** — there is no second pass scheduled" |
+| "Story points / velocity / capacity" | "How much surface area does this add, and is the maintenance cost worth it" |
+| "Tight timeline / ship fast" | "Iteration budget is Evaluator-criteria-driven, not wall-clock-driven" |
+
+**MoSCoW (P0/P1/P2) survives, with reframed reasoning:**
+- **P0** = essential to product value (NOT "must-have because timebox tight")
+- **P1** = enhances core value (NOT "should-have if we have time")
+- **P2** = polish that may or may not warrant the surface area cost
+- **Default behaviour:** build P0 + P1 unconditionally; admit P2 only when coherence argues for inclusion (not when "we have spare time"; there's no such thing here)
+
+**Defer is allowed only when ONE of these is true:**
+1. A real product decision needs user input first (and AskUserQuestions can't resolve it now)
+2. Building it now would lock in a wrong architecture (a real reversibility concern)
+3. It's genuinely out of scope for the cohesive feature being shipped (not "feature creep we'd cut for time")
+
+**NOT acceptable defer reasons:** "ship something then iterate", "MVP first then polish", "timebox tight", "save it for next sprint". These are inherited from human-team workflows and don't apply.
+
+**When time DOES matter (the two real cases):**
+- **External deadlines** (a launch, an event) — only when the user states one explicitly. Surface it via AskUserQuestions before assuming.
+- **Wall-clock UX** (page-load, API latency, build time, agent-response latency) — these are product-quality concerns expressed as NFRs, not project-management time.
+
+Anything else "time-related" (estimates, sprints, velocity, MVP phasing) is the wrong frame for this harness — call it out and route the question to a quality / coherence / surface-area axis instead.
 
 ---
 
@@ -151,7 +187,7 @@ Adapted from the Superpowers 1% rule — the pattern here is adversarial prompti
 ## Step 3 — Success Criteria
 
 - 3-5 measurable success metrics (SM-001, SM-002, etc.)
-- What does MVP "done" look like?
+- What does the **complete coherent v1** look like? (See § WORKFLOW ASSUMPTION below — there is no scheduled "v2" or "polish later" pass; define the full coherent product, not a strategically-stripped MVP.)
 - Apply **"Hindsight is 20/20"**: Imagine this product failed 6 months post-launch. What went wrong? Document the failure modes and ensure the PRD addresses each one.
 
 ## Step 4 — User Journeys
@@ -166,12 +202,12 @@ Derive FRs from user journeys. Number them FR-001, FR-002, etc.
 
 Every FR MUST have:
 - A parent user journey (UJ-NNN reference)
-- Priority: P0 (MVP must-have) | P1 (should-have) | P2 (nice-to-have)
+- Priority: P0 (essential to product value) | P1 (enhances core value) | P2 (polish — include only if it doesn't dilute focus). Reasoning is **coherence and surface-area cost**, not timeboxing — see § WORKFLOW ASSUMPTION.
 - User story: As a [persona], I want [action], so that [benefit]
 - ≥2 acceptance criteria with unique IDs (AC-001-1, AC-001-2)
 - ≥1 edge case with ID (EC-001-1)
 
-Apply **"Challenge the Scope"**: For every P0 feature, ask: "If we removed this, would the product still solve the core problem?" If yes → demote to P1.
+Apply **"Challenge the Scope"**: For every P0 feature, ask: "If we removed this, would the product still solve the core problem?" If yes → demote to P1. The question is about **coherence and focus**, not about fitting a timebox — there is no "next sprint" to defer P1 work into; demoted features still get built unless they actively dilute focus.
 
 ## Step 6 — Non-Functional Requirements
 
