@@ -20,6 +20,7 @@ See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 | Version | Date | Summary |
 |---|---|---|
+| 3.1.0 | 2026-05-08 | Verification augmentation — worker readiness signal + axe-core a11y + code-reviewer integration + Stryker mutation + fast-check property + MADR ADR matrix + size-limit budget + refactor pattern stub |
 | 3.0.0 | 2026-05-07 | Runtime-verification phase + audit pass — Generator SIMULATE mode + contract template tightening + Evaluator Step 2 lightening + audit polish |
 | 2.2.0 | 2026-04-28 | Stale-assumption pruning + operational hardening — story files removed, `/harness:negotiate` standalone removed, Planner mode collapse (6 → 3), pause snapshot, 1M-context banner |
 | 2.1.9 | 2026-04-24 | Secrets-handling contract (.env.example vs .env.local) + Evaluator setup-required gate |
@@ -45,6 +46,19 @@ See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 - Planner Pass 2 brainstorming pass over user-journey ACs (closes Bug #8 class at spec time)
 - Audit polish (Phase 2): factor HANDLING FETCHED CONTENT preamble into SKILL.md; downgrade pre-tool-use.sh test-deletion hard-block to advisory; remove ~16 lines of dead manifest fields
 - Self-validation grew 16 → 18 points in Planner Pass 2 (V17 + V18)
+
+## v3.1.0 — Shipped 2026-05-08
+
+- Worker readiness signal via stdout pattern matching (replaces 30s polling)
+- axe-core accessibility scanning per State-Transition row (PRD WCAG-Level declared via AskUserQuestions)
+- superpowers code-reviewer integration in Evaluator Step 3a (anti-leniency preservation rules mandatory; soft-fallback if not installed)
+- Stryker.js mutation testing (per-FR scored against NEGOTIATE-declared targets; closes semantic test-weakness bug class)
+- fast-check property-based testing (NEGOTIATE per-FR eligibility; race-condition detection via fc.scheduler)
+- MADR ADR matrix with Context7-verified alternatives (closes familiarity-bias bug class; new V8b self-validation; 18-point → 19-point)
+- size-limit bundle-size budget (deterministic gate via Evaluator Step 4)
+- Refactor pattern documentation (Generator RED FLAG + SKILL.md § Refactor Pattern; NO new command)
+- 8 new docs/anthropic-alignment.md decision-map rows
+- 7 v3.2 deferrals tracked with explicit "When to revisit" conditions
 
 ## v2.2.0 — Shipped 2026-04-28
 
@@ -113,18 +127,63 @@ Deferred items with non-trivial value. Revisit when the "When to revisit" condit
 - **Why parked**: ports work for web servers; many workers don't bind ports. Today SIMULATE assumes 30s is enough for any worker to be "ready". Imperfect; not blocking for v3.0.
 - **When to revisit**: when a SIMULATE timeout false-positives because a worker took >30s but was actually working.
 - *Update 2026-05-08 (v3.0):* partial fix shipped — SIMULATE Step 3 retries first worker-dependent row 3x with 10s backoff. Positive readiness signal (e.g., HTTP health endpoint convention) deferred.
+- *Update 2026-05-08 (v3.1):* CLOSED via Bash `run_in_background` + `until grep -q "<pattern>"` pattern. architecture.md declares `worker_ready_pattern`; convention-only fallback covers projects without explicit declaration. Monitor-based real-time variant deferred to v3.2 pending empirical Monitor-in-subagent confirmation.
 
 ### 9. Real-time worker log tailing during SIMULATE
 - **What**: SIMULATE could `tail -f worker.log` in background and surface tail snippets in `simulation-report.md` if the worker crashes during Step 5 (cumulative regression).
 - **Why parked**: today SIMULATE only sees Playwright tests fail with no root cause if the worker crashes mid-replay. Manual log inspection works as a workaround.
 - **When to revisit**: after a real worker-crash incident during canary or post-release where root cause was hidden.
 - *Update 2026-05-08 (v3.0):* partial fix shipped — SIMULATE Step 1 discovers log paths; Steps 3-5 tail on failure; Step 7 surfaces in `## Worker logs (on failure)` section. Real-time live tailing during dispatch (vs post-failure) still deferred.
+- *Update 2026-05-08 (v3.1):* Still partial — v3.0's post-hoc tail-100 capture preserved as the v3.1 baseline. Real-time streaming via Monitor tool deferred to v3.2 (research subagent confirmed Monitor's signature but public docs don't confirm callability from plugin-declared subagents; sandbox empirical test required before integration).
 
 ### 10. Test-account convention
 - **What**: define how SIMULATE creates / authenticates against test users (DB seed fixture vs Playwright signup-form-driven vs test-mode auth provider). Currently project-dependent.
 - **Why parked**: heavily project-dependent (Clerk dev keys differ from custom auth differ from no-auth). Hard to standardize without project examples to abstract from.
 - **When to revisit**: when ≥3 projects' test-account patterns are visible — extract the common shape into a convention.
 - *Update 2026-05-08 (v3.0):* partial fix shipped — `TEST_USER_*` env-var convention + `init.sh` `seed_test_user` stub + sprint.md Step 4a enumeration. Auth-provider abstraction (Clerk/Auth0/custom) deferred.
+- *Update 2026-05-08 (v3.1):* Stable in v3.1 — v3.0's `TEST_USER_*` env-var convention + init.sh `seed_test_user` stub continues. Auth-provider abstraction (Clerk vs Auth0 vs custom) remains deferred — research confirms each provider has its own admin API surface; right answer is convention + per-project examples in init.sh.
+
+### 11. Real-time worker log tailing via Monitor tool (N1, deferred from v3.1)
+- **What**: SIMULATE Steps 1, 3-5 use Claude Code's Monitor tool to stream worker stdout in real-time, reacting to ERROR/FATAL/panic patterns as they arrive.
+- **Why parked**: Public Anthropic docs don't confirm Monitor is callable from plugin-declared subagents. v2.1.1+ tool-inheritance SHOULD include Monitor, but unverified.
+- **When to revisit**: empirical sandbox test confirms Monitor invokes successfully from `harness:generator` subagent dispatched via Agent tool. OR: a real BELCORT project hits a worker crash that v3.1's post-hoc + readiness signal failed to surface root cause for.
+- **Context**: research-subagent finding 2026-05-08. v3.0 ROADMAP item 9 partial-closure preserved; this is the upgrade path.
+
+### 12. Parallel cumulative regression via fork-subagent (N2, deferred from v3.1)
+- **What**: SIMULATE Step 5 dispatches N parallel sub-SIMULATE Generators (one per shipped feature's regression replay) in a single Agent-tool message; main consolidates results.
+- **Why parked**: ROADMAP item 1's revisit condition not met. No real BELCORT project at N≥10 shipped features with documented serial-regression pain. Adding 180-250 LoC of fanout-merge complexity = YAGNI.
+- **When to revisit**: a real project hits N≥10 shipped features and reports SIMULATE wall-clock time exceeding 15 minutes. OR: 1M-context launch becomes mechanically detectable AND BUILD truncation recurs despite [1m] launch.
+- **Context**: confirmed via Anthropic canonical docs that `context: fork` is skill-only; CLAUDE_CODE_FORK_SUBAGENT excludes named subagents; subagents cannot spawn subagents. Architectural escape hatch is "multiple Agent-tool calls in one orchestrator message".
+
+### 13. Visual regression via Playwright snapshots (N3, deferred from v3.1)
+- **What**: Playwright `toHaveScreenshot()` baseline-diff at each State-Transition boundary in SIMULATE Step 3.
+- **Why parked**: 4 documented Playwright issues (#20097, #29968, #31083, #2626) for OS-specific font-rendering deltas; per-OS baseline directories triple storage cost; LLMs don't ship more layout-shift bugs than humans. False-positive risk drowns Evaluator's anti-leniency protocol.
+- **When to revisit**: ≥3 BELCORT projects ship UI features and flag screenshot regressions as recurring v3.0/v3.1 false-negatives. OR: Playwright resolves the documented font-rendering issues. OR: a hosted service (Argos, Chromatic, Percy) integrates cleanly with anti-leniency framing.
+- **Context**: research-subagent finding 2026-05-08.
+
+### 14. Cross-browser testing via Playwright projects (N4, deferred from v3.1)
+- **What**: Playwright's `projects: [{name: 'chromium'}, {name: 'firefox'}, {name: 'webkit'}]` matrix in SIMULATE Step 5 cumulative regression.
+- **Why parked**: Triples cumulative regression wall-clock time. Most BELCORT users today ship internal tools, not public-facing sites. No LLM-specific bug class.
+- **When to revisit**: a real BELCORT project ships a public-facing feature where Chrome-only behavior is a documented user complaint.
+- **Context**: research-subagent finding 2026-05-08.
+
+### 15. Full Lighthouse CI Web Vitals (N5, deferred from v3.1)
+- **What**: `@lhci/cli` integration for LCP/INP/CLS budget enforcement in SIMULATE Step 3 + Evaluator Step 4.
+- **Why parked**: Lab-vs-field variance + shared-CI-runner CPU contention create persistent false-positive flakes. Bundle-size piece (G7) shipped in v3.1 as the deterministic portion.
+- **When to revisit**: Lighthouse CI numberOfRuns + median patterns prove low-flake on a real BELCORT project's CI. OR: Web Vitals regression incident occurs that bundle-size budget alone wouldn't have caught.
+- **Context**: research-subagent finding 2026-05-08.
+
+### 16. /harness:refactor dedicated command (N6, deferred from v3.1)
+- **What**: New 17th command for cross-cutting refactors. Generator BUILD gains REFACTOR sub-mode with binary AC contract. Evaluator gains thin EVALUATE-REFACTOR mode.
+- **Why parked**: v2.2 mode-collapse precedent; speculative demand. v3.1 ships the stub (G8) directing refactor-shaped work to `/harness:quick`.
+- **When to revisit**: telemetry shows ≥3 invocations of `/harness:quick "[refactor] ..."` with the v3.1 stub pattern. OR: a real BELCORT project reports the /quick-as-refactor pattern is insufficient.
+- **Context**: research-subagent finding 2026-05-08. v3.1 stub explicitly tracks demand via the `[refactor]` description prefix convention.
+
+### 17. Evaluator Context7 awareness for framework method verification (N7, deferred from v3.1)
+- **What**: Evaluator Step 3 (or new Step 3d) queries Context7 for framework methods used by the implementation; flags MAJOR if implementation uses deprecated/incorrect API patterns.
+- **Why parked**: Separable scope from v3.1's D3 (code-reviewer integration). v3.0+ code-reviewer dispatch already catches some API misuse — needs telemetry.
+- **When to revisit**: After v3.1 ships and we have data on what code-reviewer catches vs what slips through. If pattern-of-misuse correlates with API-version drift, Context7 verification is the targeted fix.
+- **Context**: research-subagent finding 2026-05-08 (Subagent 3, Category C+D).
 
 ---
 
@@ -146,6 +205,8 @@ Items deferred from the v2.2 audit that may become load-bearing on future model 
   shipped-feature count, making the 1M-context launch load-bearing for projects
   past 5 features. Without it, SIMULATE's cumulative regression at scale will
   likely exhaust the 200K context.
+
+  *Update 2026-05-08 (v3.1):* priority remains medium per spec § 8.2 — v3.1's Stryker incremental + code-reviewer dispatch + axe-core analysis modestly increase context budget per Evaluator dispatch (~+30-90s wall-clock). Cumulative regression at scale remains the dominant context-consumer. No change in revisit condition; still tracking upstream Claude Code exposure of `--model` to plugin scripts.
 - **Audit-family merge** (`/analyze`, `/validate`, `/audit`, `/retrospective`, `REVALIDATE`). Each answers a distinct question per `SKILL.md` § Audit Commands. Revisit only if telemetry shows users running them in fixed pairs.
 - **Story-file deprecation grace period** (one-shot warning if existing project has `stories/` folder). Not worth the code; CHANGELOG migration note is sufficient.
 

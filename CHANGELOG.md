@@ -6,6 +6,58 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## v3.1.0 — 2026-05-08 — Verification augmentation
+
+Closes the highest-ROI gaps surfaced by post-v3.0 research. 8 additions across operational reliability, verification depth, planning rigor, and code-quality second-opinion. Anti-leniency framing preserved throughout.
+
+### Added
+
+- **Worker readiness signal** (G1, A2). SIMULATE Step 2.6 waits for positive stdout pattern via Bash `run_in_background` + `until grep -q "<pattern>"`. Architecture.md declares `worker_ready_pattern`; convention-only fallback to canonical patterns. Eliminates false NEEDS-REPAIR on slow-warming workers + false-positive successes on warm-but-stale workers.
+- **axe-core accessibility scanning** (G2, B4). SIMULATE Step 3 runs `AxeBuilder.analyze()` per State-Transition row. PRD Pass 1 declares `WCAG-Level: A | AA | AAA | N/A`. New `a11y` column in simulation-report.md. Severity-based gating: `serious|critical` violations fail Part A; `moderate` are MAJOR; `minor` are informational.
+- **superpowers code-reviewer Step 3a integration** (G3, D3). Evaluator EVALUATE Step 3 splits into 3a (mechanical second-opinion via Task subagent dispatching `superpowers:code-reviewer`) + 3b (manual constitutional review, existing) + 3c (grep scans, existing). **Anti-leniency preservation rules mandatory**: drop code-reviewer's `## Strengths` + `## Assessment` sections verbatim; map Critical/Important/Minor → BELCORT's Critical/Major/minor. Soft-fallback if `superpowers` not installed.
+- **Stryker.js mutation testing** (G4, B1). Evaluator Step 4 mutation gate runs `npx stryker run --incremental --mutate "src/<feature-folder>/"`. NEGOTIATE per-FR mutation-score targets (70% critical / 50% standard / N/A non-testable). Catches semantic test-weakness LLMs ship — Anthropic-cited reward-hacking bug class.
+- **fast-check property-based testing** (G5, B2). NEGOTIATE per-FR property-eligibility column (Y / N / Race). Generator BUILD writes property tests alongside example tests for eligible FRs. `fc.scheduler()` for race-condition detection. `numRuns` ≥ 100 enforced; trivially-true property tests flagged.
+- **MADR ADR matrix in Planner Pass 2** (G6, C4). Replaces loose "Considered: A, B, C" with structured ≥3 Decision Drivers (≥2 NFR-NNN refs) + ≥2 Considered Options (Context7-verified to exist) + per-driver scoring matrix + 1-sentence rationale. New self-validation V8b. Self-validation grows 18-point → 19-point. Closes familiarity-bias bug class with verifiable structure.
+- **size-limit bundle-size budget** (G7, B6 partial). PRD Pass 1 declares per-chunk + total budget. Generator BUILD scaffolds `.size-limit.json`. Evaluator Step 4 asserts `npx size-limit` — exceeds budget = MAJOR finding. Deterministic; no flake risk.
+- **Refactor pattern documentation** (G8, D2 stub). Generator RED FLAGS row 7 directs refactor-shaped work to `/harness:quick` with refactor-shaped contract template. New SKILL.md § Refactor Pattern (v3.1+) documents the convention. NO new command — `/harness:refactor` deferred to v3.2 pending usage data.
+
+### Changed
+
+- **`agents/evaluator.md` Step 3** restructured into Step 3a + 3b + 3c (was monolithic in v3.0). Step 3b and 3c retain v3.0 content verbatim.
+- **`commands/doctor.md` superpowers check** upgraded from advisory to MAJOR warning (still soft-required, not hard-blocking).
+- **`templates/evaluator/criteria.md.txt`** promotes v3.0's prose mention of axe-core to first-class enforcement; adds mutation-score and bundle-size dimensions.
+
+### Deferred to v3.2 (with explicit "When to revisit" conditions in ROADMAP)
+
+- **Real-time worker log tailing via Monitor tool** (N1, A1). Pending empirical confirmation Monitor is callable from plugin-declared subagents.
+- **Parallel cumulative regression via fork-subagent** (N2, A5). Pending real project at N≥10 shipped features with documented serial regression pain.
+- **Visual regression** (N3, B3). Pending evidence Playwright font-rendering noise is manageable on BELCORT user projects.
+- **Cross-browser projects matrix** (N4, B5). Pending public-facing project demand.
+- **Full Lighthouse CI Web Vitals** (N5, B6 full). Pending evidence Web Vitals signal exceeds CI noise.
+- **`/harness:refactor` command** (N6, D2 full). Pending real /quick-as-refactor usage data.
+- **Evaluator Context7 awareness for framework method verification** (N7). Separable scope; pending v3.1 D3 telemetry.
+
+### Migration
+
+- **Existing v3.0 contracts** (without Mutation Score Target / Property Eligibility / Bundle-size Budget / WCAG-Level / `worker_ready_pattern`) continue to work — new fields are additive with safe defaults.
+- **Existing v3.0 manifests** unchanged.
+- **Existing v3.0 constitutions** unchanged. V8b applies to NEW ADRs only; existing ADRs without MADR matrix produce WARNING (not CRITICAL) in `/harness:analyze`.
+- **`superpowers` plugin missing** → soft-fallback to v3.0 Step 3 behavior; doctor warns at MAJOR.
+
+### Operational notes
+
+- **1M-context dependency** unchanged from v3.0. Stryker incremental mode adds ~30-90s per Evaluator dispatch; modest impact.
+- **Anthropic API cost** marginally increased: code-reviewer Task subagent runs once per Evaluator dispatch (cost-gated to skip on diffs <50 lines).
+- **Project-side opt-in costs**: package installs (`@axe-core/playwright`, `@stryker-mutator/core`, `@stryker-mutator/vitest-runner`, `@fast-check/vitest`, `size-limit`, `@size-limit/preset-app`) — Generator BUILD scaffolds these conditionally based on PRD declarations.
+
+### Spec & Plan
+
+- Design: `docs/superpowers/specs/2026-05-08-belcort-v3.1-verification-augmentation-design.md`
+- Implementation plan: `docs/superpowers/plans/2026-05-08-belcort-v3.1-verification-augmentation.md` (Part 1 — Phases 1-3) + `-part-2.md` (Part 2 — Phases 4-5)
+- Predecessor: v3.0.0 (runtime-verification phase + audit pass)
+
+---
+
 ## v3.0.0 — 2026-05-07 — Runtime-verification phase + audit pass
 
 The largest single release since v2.0. Adds a SIMULATE mode to the Generator that drives the production-mode runtime + cumulative regression replay before Evaluator handoff, closing the visual-verification-leg gap that produced 8 demo-prep bugs in BELCORT ACC v2 feature-003. Tightens the contract template with structured State-Transition + Negative-Path + UI-surface coverage. Adds catch-block ban as a new MUST constitution principle. Lightens Evaluator EVALUATE Step 2. Audit pass applies the v2.0 / v2.2 / v2.3 ruler to accretion since v2.3.0.

@@ -31,10 +31,10 @@ SIMULATE to Evaluator EVALUATE. Do NOT edit after the Generator writes it.
 
 ## Per-state-transition verification
 
-| Entity.Field | From | To | Test name | DB confirmed | UI confirmed |
-|--------------|------|-----|-----------|--------------|--------------|
-| documents.status | received | extracting | `worker-picks-up.spec.ts` | ✅ | ✅ |
-| documents.status | extracting | extracted | `extraction-completes.spec.ts` | ❌ stayed at 'extracting' | ✅ shows 'Extracted' |
+| Entity.Field | From | To | Test name | DB confirmed | UI confirmed | a11y |
+|--------------|------|-----|-----------|--------------|--------------|------|
+| documents.status | received | extracting | `worker-picks-up.spec.ts` | ✅ | ✅ | ✅ |
+| documents.status | extracting | extracted | `extraction-completes.spec.ts` | ❌ stayed at 'extracting' | ✅ shows 'Extracted' | ⚠️ 1 moderate (color-contrast) |
 
 ---
 
@@ -65,6 +65,18 @@ Example finding format:
 > The `__getUnscopedDb` utility reads `Error().stack` to find caller path;
 > works in dev (Turbopack) but fails in prod (`tsx` serves a different
 > stack format). File: `src/lib/db/scope.ts:42`.
+
+---
+
+## A11y informational (v3.1+, optional)
+
+<emit only if any State-Transition row produced minor-impact a11y violations>
+
+Aggregated minor-severity axe findings (informational; not gating):
+
+| Rule | Count | Sample location |
+|------|-------|-----------------|
+| <rule-id> | N | <selector> |
 
 ---
 

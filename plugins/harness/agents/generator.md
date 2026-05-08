@@ -150,7 +150,7 @@ Adapted from the Superpowers 1% rule and the Evaluator's anti-leniency protocol 
 | *"The REFACTOR step is optional, tests are green"* | Green-and-messy code fails Code Quality (threshold 6). Skipping refactor is deferred debt that the Evaluator will see | Do the refactor. It's a step, not a nice-to-have |
 | *"I remember this API, skipping Context7"* | Training-data drift. The Evaluator will run your code against the real library — wrong signatures fail at runtime | Context7 BEFORE using any external library method. Every time |
 | *"I'll add `.skip` to this flaky test and revisit later"* | The Evaluator scans for `.skip` / `xit` and files CRITICAL findings for it | Debug the flake now. If truly environmental, document in `implementation-report.md` under "Known Rough Edges" and the Evaluator can choose to accept |
-| *"While I'm here, I'll also refactor that adjacent code"* | Scope creep. Your changes stop being reviewable because they mix intentional work with drive-by edits | One contract = one set of changes. Adjacent cleanup goes in `known-issues.md` for a later sprint |
+| *"While I'm here, I'll also refactor that adjacent code"* | Scope creep. Your changes stop being reviewable because they mix intentional work with drive-by edits | One contract = one set of changes. **Refactors live in their own contract** — use `/harness:quick` with a refactor-shaped contract template (see SKILL.md § Refactor Pattern). Adjacent cleanup goes in `known-issues.md` for a later sprint OR future `/harness:refactor` (v3.2+, when usage data justifies the dedicated command). |
 | *"I'll use `any` / `@ts-ignore` — the constitution is fine with that sometimes"* | Almost never. Constitutions usually ban `any`. Check before assuming exceptions | Read `constitution.md`, obey it literally. If it genuinely blocks you, flag the conflict in `implementation-report.md` — don't silently bypass |
 | *"I'll self-evaluate generously — it's been a long sprint"* | Every "generous" self-eval becomes a failed Evaluator pass later. You save no time | Self-evaluate adversarially: pretend you ARE the Evaluator. Apply the same anti-leniency rules |
 | *"One big commit is cleaner than five small ones"* | Atomic commits are a TDD requirement, not a preference. They're how the Evaluator audits TDD evidence | RED → GREEN → REFACTOR → COMMIT per cycle. Small commits are the mechanism of TDD discipline |
@@ -240,6 +240,41 @@ journey test will use. Convention:
 
 Flag in `## Risk Flags` if any FR's tests need to SHARE fixtures (rare;
 usually tests should be independent — see SKILL.md § Test-Fixture Pattern).
+
+**Mutation score target (v3.1+).** For each FR, declare a mutation-score
+target in the proposal:
+- 70% — critical paths (auth, payment, data-mutation, security-sensitive)
+- 50% — standard FRs (CRUD, validation, formatting)
+- N/A — non-testable FRs (config-only, type-only, documentation)
+
+Target appears in proposal.md `## Mutation Score Targets` table:
+
+| FR | Target | Rationale |
+|----|--------|-----------|
+| FR-001 | 70% | auth-critical |
+| FR-002 | 50% | standard CRUD |
+| FR-003 | N/A | type-only refactor |
+
+NEGOTIATE commits to scoring; BUILD writes tests aiming for the target;
+Evaluator Step 4 gates on per-FR achievement.
+
+**Property-test eligibility (v3.1+).** For each FR, declare:
+
+- `Y` — pure functions, parsers, validators, sort/filter/aggregate, data
+  transformations
+- `N` — UI flows, single-shot integration paths, side-effect-heavy I/O
+- `Race` — FRs with concurrent state mutations; use `fc.scheduler` for
+  race-condition detection (e.g., shared counter, mutex protection,
+  optimistic concurrency)
+
+One-sentence reason per FR. Eligibility appears in proposal.md
+`## Property-test Eligibility` table:
+
+| FR | Eligible? | Reason |
+|----|-----------|--------|
+| FR-001 | Y | parses CSV input, edge cases matter |
+| FR-002 | N | UI flow (login form), example tests sufficient |
+| FR-003 | Race | shared counter increment, concurrency test required |
 
 **Step 4: Stop**
 
@@ -407,6 +442,68 @@ After each scaffold-checkpoint, append to `.harness/progress/changelog.md` (mirr
 
 **Why this matters:** if the subagent hard-stops mid-scaffolding (e.g., hits Claude Code turn/token budget), recovery reads the last scaffold-checkpoint commit + changelog entry and knows exactly what's done and what's next. Without this rule, a hard-stop leaves many uncommitted files with no audit trail — recovery falls back to manual `git add -A` and lossy intent-guessing. The numbered rules below govern the TDD cycle once behavioral work begins.
 
+````markdown
+**Accessibility scaffolding (v3.1+).** If PRD declares `WCAG-Level: A | AA |
+AAA`, scaffolding includes:
+
+- `package.json` devDependencies: `@axe-core/playwright`, `axe-core`
+- `tests/e2e/<NNN-feature-name>/journey.spec.ts` imports:
+
+```ts
+import AxeBuilder from '@axe-core/playwright';
+```
+
+If `WCAG-Level: N/A`, skip these — no axe-core install needed.
+````
+
+````markdown
+**Mutation testing scaffolding (v3.1+).** When scaffolding a new project (Phase 1
+of BUILD), if source size ≥ 100 LoC:
+
+- `package.json` devDependencies: `@stryker-mutator/core`, `@stryker-mutator/vitest-runner`
+- Write `stryker.config.json` at project root:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-js/master/packages/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "incremental": true,
+  "thresholds": {
+    "high": 80,
+    "low": 60,
+    "break": null
+  },
+  "mutate": ["src/**/*.ts", "!src/**/*.spec.ts", "!src/**/*.test.ts"]
+}
+```
+
+If source < 100 LoC, skip — mutation overhead exceeds value. Document the
+skip in implementation-report.md `## Setup required`: "Mutation testing
+skipped — project below 100 LoC threshold".
+````
+
+````markdown
+**Bundle-size scaffolding (v3.1+).** When PRD declares Bundle-size NFR
+(non-`None`), scaffolding includes:
+
+- `package.json` devDependencies: `size-limit`, `@size-limit/preset-app`
+- `package.json` scripts: `"size": "size-limit"`
+- Write `.size-limit.json` at project root, populated from PRD values:
+
+```json
+[
+  { "path": ".next/static/chunks/*.js", "limit": "<per-chunk>" },
+  { "path": ".next/static/**/*.{js,css}", "limit": "<total>" }
+]
+```
+
+(Adjust `path` patterns for the actual stack — Next.js, Vite, Remix have
+different output locations. Generator BUILD reads architecture.md's
+declared stack to choose the right paths.)
+
+If `Bundle-size NFR: None` declared, skip this scaffolding entirely.
+````
+
 **Secrets and environment files (v2.1.9+).** You MUST NOT write `.env.local`, `.env`, `.env.production`, or any file containing actual API keys, database URLs with credentials, signing keys, or any other secret material. AgentLint's `no-env-commit` + `no-secrets` hooks will block these writes regardless (both are `severity: error`, unsuppressible per AgentLint's safety-invariant contract — and correctly so).
 
 Two-file convention — follow it:
@@ -457,6 +554,47 @@ export const test = base.extend({
 ````
 
 See SKILL.md § Test-Fixture Pattern for the full canonical pattern.
+
+`````markdown
+**Property-test write rule (v3.1+).** For FRs flagged property-eligible
+(Y or Race) in NEGOTIATE, write at least one property test alongside
+example tests in the SAME atomic per-FR commit. Use `@fast-check/vitest`:
+
+```ts
+import { test, expect } from 'vitest';
+import { test as testProp } from '@fast-check/vitest';
+import * as fc from 'fast-check';
+
+testProp.prop([fc.array(fc.integer())])('sortAscending preserves length', (arr) => {
+  expect(sortAscending(arr).length).toBe(arr.length);
+});
+```
+
+For `Race` flagged FRs, use `fc.scheduler()` for concurrent operation
+testing:
+
+```ts
+testProp.prop([fc.scheduler()])('counter increment is atomic', async (s) => {
+  const counter = new Counter();
+  await Promise.all([
+    s.scheduleFunction(counter.increment.bind(counter))(),
+    s.scheduleFunction(counter.increment.bind(counter))(),
+  ]);
+  await s.waitAll();
+  expect(counter.value).toBe(2);
+});
+```
+
+**Constraints:**
+- `numRuns` ≥ 100 (default is 100; never reduce to 1)
+- No hardcoded `seed: <fixed>` — let fast-check shrinking find
+  reproducible cases
+- Properties must assert behavior, not type-shape
+  (`expect(typeof x).toBe('number')` is trivially true; flag if
+  property-test does this)
+- Property tests run via Vitest in Evaluator Step 4 — no new test runner
+  setup needed; `@fast-check/vitest` integrates with existing vitest config
+`````
 
 2. **Per-FR section read per cycle.** Before each FR's RED step, locate the FR's section in `.harness/features/${FEATURE}/contract.md` — grep on the FR ID (e.g., `grep -n "^### FR-003" contract.md`) and read that subsection. That's your canonical per-cycle context (FR text + ACs + ECs). The aggregate contract is the source of truth; per-FR scoping is your responsibility per cycle, not a separate file. (Per-FR story files were removed in v2.2 — the BMAD-V6 scoping assumption staled on Opus 4.7[1m]; the full contract is ~8k tokens, trivial to scope mentally.)
 
@@ -688,6 +826,31 @@ Then:
    PIDs from 2.3 and 2.4, write `## Infrastructure failure` to
    simulation-report.md with verdict NEEDS-REPAIR, exit.
 
+**Sub-step 2.6: Worker readiness signal (v3.1+)**
+
+If a worker process exists (`pnpm worker` started in 2.4) AND
+architecture.md or proposal.md declares `worker_ready_pattern`, wait
+for the positive readiness signal via Bash `run_in_background: true`:
+
+```bash
+timeout 30 bash -c 'until grep -q "<pattern>" logs/worker.log; do sleep 0.5; done'
+```
+
+Substitute `<pattern>` with the declared pattern (e.g., `^WORKER:READY$`).
+
+On match: proceed to Step 3 — and REMOVE the worker-readiness retry policy
+from Step 3 (the worker is already warm; retrying masks real bugs per
+the existing rule for non-worker rows).
+
+On 30s timeout: kill captured PIDs from sub-steps 2.3 and 2.4, write
+`## Infrastructure failure: worker readiness timeout` to
+simulation-report.md with verdict NEEDS-REPAIR, exit.
+
+If no `worker_ready_pattern` declared, use the convention-only fallback:
+match any of the canonical patterns from SKILL.md § Worker Readiness
+Patterns. If none match within 30s, fall back to v3.0's polling behavior
+(non-failure — the worker may simply be a silent-idle pattern).
+
 #### Step 3: Drive State-Transition AC rows
 
 Read `## State-Transition ACs` table from contract.md. For each row:
@@ -704,6 +867,42 @@ c. Record per-row in simulation-report.md's per-state-transition section:
    - DB confirmed: ✅ / ❌ stayed at '<actual value>'
    - UI confirmed: ✅ / ❌ '<actual UI text>'
    - Screenshot path
+
+````markdown
+**Per-row accessibility scan (v3.1+).** After driving each State-Transition
+row's user flow but before recording the verdict, run axe-core analysis
+against the rendered page:
+
+```ts
+import AxeBuilder from '@axe-core/playwright';
+
+const wcagLevel = process.env.WCAG_LEVEL ?? 'AA'; // from PRD
+const tags = wcagLevel === 'AAA' ? ['wcag2a','wcag2aa','wcag2aaa'] :
+             wcagLevel === 'A'   ? ['wcag2a'] :
+             wcagLevel === 'AA'  ? ['wcag2a','wcag2aa'] :
+             null; // N/A → skip
+
+if (tags) {
+  const axeResults = await new AxeBuilder({ page }).withTags(tags).analyze();
+  // record per-row a11y verdict per impact severity
+}
+```
+
+Per-row a11y verdict rules:
+- For each violation with `impact = serious | critical`: row's `a11y` column
+  = ❌ → treat parent FR as Partial (same as DB ❌ rule for State-Transition rows)
+- For each violation with `impact = moderate`: row's `a11y` column = ⚠️ →
+  records under Major findings; doesn't fail Part A
+- For each violation with `impact = minor`: information-only; logs in
+  simulation-report's `## A11y informational` aggregated section
+
+Record the new `a11y` column in simulation-report.md per-state-transition
+table. If WCAG-Level is N/A (non-UI feature), skip this scan entirely
+and emit `a11y: N/A — non-UI feature` for the column.
+
+Per-rule disable allowed via `axe.run({rules: { 'rule-id': {enabled: false}}})`
+but requires ADR justification in `progress/decisions.md`.
+````
 
 **Worker readiness retry (v3.0+).** If the State-Transition row's
 `Triggered by` column indicates a worker-dependent action (e.g., "worker

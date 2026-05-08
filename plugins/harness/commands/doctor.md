@@ -63,4 +63,31 @@ Exit codes:
 - Inside a git repository
 - `frontend-design`, `security-guidance`, `agentlint` plugins
 
+`````markdown
+**superpowers plugin (v3.1+ — soft-required for Evaluator Step 3a)**
+
+Check whether `superpowers` plugin is installed:
+
+```bash
+ls ~/.claude/plugins/cache/claude-plugins-official/superpowers/ 2>/dev/null
+```
+
+- If installed: print `superpowers detected (Evaluator Step 3a will dispatch code-reviewer)`.
+- If missing: print MAJOR warning:
+
+```
+⚠️  MAJOR: superpowers plugin not installed.
+
+  Evaluator Step 3a (v3.1+ code-reviewer integration) will be skipped.
+  This is a soft requirement — the harness still functions without it,
+  falling back to v3.0's Step 3 (manual review + grep scans only).
+
+  To install:
+    /plugin install superpowers@claude-plugins-official
+```
+
+Do NOT block sprint dispatch on missing superpowers (soft-required, not
+hard-required). Doctor exits 0; warning is informational.
+`````
+
 Every failure prints the exact install command to copy-paste. No googling.

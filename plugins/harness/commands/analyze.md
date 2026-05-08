@@ -25,6 +25,22 @@ In the full [sprint.md](sprint.md) flow, `/harness:analyze` runs automatically b
    - **Dependency ordering**: Contract's build order respects architectural dependencies
    - **Scope consistency**: Contract scope matches PRD priorities (no P2 features in a P0 contract)
    - **Tech stack conflicts**: No contradicting framework mentions across files
+
+     **ADR matrix completeness check (v3.1+, WARNING).** For each ADR in
+     architecture.md:
+
+     - If the ADR has a `Considered options` field with only one option (or
+       none), emit WARNING (NOT CRITICAL — preserves existing-project
+       compatibility): "ADR-NNN has fewer than 2 considered options; v3.1+
+       requires MADR matrix structure. Consider running `/harness:edit
+       'restructure ADR-NNN to MADR format'` if this is a new sprint."
+     - If the ADR has a `Pros and cons matrix` but missing the
+       `Hallucination check` (Context7-verified alternatives), emit WARNING:
+       "ADR-NNN matrix missing Context7-verification of non-chosen
+       alternatives; alternatives may be hallucinated."
+
+     These are WARNINGs not CRITICAL because they don't break the pipeline;
+     they surface drift the user can choose to address via `/harness:edit`.
 3. Write findings to `.harness/features/{current-feature}/analysis-report.md`. The report has two parts: a **coverage matrix** (per-requirement tables that make gaps visually loud) and a **summary block** (counts + CRITICAL/WARNING lists).
 
    ### Part A — Coverage matrix (SpecKit-inspired)

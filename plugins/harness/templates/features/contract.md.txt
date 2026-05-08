@@ -105,6 +105,37 @@ recovery; Evaluator Part A gates on test presence + passing.
 If this feature exercises no constraints, write: `_None — this feature
 does not interact with any constraints._` and explain why.
 
+## Mutation Score Targets (v3.1+)
+
+For each FR, declare a mutation-score target. Generator NEGOTIATE populates
+this table with proposed targets; BUILD writes tests aiming for the targets;
+Evaluator Step 4 gates on per-FR achievement against declared targets.
+
+| FR | Target | Rationale |
+|----|--------|-----------|
+
+<!-- Example row — DELETE before delivery; replace with one row per FR -->
+| <example: FR-001> | 70% | <example: auth-critical path> |
+
+If this feature has only N/A FRs (config, types, docs only), write:
+`_None — all FRs are non-testable (target = N/A)._`
+
+````markdown
+## Bundle-size Budget (v3.1+, UI projects only)
+
+If PRD declares Bundle-size NFR, populate this section with the budget
+values. If PRD declares `None`, write: `_None — early prototype, no
+budget enforced._`
+
+```yaml
+bundle_size_per_chunk: <from PRD>
+bundle_size_total: <from PRD>
+```
+
+Generator BUILD scaffolds `.size-limit.json` from these values. Evaluator
+Step 4 asserts `npx size-limit` against the budget.
+````
+
 ## Definition of Done
 - All ACs pass via Playwright (in EVALUATE mode)
 - All unit tests pass

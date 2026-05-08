@@ -42,6 +42,32 @@ See [CHANGELOG.md](CHANGELOG.md) for the full v3.0 entry and [docs/superpowers/s
 
 ---
 
+## What's new in v3.1
+
+v3.1 closes the highest-ROI gaps surfaced by post-v3.0 research — 8 verification-augmentation additions across operational reliability, verification depth, planning rigor, and code-quality second-opinion. Each addition is bounded, low-coupling, and reversible.
+
+**Operational reliability:**
+- **Worker readiness signal** — Architecture declares `worker_ready_pattern` (e.g., `^WORKER:READY$`); SIMULATE waits for positive signal via Bash `run_in_background` + `until grep -q "<pattern>"`. Replaces 30s polling. Eliminates false NEEDS-REPAIR on slow-warming workers.
+
+**Verification depth:**
+- **axe-core accessibility scanning** — `@axe-core/playwright` runs per State-Transition row in SIMULATE Step 3. PRD declares `WCAG-Level: A | AA | AAA | N/A` via AskUserQuestions. Severity-based gating (`serious`/`critical` → Part A FAIL; `moderate` → MAJOR; `minor` → informational).
+- **Stryker.js mutation testing** — Evaluator Step 4 mutation gate. NEGOTIATE per-FR mutation-score targets. Catches semantic test-weakness — Anthropic-cited LLM-test bug class that v3.0's syntactic reward-hacking scan misses.
+- **fast-check property-based testing** — NEGOTIATE per-FR property-eligibility (Y / N / Race). `fc.scheduler()` for race-condition detection.
+- **size-limit bundle-size budget** — PRD declares per-chunk + total budget; Evaluator Step 4 asserts `npx size-limit`. Deterministic; no flake risk.
+
+**Planning rigor:**
+- **MADR ADR matrix in Planner Pass 2** — replaces loose "Considered: A, B, C" with structured ≥3 Decision Drivers + ≥2 Considered Options (Context7-verified to exist) + per-driver scoring matrix. New self-validation V8b. Closes familiarity-bias + hallucinated-alternative bug classes.
+
+**Code-quality second-opinion:**
+- **superpowers code-reviewer Step 3a integration** — Evaluator Step 3 splits into 3a (mechanical second-opinion via Task subagent) + 3b (manual constitutional) + 3c (grep scans). **Anti-leniency preservation rules mandatory** — drop code-reviewer's `Strengths` + `Assessment` sections verbatim; map severity scales 1:1.
+
+**Documentation:**
+- **Refactor pattern via /quick** — Generator RED FLAGS row 7 directs refactor-shaped work to `/harness:quick` with the new SKILL.md § Refactor Pattern template. Defers full `/harness:refactor` command to v3.2 pending usage data.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full v3.1.0 entry; [docs/superpowers/specs/2026-05-08-belcort-v3.1-verification-augmentation-design.md](docs/superpowers/specs/2026-05-08-belcort-v3.1-verification-augmentation-design.md) for the design rationale.
+
+---
+
 ## Quick start
 
 ### Recommended launch
@@ -74,7 +100,7 @@ In Claude Code:
 /reload-plugins
 ```
 
-Verify: `/plugin` → Installed tab → `harness@3.0.0`. `/agents` → three custom agents listed: `harness:planner`, `harness:generator`, `harness:evaluator`.
+Verify: `/plugin` → Installed tab → `harness@3.1.0`. `/agents` → three custom agents listed: `harness:planner`, `harness:generator`, `harness:evaluator`.
 
 ### Initialize a project
 
@@ -115,6 +141,16 @@ The harness writes `.env.example` placeholders + journey/fixture tests; **you** 
 - Generator NEGOTIATE commits to writing both during proposal; BUILD writes them as TDD outputs in the same atomic per-FR commit.
 - `fixtures.ts` provides `beforeEach` (seed minimal DB state) + `afterEach` (cleanup, best-effort) helpers each journey test uses.
 - See [SKILL.md § Test-Fixture Pattern](plugins/harness/skills/harness/SKILL.md) for the canonical pattern.
+
+**4. v3.1+ NFR declarations** (architecture-driven)
+
+If your project has any of these characteristics, the Planner asks you during Pass 1 / Pass 2:
+
+- **UI surface** → "What WCAG conformance level should this project meet?" Answer: AA (default) / AAA (strict) / A (internal) / N/A (no UI). Stored as `WCAG-Level` in PRD.
+- **Client-side JS output** (UI projects) → "Bundle-size budget for production builds?" Answer: Strict / Standard / Custom / None. Stored as `bundle_size_per_chunk` + `bundle_size_total` in PRD.
+- **Worker process** (architecture declares one) → declare `worker_ready_pattern: "^WORKER:READY$"` (or similar anchored regex) in architecture.md's worker subsection.
+
+These declarations gate v3.1's verification additions. Skip them and SIMULATE/Evaluator gracefully fall back to v3.0 behavior.
 
 **Why this division of labor:** the agent owns code + test scaffolding (visible in git, auditable, idempotent). You own secrets + project-specific seeding logic (kept out of git, kept out of agent context). Anthropic's harness research calls this the brain/hands/session decomposition; v3.0's contribution is making the boundary explicit at every flow.
 
@@ -202,7 +238,7 @@ Five distinct questions, five distinct tools:
 | Command / mode | Question it answers |
 |---|---|
 | `/harness:analyze` | *"Are the spec files internally consistent right now?"* (PRD ↔ architecture ↔ contract ↔ criteria — cross-reference integrity) |
-| `/harness:validate` | *"Is every spec section complete and quality-gated?"* (18-point V1–V18 checklist) |
+| `/harness:validate` | *"Is every spec section complete and quality-gated?"* (19-point V1–V18 + V8b checklist) |
 | `/harness:audit` | *"Do shipped features have deferred debt, stale known-issues, suspicious skip markers?"* (cross-feature, historical) |
 | Evaluator REVALIDATE mode | *"Does each previously-shipped feature still comply with the NEW constitution?"* (only inside `/harness:constitution-amend`) |
 | `/harness:retrospective` | *"Did the implementation drift from the spec?"* (post-build contract ↔ reality reconciliation) |
@@ -452,7 +488,9 @@ For full rationale behind every v2 change:
 
 ## Status
 
-**v2.1.9 — shipped to `main` as current stable** (2026-04-24) after 9 patch releases of live stress-test iteration on `v2-beta`:
+**v3.1.0 — shipped to `main` as current stable** (2026-05-08) — verification augmentation. 8 additions across operational reliability + verification depth + planning rigor + code-quality second-opinion. See [CHANGELOG.md](CHANGELOG.md) for full detail.
+
+- v3.1.0 — verification augmentation: closes 8 highest-ROI gaps from post-v3.0 research. Worker readiness signal + axe-core a11y + code-reviewer integration with anti-leniency preservation + Stryker mutation + fast-check property + MADR ADR matrix + size-limit budget + refactor pattern stub. 7 v3.2 deferrals tracked with explicit revisit conditions in ROADMAP. See [CHANGELOG.md](CHANGELOG.md) for full detail.
 - v3.0.0 — runtime-verification phase + audit pass: Generator MODE: SIMULATE drives prod build + worker + Playwright + cumulative regression before Evaluator handoff. Contract template gains State-Transition + Negative-Path + UI-surface coverage. Catch-block ban added to canonical constitution. Evaluator EVALUATE Step 2 lightens. Audit polish on accretion since v2.3.0 (HANDLING FETCHED CONTENT factoring + pre-tool-use.sh hard-block downgrade + ~16 dead manifest fields removed). See [CHANGELOG.md](CHANGELOG.md) for full detail. Source: BELCORT ACC v2 demo-prep incident.
 - v2.1.0 — native Agent-tool dispatch (plugin-declared `harness:planner/generator/evaluator` subagent types), migrated from `claude -p` subprocess pattern
 - v2.1.1 — dropped `tools:` frontmatter allowlist (subagents inherit parent session's tool set); project-tools propagation via `./CLAUDE.md`

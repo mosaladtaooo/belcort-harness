@@ -106,7 +106,7 @@ Invoke `/harness:analyze`. Cascade edits are exactly where analyze earns its kee
 
 Invoke `/harness:validate` on the post-edit spec. Analyze catches *inconsistency* (files don't reference each other correctly); validate catches *incompleteness* (a section the edit gutted, a removed NFR that now lacks a measurable target, an AC that lost its verification path). Cascade edits are the specific risk scenario where both audits are proportional — single-file amendments don't warrant this second pass.
 
-On V-gate failures (V1–V18 from `agents/planner.md § SELF-VALIDATION`):
+On V-gate failures (V1–V18 + V8b from `agents/planner.md § SELF-VALIDATION`):
 - **Fix-now** (recommended if ≤2 failures): run `/harness:amend "<fix>"` or `/harness:edit "<fix>"` per failure, then re-run validate.
 - **Defer-to-sprint** (acceptable if failures are expected to be filled by an imminent sprint, e.g., adding a new FR that the next sprint will flesh out with ACs): note each deferred V-gate in `.harness/progress/known-issues.md` with a target feature/date. Do NOT defer silently — the gap is a ticking drift timer.
 

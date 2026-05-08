@@ -135,8 +135,23 @@ For a frontend: loading, empty, error, partial, success states all render with a
 - Exercise each user journey (UJ-NNN) end-to-end via Playwright, hitting every UI state
 - Verify NFR metrics with measurement, not estimation:
   - Performance NFRs: use Playwright's performance API or curl with `-w '%{time_total}'`
-  - Accessibility NFRs: run axe-core via Playwright
   - Security NFRs: per `spec/constitution.md` security principles
+
+**Accessibility (NFR-driven, v3.1+):**
+
+If PRD declares `WCAG-Level: A | AA | AAA` (in `prd.md` § Accessibility NFR):
+
+- axe-core violations from simulation-report.md `a11y` column with
+  `impact = serious | critical` count toward Part A FAIL (treats parent
+  FR as Partial, same gating rule as DB ❌)
+- `impact = moderate` violations are MAJOR findings (do not fail Part A)
+- `impact = minor` violations are informational only (logged in
+  `## A11y informational` section of simulation-report)
+- Per-rule disable allowed via project's `axe.run({rules: { 'rule-id':
+  {enabled: false}}})` config, but requires ADR justifying the disable
+  (recorded in `progress/decisions.md`)
+
+If WCAG-Level: N/A or not declared, skip a11y gating entirely.
 - Try to break the product as a real user would (drag-drop wrong files, paste 10MB into a textarea, refresh during submit, etc.)
 - Cite file:line or Playwright-action evidence for every score < 10
 

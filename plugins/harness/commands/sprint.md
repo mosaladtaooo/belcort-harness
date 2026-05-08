@@ -75,7 +75,7 @@ The orchestrator dispatches the Planner via the Agent tool:
 
 > You are being dispatched in PLAN mode (see your system prompt for the full role and 2-pass procedure).
 >
-> Produce the full specification per PASS 1 + PASS 2. Write only the files your output sections list: spec/*, evaluator/criteria.md, features/NNN-name/contract.md, init.sh, manifest.yaml, ROADMAP.md, progress/*. DO NOT write source code or implementation files — those are for the Generator. Run your 18-point self-validation before exiting and report the pass count.
+> Produce the full specification per PASS 1 + PASS 2. Write only the files your output sections list: spec/*, evaluator/criteria.md, features/NNN-name/contract.md, init.sh, manifest.yaml, ROADMAP.md, progress/*. DO NOT write source code or implementation files — those are for the Generator. Run your 19-point self-validation before exiting and report the pass count.
 >
 > User request:
 > $ARGUMENTS
@@ -109,7 +109,7 @@ Architecture: [N] components, Context7 verified.
 Contract: [strategy], [N] deliverables, [N] ACs.
 Files: ✓ spec/prd.md, ✓ spec/constitution.md, ✓ spec/architecture.md,
        ✓ evaluator/criteria.md, ✓ features/NNN/contract.md, ✓ init.sh.
-Planner self-validation: [N/18 passed].
+Planner self-validation: [N/19 passed].
 
 Next:
   • approved               → negotiate + build
@@ -185,7 +185,6 @@ Three dispatches in sequence. The orchestrator reads `state.current_feature` fro
 
 **After FINALIZE returns**: orchestrator updates `.harness/manifest.yaml` → `state.phase = "building"` using the Edit tool.
 
-See [negotiate.md](negotiate.md) for the standalone variant.
 
 ---
 

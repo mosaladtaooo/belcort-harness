@@ -32,7 +32,7 @@ Each procedure lives in its own file under `commands/`. This is a pointer table,
 | `/harness:resume` | [commands/resume.md](../../commands/resume.md) | Recover from any phase using `manifest.yaml` + `changelog.md` |
 | `/harness:clarify` | [commands/clarify.md](../../commands/clarify.md) | Post-plan structured Q&A — surface spec ambiguities, collect answers in files, auto-patch specs. Runs before human approval gate. |
 | `/harness:analyze` | [commands/analyze.md](../../commands/analyze.md) | Cross-artifact consistency check (PRD ↔ architecture ↔ contract) |
-| `/harness:validate` | [commands/validate.md](../../commands/validate.md) | 18-point quality audit on existing spec files |
+| `/harness:validate` | [commands/validate.md](../../commands/validate.md) | 19-point quality audit on existing spec files |
 | `/harness:edit "<change>"` | [commands/edit.md](../../commands/edit.md) | Cascade-aware spec edit via fresh Planner subagent (EDIT mode). Produces cross-file patches in `edit-patches.md`, user approves per-file, orchestrator mechanically applies. For multi-file coordinated changes (stack swaps, NFR tightening). |
 | `/harness:amend "<tweak>"` | [commands/amend.md](../../commands/amend.md) | Safe post-plan spec amendment via a fresh Planner subagent (EDIT mode with the AMENDMENT marker). Produces before→after patches in `amend-patches.md`, user confirms, orchestrator mechanically applies. **Never edits spec from orchestrator context.** Solves the post-plan tweak pollution failure mode. |
 | `/harness:retrospective` | [commands/retrospective.md](../../commands/retrospective.md) | Post-merge drift analysis + spec sync |
@@ -183,6 +183,133 @@ export { expect };
   Evaluator's secrets scan + AgentLint blocks the write.
 - No `beforeEach` cleanup → 20 features × 50 tests later, the test DB
   has 1000 stale rows and SIMULATE times out.
+
+## Worker Readiness Patterns (v3.1+)
+
+When SIMULATE drives a worker-dependent state transition, it needs to
+know when the worker is warm. v3.1 introduces a positive readiness signal
+via stdout pattern matching, replacing v3.0's 30s polling.
+
+### Project author's responsibility
+
+Declare in `architecture.md`'s worker subsection:
+
+````yaml
+worker_ready_pattern: "^WORKER:READY$"
+````
+
+Anchor the pattern (`^...$` or word-boundary `\bREADY\b`) to avoid
+false-ready from debug logs containing "ready" as a substring.
+
+### Convention-only fallback
+
+If no `worker_ready_pattern` declared, SIMULATE matches any of these
+canonical patterns within 30s:
+
+- `Server listening on`
+- `worker ready`
+- `[ready]`
+- `READY:GO`
+- `Database connection established`
+- `Queue subscribed`
+
+If none match, falls back to v3.0's 30s polling timeout (no failure —
+worker may be silent-idle).
+
+### Why a positive signal
+
+- Eliminates false NEEDS-REPAIR on slow-warming workers (DB pool, JIT, embeddings model load)
+- Eliminates false-positive successes on warm-but-stale workers (PID leak from prior SIMULATE handles state transitions using cached pre-migration data)
+- Zero turn-burn vs Monitor-based streaming (one completion notification regardless of session length)
+
+### Worker stdout piping convention
+
+For the readiness pattern to be observable, the worker's stdout must reach
+a file. Standard pattern in `package.json`:
+
+````json
+{
+  "scripts": {
+    "worker": "tsx scripts/worker.ts 2>&1 | tee logs/worker.log"
+  }
+}
+````
+
+Generator BUILD adds this convention to scaffolding when a worker is
+declared. Existing projects without piping fall back to convention-only
+canonical-pattern detection if their worker prints to stdout.
+
+## Refactor Pattern (v3.1+)
+
+Behavior-preserving cross-cutting changes (rename, extract, deduplicate,
+homogenize) don't fit the FR/AC-driven sprint contract shape. Until the
+dedicated `/harness:refactor` command lands (v3.2+), express refactor
+work via `/harness:quick` with this contract template.
+
+### Contract template
+
+````markdown
+## Refactor: <intent in one sentence>
+
+**Mode**: REFACTOR (behavior-preserving, no new tests, no new behavior)
+
+### Behavior preservation invariant (the AC)
+- AC-R1: All existing tests pass before and after (`vitest run` + `playwright test` exit 0)
+- AC-R2: Git diff shows ZERO behavior changes — only renames/moves/extractions
+- AC-R3: No new dependencies, no new exports, no API surface changes
+
+### Affected sites (user-grepped)
+- `src/path/a.ts:42` — `getUser()` → `getCurrentUser()`
+- `src/path/b.ts:118` — same rename
+- `src/path/c.ts:201` — same rename
+
+### Out of scope (≥3 explicit non-changes)
+- Test logic changes
+- New feature additions
+- Adjacent bug fixes (file in known-issues.md)
+
+### Definition of Done
+- All affected sites updated atomically (single commit)
+- ALL pre-existing tests pass; no test changes
+- No new tests added (refactor doesn't introduce new behavior)
+- Constitution scan still clean
+````
+
+### Workflow
+
+1. User invokes `/harness:quick "<refactor intent>"` with the template
+   above as the contract body.
+2. Generator BUILD reads contract, refactors per scope, runs existing
+   tests. Generator's RED FLAGS row 7 prose explicitly directs refactor-
+   shaped contracts to this pattern.
+3. Evaluator EVALUATE confirms binary AC: tests pass + diff is rename-only
+   + no new dependencies.
+4. PASS → squash-merge with `[harness:refactor] <intent>` commit.
+
+### Why this pattern (not /sprint)
+
+- Refactors have no PRD/spec authoring step — `/quick` skips Planner correctly
+- Refactors have binary ACs (tests pass / diff is rename-only) — no
+  numeric Part B grading needed
+- Refactors are atomic — single commit, single eval pass
+
+### When to escalate to /harness:refactor (v3.2+)
+
+If the refactor is large (≥10 files affected) OR requires architectural
+judgment (extract module boundary, change paradigm), defer to v3.2's
+dedicated command. Track usage of /quick-as-refactor in
+`known-issues.md` to inform v3.2 demand.
+
+### Tracking convention
+
+When invoking /quick for refactor work, prepend the user description with
+`[refactor]`:
+
+```
+/harness:quick "[refactor] rename getUser to getCurrentUser everywhere"
+```
+
+This makes the pattern grep-able for v3.2 demand-data analysis.
 
 ## File Ownership Contract
 
@@ -530,7 +657,7 @@ Installed plugins that the harness integrates with if available. None required; 
 | `frontend-design` | Planner (Pass 2), Generator (BUILD UI work) | Design tokens + layout patterns; produces more polished UI | `/plugin install frontend-design@claude-plugins-official` |
 | `security-guidance` | Generator (pre-commit), Evaluator (Code Quality) | OWASP Top 10 checks, secret-detection, injection-flaw scan | `/plugin install security-guidance@claude-plugins-official` |
 | `agentlint` | Evaluator (Code Quality, before manual review) | 33 evidence-backed checks across 5 dimensions; catches patterns humans miss | `/plugin install agentlint@claude-plugins-official` |
-| `superpowers` | Generator (BUILD — TDD cycle), Evaluator (systematic-debugging when stuck) | TDD skill owns the RED/GREEN/REFACTOR discipline per the Superpowers pattern; required for Generator BUILD mode | `/plugin install superpowers@claude-plugins-official` |
+| superpowers | Generator BUILD (TDD), Evaluator EVALUATE Step 3a (v3.1+ — code-reviewer integration), systematic-debugging | TDD skill, code-reviewer skill, debugging skill | /plugin install superpowers@claude-plugins-official |
 
 The doctor (`/harness:doctor`) checks for these and warns if missing. Generator and Evaluator reference this section for integration guidance rather than duplicating install/usage details.
 

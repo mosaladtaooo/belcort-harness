@@ -458,18 +458,78 @@ Record findings:
   route + action + observed result is rubber-stamping; the tuning-log
   flags such patterns.
 
-### Step 3: Code Quality Review
+### Step 3: Code Quality Review (v3.1+)
 
-Read the source files and check against the constitution. Use Bash with whatever scan commands fit the stack:
-- File-length violations against constitution's max (typically 300 lines)
-- Forbidden patterns per constitution (`console.log`, `: any`, `eval(`, etc.)
-- Project's lint script (`npm run lint`, `pnpm lint`, `npx eslint src/`, `cargo clippy` — check `package.json`/`pyproject.toml`/etc.)
+Step 3 splits into three sub-steps. Run them in order: 3a → 3b → 3c.
+After 3a (mechanical second-opinion via code-reviewer), 3b and 3c MUST
+still run regardless of code-reviewer's verdict — anti-leniency protocol
+applies to YOUR judgment, not code-reviewer's.
+
+````markdown
+#### Step 3a: Mechanical second-opinion via superpowers:code-reviewer (v3.1+)
+
+If `superpowers` plugin is installed, dispatch a Task subagent using the
+code-reviewer skill template:
+
+- Tool: Agent (general-purpose)
+- Subagent type: superpowers:code-reviewer
+- Inputs to provide in the prompt:
+  - `WHAT_WAS_IMPLEMENTED`: implementation-report.md `## FR → Implementation Map` summary
+  - `PLAN_OR_REQUIREMENTS`: full path `.harness/features/${FEATURE}/contract.md`
+  - `BASE_SHA`: `git rev-parse main` (sprint-start anchor — capture before dispatch)
+  - `HEAD_SHA`: `git rev-parse harness/build/${FEATURE}` (current build branch HEAD)
+  - `DESCRIPTION`: one-paragraph summary of the feature's purpose
+
+**Cost gate:** if the diff is small, skip Step 3a entirely:
+
+```bash
+git diff --stat ${BASE_SHA}..${HEAD_SHA} | wc -l
+```
+
+If line count < 50, skip 3a (overhead exceeds value on tiny diffs).
+Proceed directly to 3b. Document the skip in eval-report.md as
+"Step 3a: skipped — diff < 50 lines (cost gate)".
+
+**Output translation rules (anti-leniency preservation, MANDATORY):**
+
+When parsing code-reviewer's response:
+- code-reviewer's `## Critical (Must Fix)` items → eval-report.md
+  `## Critical Findings` (severity: CRITICAL)
+- code-reviewer's `## Important (Should Fix)` items → eval-report.md
+  `## Major Findings` (severity: MAJOR)
+- code-reviewer's `## Minor` items → eval-report.md `## Minor Findings`
+  (severity: minor)
+- **DROP code-reviewer's `## Strengths` section verbatim.** Do NOT
+  propagate "what was done well" prose — adversarial framing is
+  preserved by NOT importing collaborative-skeptic narrative.
+- **DROP code-reviewer's `## Assessment` section verbatim.** (E.g., "Ready
+  to merge: With fixes" — Evaluator computes its own verdict in Step 7;
+  the code-reviewer's verdict is informational, not authoritative.)
+- code-reviewer is a SECOND OPINION, not a replacement. Run Steps 3b and
+  3c after 3a, regardless of how thoroughly code-reviewer reviewed. The
+  anti-leniency protocol applies to YOUR final judgment.
+
+If `superpowers` plugin NOT installed:
+- Skip Step 3a; doctor warned at MAJOR (per `commands/doctor.md` v3.1+)
+- Proceed directly to Step 3b (the manual constitutional review)
+- Document the skip in eval-report.md as "Step 3a: skipped — superpowers
+  plugin not installed"
+````
+
+#### Step 3b: Manual constitutional review
 
 Beyond grep-able patterns, manually review:
 - Function lengths (flag any >50 lines unless the constitution explicitly allows)
 - Error handling at boundaries (API calls, user input)
 - Import hygiene (unused imports, circular deps)
 - Naming conventions per constitution
+
+#### Step 3c: Constitutional grep scans
+
+Read the source files and check against the constitution. Use Bash with whatever scan commands fit the stack:
+- File-length violations against constitution's max (typically 300 lines)
+- Forbidden patterns per constitution (`console.log`, `: any`, `eval(`, etc.)
+- Project's lint script (`npm run lint`, `pnpm lint`, `npx eslint src/`, `cargo clippy` — check `package.json`/`pyproject.toml`/etc.)
 
 **Catch-block ban scan (v3.0+):** if the project constitution includes the "Errors at boundaries MUST be surfaced or explicitly logged" principle (check `.harness/spec/constitution.md` for the matching §-text or trigger keyword "catch-block ban"), run:
 
@@ -492,6 +552,65 @@ Document false positives in eval-report under `## Reward-Hacking Findings`.
 ### Step 4: Test Suite Analysis
 
 Run the project's full test suite (typically `npm test` / `npx vitest run` — check `package.json` test script) and any E2E suite (`npx playwright test` if Playwright is configured).
+
+````markdown
+**Mutation gate (v3.1+).** If `stryker.config.json` exists at project root
+(scaffolded by Generator BUILD per v3.1+ rule), run mutation testing per
+contract's per-FR scoping:
+
+```bash
+npx stryker run --incremental --mutate "src/<feature-folder-paths>/"
+```
+
+Wait for completion. Parse `reports/mutation/mutation.json`:
+
+- For each FR with declared target X% in contract `## Mutation Score Targets`:
+  - If `mutationScore` < X% by ≥10 points → MAJOR finding ("FR-NNN
+    mutation score Y% < target X%; survived mutants suggest assertion
+    weakness")
+  - If `mutationScore` < 30% on any per-FR module → CRITICAL finding
+  - For FRs with target = N/A, skip mutation check
+- Equivalent mutants (annotated by Stryker as `EquivalentMutant`) are
+  NOT counted against Generator. They appear in
+  `reports/mutation/mutation.json` with `status: "Killed"` but were
+  filtered as equivalent. To exclude: project author adds
+  `excludedMutations` to stryker.config.json with ADR-justified
+  rationale in `progress/decisions.md`.
+
+If Stryker errors out (cannot run incremental DB, missing config, vitest
+config incompatible), this is **infrastructure failure NOT test failure**
+— file `## Mutation Infrastructure Failure` finding under Code Quality
+and proceed; do NOT block Part A on Stryker unavailability.
+````
+
+**Property-test triviality check (v3.1+).** When property tests exist
+(grep test files for `fc.assert(fc.property` or `testProp.prop`), verify:
+
+- `numRuns` ≥ 100 (default is 100; if explicitly reduced to 1-10, MAJOR)
+- No hardcoded `seed:` parameter (if found, MAJOR — masks reproducibility)
+- Properties assert behavior, not type-shape (grep for property bodies
+  that contain ONLY `typeof` checks or `instanceof` without other
+  assertions; flag these as MAJOR — trivially-true properties)
+
+````markdown
+**Bundle-size gate (v3.1+).** If PRD declares Bundle-size NFR (non-`None`)
+and project has `.size-limit.json`, run:
+
+```bash
+npx size-limit
+```
+
+Parse output:
+
+- If any path's measured size ≤ budget → `## Bundle Size` section in
+  eval-report logs success
+- If any path exceeds budget → MAJOR finding (deterministic — bundle
+  size is operational concern, not Part A contract-compliance gate)
+- If size-limit errors out (config missing, build artifacts missing,
+  build was skipped) → infrastructure failure: file `## Bundle-size
+  Infrastructure Failure` finding; do NOT block Part A on size-limit
+  unavailability
+````
 
 Cross-check the git log for TDD evidence — test files should appear in commits BEFORE the implementation files for the same FR. `git log --oneline --name-only | head -60` is one way; the pattern matters more than the exact command.
 

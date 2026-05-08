@@ -1,5 +1,5 @@
 ---
-description: Run the 18-point quality audit on existing .harness/spec/ files (BMAD tri-modal). Surfaces missing sections, inconsistencies, and spec drift without regenerating anything.
+description: Run the 19-point quality audit on existing .harness/spec/ files (BMAD tri-modal). Surfaces missing sections, inconsistencies, and spec drift without regenerating anything.
 ---
 
 # `/harness:validate` — Validate existing spec
@@ -9,7 +9,7 @@ For when you want to audit an existing PRD without regenerating it.
 ## Procedure
 
 1. Read all `.harness/spec/` files
-2. Run the Planner's 18-point validation checklist against them (V1–V18 — see `agents/planner.md` SELF-VALIDATION section)
+2. Run the Planner's 19-point validation checklist against them (V1–V18 + V8b — see `agents/planner.md` SELF-VALIDATION section)
 3. Report findings:
    ```
    ═══════════════════════════════
@@ -21,7 +21,7 @@ For when you want to audit an existing PRD without regenerating it.
    ...
    V18 Wording does work: PASS/FAIL  [details]
 
-   Result: [N]/18 passed
+   Result: [N]/19 passed
    Fix: [list of specific issues to address]
    ═══════════════════════════════
    ```

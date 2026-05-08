@@ -54,6 +54,14 @@ A point-by-point trace from BELCORT Harness design decisions back to the Anthrop
 | Constitution catch-block ban (v3.0) | Trustworthy Agents | *"Multi-layer defenses: train the model, monitor production, red-team battle test."* Production observation surfaced Bug #6 class; constitution principle is the train-the-model layer. |
 | Evaluator EVALUATE Step 2 lightening (v3.0) | Rajasekaran 2026 | *"Stripping away pieces that are no longer load-bearing."* Evaluator's prod-stack work staled the moment SIMULATE shipped. |
 | Cross-runtime parity check folded into SIMULATE Step 6 (v3.0) | Effective Harnesses | *"Visual feedback (screenshots via Playwright for UI tasks)."* Extended to dev-vs-prod cross-runtime parity. |
+| Worker readiness signal via stdout pattern (v3.1) | Rajasekaran 2026 | *"Stripping away pieces that are no longer load-bearing."* — replaces 30s polling with positive signal at zero project cost |
+| axe-core accessibility in SIMULATE Step 3 (v3.1) | Effective Harnesses | *"Visual feedback (screenshots via Playwright for UI tasks)."* Extended to rule-based a11y enforcement |
+| superpowers code-reviewer Step 3a integration (v3.1) | Rajasekaran 2026 | *"Separating the agent doing the work from the agent judging it proves to be a strong lever."* Adds second judging perspective via Task-subagent dispatch with adversarial framing preservation |
+| Mutation testing semantic test-quality gate (v3.1) | Trustworthy Agents | *"Multi-layer defenses: train the model, monitor production, red-team battle test."* Mutation testing IS red-team-against-tests-themselves |
+| Property-based testing race-condition coverage (v3.1) | Trustworthy Agents | *"Models are trained through scenarios that place Claude in ambiguous situations."* Property tests force input-space reasoning beyond example certainty |
+| MADR ADR matrix with Context7-verified alternatives (v3.1) | Rajasekaran 2026 | *"Find the simplest solution possible, and only increase complexity when needed."* Extended to "and prove the alternatives you considered actually exist" — anti-hallucination for ADR options |
+| Bundle-size budget gate (v3.1) | Effective Harnesses | *"Rules-based feedback (tests, linters, type checkers)."* Bundle-size is deterministic rules-based perf signal |
+| Refactor pattern via /quick stub (v3.1) | Rajasekaran 2026 | *"Stripping away pieces that are no longer load-bearing."* Defers full /harness:refactor command until usage data justifies it |
 
 ## Deviations from the source material
 
@@ -79,6 +87,18 @@ This document is maintained alongside the harness. When a design decision change
 - v2.2 — stale-assumption pruning + operational hardening: per-FR story files removed (Anthropic *"every component encodes an assumption that may go stale"*), Planner mode collapse (4 post-PLAN modes → unified EDIT, single source of truth via dispatch markers), `/harness:negotiate` standalone removed, Generator pause snapshot (file-based state at boundaries), 1M-context confirmation banner (operational), soft-only Planner feature-size gate. Trust-the-model stance documented as conditional on 1M-context launch. ~300 LoC reduction. Full plan: `docs/superpowers/plans/2026-04-28-belcort-audit-and-refine.md`. Full spec: `docs/superpowers/specs/2026-04-28-belcort-audit-and-refine-design.md`.
 - v2.3 — agent-prompt deduplication + bash de-prescription: Generator three-section TDD/reward-hacking redundancy collapsed to single source of truth (RED FLAGS table is canonical; ANTI-PATTERNS section dropped; REWARD-HACKING — FORBIDDEN compressed to cross-ref + one novel rule). Evaluator Steps 1, 3, 4 converted from literal bash to natural-language intent; Step 4.5 reward-hacking scan kept literal. Evaluator agent-level "READ THIS CAREFULLY" leniency warning deleted (mode-mis-scoped); EVALUATE-mode copy preserved. ~50-55 LoC reduction. Full plan: `docs/superpowers/plans/2026-04-29-belcort-v2.3-agent-prompt-deduplication.md`. Full spec: `docs/superpowers/specs/2026-04-29-belcort-v2.3-agent-prompt-deduplication-design.md`.
 - v3.0 — runtime-verification phase + audit pass: closes the visual-verification-leg gap surfaced by BELCORT ACC v2's 8-bug demo-prep incident. Adds Generator SIMULATE mode (drives prod build + worker + Playwright + DB queries; cumulative regression replay across all shipped features). Tightens contract template with State-Transition AC, Negative-Path Coverage, and UI-surface AC clauses. Adds catch-block ban as new constitution principle. Lightens Evaluator EVALUATE Step 2 — reads simulation-report.md as authoritative behavioural evidence. Audit pass applies the v2.0 / v2.2 / v2.3 ruler: factors HANDLING FETCHED CONTENT preamble into SKILL.md; downgrades pre-tool-use.sh test-deletion hard-block to advisory; removes ~16 dead manifest fields. Single atomic PR. Spec: `docs/superpowers/specs/2026-05-07-belcort-v3-runtime-verification-and-audit-design.md`. Plan: `docs/superpowers/plans/2026-05-07-belcort-v3-runtime-verification-and-audit.md` + `-part-2.md`.
+- v3.1 — verification augmentation: closes the highest-ROI gaps surfaced
+  by post-v3.0 research (3 Tier 1 + 3 Tier 2 + 2 Tier 3 additions). Adds
+  worker readiness signal, axe-core a11y, superpowers code-reviewer
+  integration with anti-leniency preservation, Stryker mutation testing,
+  fast-check property testing, MADR ADR matrix with Context7-verified
+  alternatives, size-limit bundle budget, refactor-pattern documentation
+  stub. Defers visual regression, cross-browser matrix, full Lighthouse
+  CI, parallel cumulative regression, real-time worker log tailing,
+  /harness:refactor command — each with explicit "When to revisit"
+  conditions in ROADMAP.md. Net LoC: ~+460. Single atomic v3.1.0 PR.
+  Spec: docs/superpowers/specs/2026-05-08-belcort-v3.1-verification-augmentation-design.md.
+  Plan: docs/superpowers/plans/2026-05-08-belcort-v3.1-verification-augmentation.md (+ -part-2.md).
 
 ## v1.5 additions to the decision map
 

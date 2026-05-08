@@ -109,9 +109,9 @@ Adapted from the Superpowers 1% rule — the pattern here is adversarial prompti
 | *"This NFR is obvious — 'fast', 'secure', 'user-friendly' covers it"* | Vague NFRs are untestable. The Evaluator can't grade against "fast"; neither can you in Pass 2 self-validation | Write SMART NFRs: "p95 search latency < 200ms at 1k RPS" — measurable, time-bound, check-able |
 | *"The user said 1 sentence — I'll just infer the rest"* | Inference without record = silent assumption = downstream bug the user didn't authorize | Use AskUserQuestions to surface the top 3-5 assumptions. If the user can't or won't answer, log each assumption in `prd.md` under "## Silent Defaults" so `/harness:clarify` can surface them later |
 | *"The constitution is generic — 'clean code, good tests' covers it"* | Generic constitutions provide no gate for the Evaluator. A constitution is a MUST-language contract, not a vibe | Write each principle as a testable MUST ("All public APIs MUST have integration tests", not "tests are important") |
-| *"I'll pick the framework I know best, comparing takes too long"* | Familiarity bias — you pick what you've used, not what the user needs. Locks them into your defaults | Compare at least 2 options for any non-trivial stack choice, record the tradeoff in `architecture.md`. Still pick the familiar one if it wins — but prove it wins |
+| *"I'll pick the framework I know best, comparing takes too long"* | Familiarity bias — you pick what you've used, not what the user needs. Locks them into your defaults | Compare ≥2 options. **Run Context7 `resolve-library-id` for EACH alternative; if Context7 returns nothing for an alleged option, it's a hallucination — drop it.** Score per-driver. Justify highest-scoring choice in the ADR `Why` line. |
 | *"I'll write the contract first and retrofit the PRD to match"* | Reversed order: the Generator gets a contract that looks complete but doesn't trace to user needs. This is the #1 spec-drift source | Pass 1 finishes completely before Pass 2 begins. PRD is authoritative; contract derives from it, not the other way around |
-| *"The 18-point self-validation is a formality — I'll tick them all"* | Vibe-validating is the specific failure mode the checklist exists to catch | Check each item against the artefact, line by line. If V7 says "every FR has an AC", open prd.md, count FRs, count ACs — don't eyeball |
+| *"The 19-point self-validation is a formality — I'll tick them all"* | Vibe-validating is the specific failure mode the checklist exists to catch | Check each item against the artefact, line by line. If V7 says "every FR has an AC", open prd.md, count FRs, count ACs — don't eyeball |
 | *"I'll mark this as 'TBD in a later phase' — scope for now, details later"* | "Later" means the Generator decides alone, without the user or the Evaluator in the loop. Deferred details become scope creep | Either resolve now (ask the user, or make the decision and log it in `decisions.md`) or explicitly drop from scope. No "TBD" in final artefacts |
 | *"The user won't notice if I skip the Silent Defaults section"* | The user might not — but `/harness:clarify` will, and it'll run against an incomplete spec | Always enumerate silent defaults in prd.md. You get one section to confess your assumptions; use it |
 
@@ -175,6 +175,53 @@ Every NFR MUST be specific and measurable:
 - BAD: "The app should be fast"
 - GOOD: "NFR-001: Page load ≤ 2s on 3G connection"
 - GOOD: "NFR-002: API response ≤ 200ms p95"
+
+**Sub-step W: Accessibility conformance level (v3.1+)**
+
+When the project has any UI surface (architecture declares a UI layer),
+ask via AskUserQuestions:
+
+> "What WCAG conformance level should this project meet?
+>   1. AA (recommended default — public-facing apps)
+>   2. AAA (strict — government / accessibility-critical)
+>   3. A only (internal tools — minimal)
+>   4. N/A (no UI — non-applicable)"
+
+Record the answer in `prd.md` under a new `## Accessibility NFR` section
+as: `WCAG-Level: A | AA | AAA | N/A`.
+
+If `N/A`: SIMULATE Step 3 will skip axe-core scans entirely. If `A | AA |
+AAA`: SIMULATE will run AxeBuilder with appropriate tags and Evaluator
+will gate Part A on `impact ≥ serious` violations.
+
+Skip this sub-step if architecture explicitly declares no UI surface
+(CLI tool, library, headless service).
+
+````markdown
+**Sub-step BS: Bundle-size budget (v3.1+, UI projects only)**
+
+When the project has client-side JavaScript output (architecture declares
+a UI layer with build artifacts), ask via AskUserQuestions:
+
+> "Bundle-size budget for production builds?
+>   1. Strict (≤ 150kB per chunk, ≤ 500kB total)
+>   2. Standard (≤ 250kB per chunk, ≤ 1MB total)
+>   3. Custom (specify per-chunk + total)
+>   4. None (skip — early prototype, no budget)"
+
+Record in `prd.md` under a new `## Bundle-size NFR` section:
+
+```yaml
+bundle_size_per_chunk: "150kB" | "250kB" | "<custom>"
+bundle_size_total: "500kB" | "1MB" | "<custom>"
+```
+
+If `None`: SIMULATE/Evaluator skip bundle-size gate. If declared:
+Generator BUILD scaffolds `.size-limit.json` from these values.
+
+Skip this sub-step if architecture declares no client-side JS output
+(server-rendered with no static chunks, CLI tool, library).
+````
 
 ## Step 7 — Innovation & AI Opportunities
 
@@ -335,12 +382,47 @@ For each NFR, confirm the chosen stack can realistically meet it:
 - NFR-002: [target] → [why stack supports this]
 
 ## Key Stack Decisions (ADRs)
-### ADR-001: [Decision title, e.g., "PostgreSQL over SQLite"]
-- **Context**: [what drove this decision]
-- **Options considered**: [A, B, C with brief tradeoffs]
-- **Chosen**: [X]
-- **Rationale**: [why]
-- **Affects**: NFR-NNN (not specific FRs — those are negotiated later)
+### ADR-NNN: <decision>
+
+**Status**: proposed | accepted | superseded
+
+**Decision drivers** (≥3, ≥2 must be NFR-NNN refs):
+- <driver-1> (e.g., NFR-001: response p95 < 200ms)
+- <driver-2> (e.g., NFR-003: zero-downtime deploys)
+- <driver-3> (e.g., team familiarity, license compatibility)
+
+**Considered options** (≥2; each Context7-verified to exist):
+- <option-A>
+- <option-B>
+- <option-C>
+
+For EACH option above, run `mcp__context7__resolve-library-id` (or the
+plugin-namespaced equivalent) to verify the option exists. If Context7
+returns nothing for an alleged option, drop it as hallucination. DO NOT
+list options you cannot verify.
+
+**Pros and cons matrix:**
+
+| Option | <driver-1> | <driver-2> | <driver-3> | Score |
+|--------|------------|------------|------------|-------|
+| <A>    | <eval>     | <eval>     | <eval>     | N/M   |
+| <B>    | <eval>     | <eval>     | <eval>     | N/M   |
+| <C>    | <eval>     | <eval>     | <eval>     | N/M   |
+
+Score per cell: 0 (fails driver), 1 (meets driver), 2 (exceeds driver).
+Total score = sum across drivers; M = total possible (drivers × 2).
+
+**Chosen**: <option-X>
+
+**Why**: <one sentence pointing to highest-scoring driver where chosen
+option won>
+
+**Hallucination check**: Context7 query results for non-chosen alternatives
+confirming they exist (file:line references, NOT memory-recall):
+- <option-Y>: Context7 lookup succeeded — `<library-id>` resolved
+- <option-Z>: Context7 lookup succeeded — `<library-id>` resolved
+
+**Affects**: <list of FRs / files / future ADRs depending on this decision>
 
 ## Deferred to Negotiation Phase
 The following are NOT decided here — the Generator and Evaluator will negotiate 
@@ -352,6 +434,26 @@ them in the negotiation phase (auto-invoked by `/harness:sprint` § 2c) before b
 - FR-to-file mappings
 - Internal library choices (utility libs, state management patterns, etc.)
 \`\`\`
+
+**Worker readiness signal (v3.1+).** When the architecture includes a
+worker process, declare in the worker subsection:
+
+````yaml
+worker_ready_pattern: "<exact-anchored-regex>"
+````
+
+Examples:
+- `worker_ready_pattern: "^WORKER:READY$"` (anchored exact)
+- `worker_ready_pattern: "^Server listening on \\d+$"` (anchored canonical)
+- `worker_ready_pattern: "\\bDatabase connection established\\b"` (word-boundary)
+
+Anchor the pattern to avoid false-ready from debug logs containing the
+substring. SIMULATE matches against the worker's stdout (piped via
+`pnpm worker 2>&1 | tee logs/worker.log` convention).
+
+If no stable readiness signal exists (worker idles silently until a job
+arrives), omit the declaration; SIMULATE falls back to canonical-pattern
+detection per SKILL.md § Worker Readiness Patterns.
 
 ## Evaluator Criteria: `.harness/evaluator/criteria.md`
 
@@ -644,7 +746,7 @@ Then stop — surface the split to the human at the `/harness:analyze` gate for 
 | Changelog, decisions | `.harness/progress/` | Product lifetime, append-only | All agents |
 ---
 
-# SELF-VALIDATION (18-point checklist)
+# SELF-VALIDATION (19-point checklist)
 
 Run EVERY check before declaring planning complete. If ANY fails, fix before finishing.
 
@@ -659,6 +761,11 @@ Run EVERY check before declaring planning complete. If ANY fails, fix before fin
 
 ## Architecture Quality
 - [ ] **V8: Stack rationale** — Every stack choice has documented rationale (not just a name)
+- [ ] V8b: Every architecture.md ADR with `Considered options` has
+      ≥2 alternatives, ≥3 decision drivers (≥2 NFR-NNN refs), per-driver
+      score per option, AND Context7 verification reference for each
+      non-chosen alternative. Chosen option's `Why` line explicitly
+      references the highest-scoring driver.
 - [ ] **V9: Context7 verified** — Framework APIs looked up, not assumed
 - [ ] **V10: NFR alignment** — Stack choices demonstrably serve NFR metrics
 - [ ] **V11-new: No premature detail** — architecture.md contains ZERO file paths, 
@@ -689,7 +796,7 @@ Run EVERY check before declaring planning complete. If ANY fails, fix before fin
       prd.md, OR `architecture.md` declares no UI surface and prd.md says
       `## UI-Surface Audit: N/A — non-UI feature`.
 
-**All 18 checks pass → write all files, report to orchestrator.**
+**All 19 checks pass → write all files, report to orchestrator.**
 **Any fail → fix, re-check, then report.**
 
 ---

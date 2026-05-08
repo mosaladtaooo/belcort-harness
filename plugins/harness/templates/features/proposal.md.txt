@@ -62,3 +62,13 @@ src/
 | Evaluator ask | How I addressed it |
 |---------------|--------------------|
 | {{from_review_md}} | {{change_to_proposal}} |
+
+## Property-test Eligibility (v3.1+)
+
+For each FR, declare property-eligibility per Generator NEGOTIATE rule.
+
+| FR | Eligible? | Reason |
+|----|-----------|--------|
+
+<!-- Example row — DELETE before delivery -->
+| <example: FR-001> | Y | <example: parses CSV input, edge cases matter> |
