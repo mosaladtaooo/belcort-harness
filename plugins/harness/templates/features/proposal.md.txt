@@ -1,0 +1,64 @@
+<!-- BELCORT Harness — Template: proposal.md -->
+<!--
+Written by: Generator in NEGOTIATE mode.
+Location when instantiated: .harness/features/{current-feature}/proposal.md
+Purpose: Generator's HOW-to-implement proposal, reviewed by Evaluator before any code is written.
+Canonical source: this file. The inline copy in plugins/harness/agents/generator.md must stay in sync.
+-->
+
+# Implementation Proposal — Round {{N}}
+
+**Date**: {{ISO_DATE}}
+**Round**: {{N}} of max 3
+
+## Component/Module Breakdown
+- {{component_name}} — {{one_line_responsibility}}
+- {{component_name}} — {{one_line_responsibility}}
+
+## Directory Structure
+```
+src/
+├── features/
+│   ├── {{feature_1}}/
+│   └── {{feature_2}}/
+├── lib/
+└── api/
+```
+
+## Data Model Proposal
+
+| Entity | Fields | Serves FR |
+|--------|--------|-----------|
+| {{Entity}} | {{field_list}} | {{FR_ids}} |
+
+## API Surface Proposal
+
+| Endpoint | Method | Purpose | Serves FR |
+|----------|--------|---------|-----------|
+| {{path}} | {{METHOD}} | {{one_line}} | {{FR_ids}} |
+
+## FR → Implementation Mapping
+
+| FR | Components touched | Files (planned) | Test strategy |
+|----|-------------------|-----------------|---------------|
+| {{FR-001}} | {{component}} | {{file_list}} | {{unit_e2e_mix}} |
+
+## AC → Test Approach
+
+| AC | How I'll verify it in BUILD mode |
+|----|----------------------------------|
+| {{AC-001-1}} | {{runner_and_assertion}} |
+
+## Risk Flags (things I'm uncertain about)
+- {{area_uncertain}}
+- {{edge_case_draft_contract_missed}}
+- {{dependency_unverified_via_context7}}
+
+## Questions for Evaluator
+- {{clarifying_question}}
+
+## If Round 2+: Response to Previous Review
+
+| Evaluator ask | How I addressed it |
+|---------------|--------------------|
+| {{from_review_md}} | {{change_to_proposal}} |

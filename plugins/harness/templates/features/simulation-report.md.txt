@@ -1,0 +1,104 @@
+# Simulation Report — features/<FEATURE>
+
+**Date**: <ISO date>
+**Generator (SIMULATE)**: <agent run ID>
+**Verdict**: VERIFIED | NEEDS-REPAIR
+
+This file is the authoritative behavioural-evidence handoff from Generator
+SIMULATE to Evaluator EVALUATE. Do NOT edit after the Generator writes it.
+
+---
+
+## Summary
+
+- Feature: features/<FEATURE>
+- Total state-transition rows: N (verified: M, partial: P, cannot-verify: Q)
+- Total negative-path rows: N (verified: M, partial: P, cannot-verify: Q)
+- Cumulative regression: N prior features replayed (passed: M, failed: P)
+- Cross-runtime parity: <none / minor / CRITICAL>
+
+---
+
+## Per-FR verification
+
+| FR | Verdict | Test driving | Evidence |
+|----|---------|-------------|----------|
+| FR-001 | ✅ Verified | `worker-picks-up.spec.ts` | screenshot: `<path>`, DB: `<query result>` |
+| FR-002 | ⚠️ Partial-runtime-gap | `extraction-completes.spec.ts` | UI shows "extracted" but DB still shows "received" |
+| FR-003 | ❌ Cannot-verify | (test missing) | Generator NEGOTIATE committed to test name but BUILD did not write it |
+
+---
+
+## Per-state-transition verification
+
+| Entity.Field | From | To | Test name | DB confirmed | UI confirmed |
+|--------------|------|-----|-----------|--------------|--------------|
+| documents.status | received | extracting | `worker-picks-up.spec.ts` | ✅ | ✅ |
+| documents.status | extracting | extracted | `extraction-completes.spec.ts` | ❌ stayed at 'extracting' | ✅ shows 'Extracted' |
+
+---
+
+## Per-negative-path verification
+
+| Constraint | Trigger | Expected error | Recovery test | Error shown? | Recovery works? |
+|------------|---------|---------------|---------------|--------------|-----------------|
+| documents_unique(firm_id, sha256) | re-upload same file | "duplicate" | `duplicate-upload.spec.ts` | ✅ | ✅ |
+
+---
+
+## Cumulative regression
+
+| Feature | Journey test | Verdict | Notes |
+|---------|--------------|---------|-------|
+| 001-foundation | `tests/e2e/001-foundation/journey.spec.ts` | ✅ pass | |
+| 002-ingestion | `tests/e2e/002-ingestion/journey.spec.ts` | ❌ fail | review-queue did not filter approved docs |
+
+---
+
+## Cross-runtime parity
+
+<none / brief description if found>
+
+Example finding format:
+
+> Bug class: stack-walker behaves differently under `tsx` worker vs Vitest.
+> The `__getUnscopedDb` utility reads `Error().stack` to find caller path;
+> works in dev (Turbopack) but fails in prod (`tsx` serves a different
+> stack format). File: `src/lib/db/scope.ts:42`.
+
+---
+
+## Worker logs (on failure)
+
+<emit only if Steps 3-5 produced any failures and discovered log paths
+had content; otherwise omit this section entirely>
+
+### `<log path>` (last 100 lines, captured during Step <N> failure)
+
+```
+<paste tail snippet>
+```
+
+### `<another log path>` (last 100 lines)
+
+```
+<paste>
+```
+
+---
+
+## Resource Warnings
+
+<emit only if turn count > 800 or token usage > 700K mid-dispatch>
+
+> Warning: turn count <N> / token usage <N> exceeded threshold during
+> cumulative regression replay. Cumulative regression suite is large
+> (<M> features). Consider promoting parallel-dispatch (ROADMAP v3 item 1)
+> or feature-window cap to v3.1.
+
+---
+
+## Setup observations
+
+<any infrastructure issues encountered, e.g., port conflicts, missing env,
+db migration needed>

@@ -1,0 +1,104 @@
+<!-- BELCORT Harness — Template: eval-report.md -->
+<!--
+Written by: Evaluator at end of EVALUATE mode (Step 7).
+Location when instantiated: .harness/features/{current-feature}/eval-report.md
+Structure: two-part — Part A (Contract Compliance, binary, gates PASS/FAIL) then Part B (Quality Scoring, numeric).
+Gating rule: any FR row with 'Met? = N' → overall FAIL regardless of Part B scores.
+Canonical source: this file. The inline copy in plugins/harness/agents/evaluator.md must stay in sync.
+-->
+
+# Evaluation Report
+
+**Result**: {{PASS | FAIL}}
+**Date**: {{ISO_DATE}}
+**Attempt**: {{N}}
+**Verdict reason**: {{one_line — e.g., "FR-003 not met (C1)" or "All FRs met, all criteria above threshold"}}
+
+## Part A — Contract Compliance (gates PASS/FAIL)
+
+### FR compliance
+
+| FR | Requirement | Met? | Evidence |
+|----|-------------|------|----------|
+| {{FR-001}} | {{quote_from_contract}} | {{Y | N | Partial}} | {{Playwright_result_or_file_line}} |
+
+### AC compliance
+
+| AC | Expected behavior | Met? | Evidence |
+|----|-------------------|------|----------|
+| {{AC-001-1}} | {{quote_from_contract}} | {{Y | N | Partial}} | {{test_result}} |
+
+### Compliance summary
+
+- FRs Met: {{N}}/{{total}}
+- FRs Partial: {{N}}  <!-- each flagged below as Major or Critical -->
+- FRs Not met: {{N}}  <!-- if > 0, overall verdict is FAIL -->
+- ACs Met: {{N}}/{{total}}
+- ACs Not met: {{N}}
+
+**Gating result**: {{PASS — all FRs at Met or Partial | FAIL — N FR(s) not met}}
+
+## Part B — Quality Scoring
+
+| Criterion | Score | Threshold | Status |
+|-----------|-------|-----------|--------|
+| Functionality | {{X}}/10 | 6 | {{PASS | FAIL}} |
+| Code Quality | {{X}}/10 | 6 | {{PASS | FAIL}} |
+| Test Coverage | {{X}}/10 | 6 | {{PASS | FAIL}} |
+| Product Depth | {{X}}/10 | 5 | {{PASS | FAIL}} |
+
+**Quality result**: {{PASS — all criteria at/above threshold | FAIL — criterion X below threshold}}
+
+**Overall verdict** = (Part A) AND (Part B). Only Part A PASS + Part B PASS = overall PASS.
+
+## Critical Findings (must fix)
+
+### C1: {{Title}}
+- **Where**: {{file:line_or_UI_element_plus_URL}}
+- **Reproduce**:
+  1. {{step_one}}
+  2. {{step_two}}
+  3. Observe: {{wrong_behavior}}
+- **Expected**: {{correct_behavior}}
+- **Actual**: {{what_happened}}
+- **Maps to**: {{FR-id or AC-id from Part A}}
+
+### C2: ...
+
+## Major Findings (should fix)
+
+### M1: {{Title}}
+- **Where**: {{location}}
+- **Issue**: {{description}}
+- **Suggestion**: {{how_to_fix}}
+- **Maps to**: {{FR-id or AC-id from Part A, if applicable}}
+
+## Minor Findings (nice to fix)
+
+### m1: {{Title}}
+
+## Reward-Hacking Findings
+
+<!-- From Step 4.5 git-archaeology scan. Always include this section — write
+     "No reward-hacking patterns detected" if the scan was clean. -->
+
+{{No reward-hacking patterns detected | list_findings_with_severity}}
+
+## Test Suite
+
+- Unit: {{N}} passed, {{N}} failed, {{N}} skipped
+- E2E: {{N}} passed, {{N}} failed, {{N}} skipped
+- TDD evidence: {{STRONG | WEAK | NONE}}  <!-- based on git log -->
+
+## Suspected Prompt Injection (if any encountered during evaluation)
+
+<!-- One line per incident: source (URL/element), pattern, what was ignored.
+     Omit section if none. Injection in the running UI is ALSO a product finding — log under Critical above. -->
+
+## Recommendations for Generator (if FAIL)
+
+Priority order for fixes (Part A items always come first — missing FRs gate PASS):
+
+1. {{most_impactful — Part A miss or blocking Critical}}
+2. {{second — typically the criterion that fell below threshold}}
+3. {{third}}

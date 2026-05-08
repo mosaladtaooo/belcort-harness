@@ -1,0 +1,36 @@
+# Evaluator Notes — Project-Specific Calibration
+
+Project-specific guidance for the Evaluator. NOT generic QA patterns (those live in `.harness/evaluator/examples.md`) — only notes that apply specifically to THIS project.
+
+## When to use this file
+
+Add entries here when:
+- A domain-specific acceptance bar differs from generic defaults
+- A terminology choice in the PRD needs specific Evaluator interpretation
+- The product has unusual UX patterns that shouldn't be penalized as "inconsistent"
+- A specific non-obvious behavior must be preserved (e.g., a legacy contract with a client)
+
+Do NOT use this file for:
+- Generic scoring calibration → that goes in `.harness/evaluator/examples.md`
+- One-off eval bugs → those get logged in `tuning-log.md`
+- Changes to scoring criteria themselves → those modify `.harness/evaluator/criteria.md`
+
+## How the Evaluator uses this file
+
+The Evaluator reads this file in EVALUATE mode alongside `examples.md`. Project-specific notes override generic examples when both apply to the same situation.
+
+---
+
+## Project-Specific Calibration Notes
+
+<!-- Template for each note:
+
+### Note NNN — [Short title]
+**Applies to**: [Functionality / Code Quality / Test Coverage / Product Depth / Cross-cutting]
+**Context**: [why this matters for THIS project specifically]
+**Guidance**: [how the Evaluator should adjust its judgment]
+**Reference**: [link to PRD section, ADR, or decision that drove this]
+
+-->
+
+_No notes yet._

@@ -1,0 +1,114 @@
+<!-- BELCORT Harness — Template: contract.md (final, negotiated) -->
+<!--
+Written by: Generator in FINALIZE-CONTRACT mode after negotiation converges.
+Location when instantiated: .harness/features/{current-feature}/contract.md
+Purpose: The canonical source-of-truth that BUILD and EVALUATE phases operate against.
+Gating marker: must contain '**Negotiated**:' line — Evaluator checks for this in Step 1 setup.
+Canonical source: this file. Generator FINALIZE-CONTRACT references it by path (no inline duplication; v2.1.3+).
+-->
+
+# Build Contract — Final (Negotiated)
+
+**Negotiated**: {{ISO_DATE}}
+**Rounds**: {{N}}
+**Agreement**: Generator proposal + Evaluator review
+
+## Scope
+{{from_original_draft — FRs_in_this_build}}
+
+## Component/Module Breakdown
+{{from_proposal_md}}
+
+## Directory Structure
+```
+{{from_proposal_md}}
+```
+
+## Data Model
+{{from_proposal_md_updated_if_review_requested}}
+
+## API Surface
+{{from_proposal_md_updated_if_review_requested}}
+
+## FR → Implementation Mapping
+{{from_proposal_md}}
+
+## Deliverables
+
+### D1: [{{FR-001}}] {{Description}}
+- {{AC-001-1}}: {{original_from_draft}}
+- {{AC-001-2}}: {{original_from_draft}}
+- {{AC-001-3}}: {{NEW — added by Evaluator review}}
+- {{EC-001-1}}: {{original}}
+
+### D2: ...
+
+### Rule: UI-surface AC for state-mutating FRs (v3.0+)
+
+**For any FR that mutates a `status` / `state` / `phase` field on any entity:**
+A UI-surface AC is REQUIRED. Format:
+
+- AC-NNN-ui: User can see <field-value-transformation> on `<route>` via
+  selector `<selector>`. Asserted by Playwright test
+  `tests/e2e/<NNN-feature-name>/journey.spec.ts > test('<name>')`.
+
+Required components: route, DOM selector, value transformation, test name.
+
+Heuristic: user-observable lifecycle stages need UI surface; internal/admin-only
+stages don't. If unsure, declare the AC; if the user really shouldn't see it,
+the Planner adds a `## UI-Surface Excluded` note with rationale below the FR.
+
+## Test Criteria (flat list for Evaluator in EVALUATE mode)
+- [ ] {{AC-001-1}}
+- [ ] {{AC-001-2}}
+- [ ] {{AC-001-3}}  <!-- new from review -->
+
+## Build Order
+{{from_proposal_md — technical_order}}
+1. {{most_dependency_free_first}}
+2. ...
+
+## NFRs to Verify
+{{from_original_draft}}
+
+## State-Transition ACs
+
+For every state field in the data model that this feature mutates, list each
+transition and its corresponding observable Playwright test. Planner Pass 2
+populates `Entity.Field` / `From` / `To` / `Triggered by` from architecture's
+data model; Generator NEGOTIATE populates `Playwright test name`; Evaluator
+REVIEW-PROPOSAL Step 5 rejects `agreed` if any row blank; SIMULATE Step 3
+drives each row; Evaluator Part A refuses Met without one passing named test
+per row.
+
+| Entity.Field | From | To | Triggered by | Playwright test name |
+|--------------|------|-----|--------------|----------------------|
+<!-- Example row — DELETE before delivery; replace with one row per state transition this feature triggers. -->
+| <example: documents.status> | received | extracting | worker pickup | `tests/e2e/<NNN-feature-name>/journey.spec.ts > test('worker picks up doc')` |
+
+If this feature mutates no state fields, write: `_None — this feature does
+not mutate any state field._` and explain why in one line.
+
+## Negative-Path Coverage
+
+For each unique constraint, foreign-key constraint, or check constraint in
+the data model that this feature exercises. Same ownership pattern: Planner
+populates `Constraint` / `Trigger scenario` / `Expected error`; Generator
+NEGOTIATE populates `Recovery test`; SIMULATE Step 4 drives + verifies
+recovery; Evaluator Part A gates on test presence + passing.
+
+| Constraint | Trigger scenario | Expected error | Recovery test |
+|------------|------------------|----------------|---------------|
+<!-- Example row — DELETE before delivery; replace with one row per constraint this feature exercises. -->
+| <example: documents_unique(firm_id, sha256)> | re-upload same file | "duplicate document" | `tests/e2e/<NNN-feature-name>/journey.spec.ts > test('duplicate upload recovers')` |
+
+If this feature exercises no constraints, write: `_None — this feature
+does not interact with any constraints._` and explain why.
+
+## Definition of Done
+- All ACs pass via Playwright (in EVALUATE mode)
+- All unit tests pass
+- E2E tests cover all UJs in scope
+- No lint errors
+- Constitution followed
+- TDD evidence in git log

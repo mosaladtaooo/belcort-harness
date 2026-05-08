@@ -1,0 +1,10 @@
+# BELCORT Harness Engine — DEPRECATED global snippet
+
+**Notice (v2.0.0+):** BELCORT Harness rules are now installed PROJECT-LOCAL into each project's `./CLAUDE.md` via `/harness:setup`. The global `~/.claude/CLAUDE.md` block this snippet was installed into is no longer used by the harness.
+
+**To migrate from v1.x:**
+1. Run `scripts/uninstall-rules.sh` once to remove this block from `~/.claude/CLAUDE.md`.
+2. In each harness project, run `/harness:setup` to install the project-local `./CLAUDE.md`.
+3. Done — activation rules now live only where they're relevant.
+
+See: `plugins/harness/templates/CLAUDE.md.project.txt` for the new project-local snippet.

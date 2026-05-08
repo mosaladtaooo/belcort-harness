@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+# .harness/init.sh — Project health check
+#
+# Runs at the start of /harness:resume Step 3 and any time you want to verify
+# the project is in a workable state. Generic baseline below; the Planner is
+# expected to customise this for THIS project's stack during Pass 2 (e.g.,
+# replace `npm` with `pnpm`/`yarn`/`bun`, add framework-specific smoke tests,
+# or skip blocks that don't apply).
+#
+# Exit codes:
+#   0 — project is healthy, harness can proceed
+#   1 — one or more health checks failed; fix before continuing
+#   2 — script error (unreadable config, missing tool that should be checked
+#       by /harness:doctor first)
+#
+# Usage:
+#   bash .harness/init.sh         — full check
+#   bash .harness/init.sh --quick — skip slow checks (smoke test, e2e)
+#   bash .harness/init.sh --json  — machine-readable output
+
+set -u
+
+MODE="full"
+for arg in "$@"; do
+  case "$arg" in
+    --quick) MODE="quick" ;;
+    --json)  MODE="json"  ;;
+  esac
+done
+
+FAIL_COUNT=0
+WARN_COUNT=0
+REPORT=""
+
+add() {
+  local status="$1" name="$2" detail="$3"
+  REPORT+=$'\n'"  [$status] $name"
+  [ -n "$detail" ] && REPORT+=$'\n'"        $detail"
+  case "$status" in
+    FAIL) FAIL_COUNT=$((FAIL_COUNT + 1)) ;;
+    WARN) WARN_COUNT=$((WARN_COUNT + 1)) ;;
+  esac
+}
+
+# Optional: seed test user for SIMULATE auth-gated flows (v3.0+)
+# Reads TEST_USER_EMAIL / TEST_USER_PASSWORD from .env.local
+# Project author customizes the body for their stack (Drizzle migration,
+# Clerk admin API call, raw SQL, etc.)
+seed_test_user() {
+  if [ -z "${TEST_USER_EMAIL:-}" ] || [ -z "${TEST_USER_PASSWORD:-}" ]; then
+    echo "  [seed_test_user] skipped — TEST_USER_EMAIL or TEST_USER_PASSWORD not set in .env.local"
+    return 0
+  fi
+
+  echo "  [seed_test_user] seeding ${TEST_USER_EMAIL}..."
+  # CUSTOMIZE: replace this block with your project's seeding logic.
+  # Example for a Postgres-backed app with Drizzle:
+  #   psql "${DATABASE_URL}" -c "INSERT INTO users (email, password_hash) VALUES ('${TEST_USER_EMAIL}', crypt('${TEST_USER_PASSWORD}', gen_salt('bf'))) ON CONFLICT (email) DO NOTHING;"
+  # Example for Clerk:
+  #   curl -X POST https://api.clerk.com/v1/users \
+  #     -H "Authorization: Bearer ${CLERK_SECRET_KEY}" \
+  #     -d "{\"email_address\": [\"${TEST_USER_EMAIL}\"], \"password\": \"${TEST_USER_PASSWORD}\"}"
+  # If your project doesn't have auth, leave this body as a no-op echo.
+  echo "  [seed_test_user] DONE (replace this with your project's seeding logic)"
+}
+
+# ─────────────────────────────────────────────────────────────
+# Baseline checks (apply to almost any project)
+# ─────────────────────────────────────────────────────────────
+
+# Inside a git repo? (harness uses worktrees + atomic commits)
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if [ -z "$(git status --porcelain 2>/dev/null)" ]; then
+    add PASS "git working tree clean" ""
+  else
+    add WARN "git working tree clean" "uncommitted changes present"
+  fi
+else
+  add WARN "git repository" "not a git repo — worktrees disabled"
+fi
+
+# Node.js version (≥20 — MCP servers require modern Node)
+if command -v node >/dev/null 2>&1; then
+  NODE_MAJOR=$(node --version | sed 's/v//' | cut -d. -f1)
+  if [ "${NODE_MAJOR:-0}" -ge 20 ]; then
+    add PASS "Node.js ≥ 20" "$(node --version)"
+  else
+    add FAIL "Node.js ≥ 20" "found $(node --version) — upgrade required"
+  fi
+else
+  add WARN "Node.js" "not installed (skip if your stack doesn't need it)"
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Stack-specific checks (Planner customises for THIS project)
+# ─────────────────────────────────────────────────────────────
+
+# Dependencies installed?
+if [ -f "package.json" ]; then
+  if [ -d "node_modules" ]; then
+    add PASS "node_modules present" ""
+  else
+    add FAIL "node_modules missing" "run: npm install (or pnpm/yarn/bun)"
+  fi
+fi
+
+if [ -f "pyproject.toml" ] || [ -f "requirements.txt" ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    add PASS "Python toolchain" "$(python3 --version)"
+  else
+    add FAIL "Python 3" "not installed"
+  fi
+fi
+
+# Lint
+if [ -f "package.json" ] && command -v node >/dev/null 2>&1; then
+  if grep -q '"lint"' package.json 2>/dev/null; then
+    if [ "$MODE" != "quick" ]; then
+      LINT_OUT=$(npm run --silent lint 2>&1)
+      LINT_RC=$?
+      if [ "$LINT_RC" -eq 0 ]; then
+        add PASS "lint" "0 errors"
+      else
+        add FAIL "lint" "$(printf '%s' "$LINT_OUT" | tail -3 | tr '\n' ' ')"
+      fi
+    else
+      add WARN "lint" "skipped (--quick)"
+    fi
+  fi
+fi
+
+# Unit tests
+if [ -f "package.json" ] && command -v node >/dev/null 2>&1; then
+  if grep -qE '"(test|test:unit)"' package.json 2>/dev/null; then
+    if [ "$MODE" != "quick" ]; then
+      TEST_OUT=$(npm test --silent 2>&1)
+      TEST_RC=$?
+      if [ "$TEST_RC" -eq 0 ]; then
+        add PASS "unit tests" "passing"
+      else
+        add FAIL "unit tests" "$(printf '%s' "$TEST_OUT" | tail -5 | tr '\n' ' ')"
+      fi
+    else
+      add WARN "unit tests" "skipped (--quick)"
+    fi
+  fi
+fi
+
+# Type check (if TypeScript)
+if [ -f "tsconfig.json" ] && command -v npx >/dev/null 2>&1; then
+  if [ "$MODE" != "quick" ]; then
+    TC_OUT=$(npx --no-install tsc --noEmit 2>&1)
+    TC_RC=$?
+    if [ "$TC_RC" -eq 0 ]; then
+      add PASS "TypeScript check" "no errors"
+    else
+      ERR_LINES=$(printf '%s' "$TC_OUT" | grep -cE 'error TS' || echo 0)
+      add FAIL "TypeScript check" "$ERR_LINES type errors"
+    fi
+  else
+    add WARN "TypeScript check" "skipped (--quick)"
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Test-user seed (v3.0+ — for SIMULATE auth-gated flows)
+# ─────────────────────────────────────────────────────────────
+# Run AFTER any DB migrations/baseline checks above, BEFORE the smoke test
+# that exercises the running app. The function body is a project-customizable
+# stub (see seed_test_user() definition above).
+
+seed_test_user
+
+# ─────────────────────────────────────────────────────────────
+# Optional smoke test (Planner replaces with project-specific check)
+# ─────────────────────────────────────────────────────────────
+# Replace this block with your project's smoke test. Examples:
+#   - HTTP server: curl localhost:3000/health
+#   - CLI tool:    your-cli --version
+#   - Library:     node -e "require('./dist').smoke()"
+
+# (No default — Planner adds for THIS project)
+
+# ─────────────────────────────────────────────────────────────
+# Output
+# ─────────────────────────────────────────────────────────────
+
+EXIT_CODE=0
+[ "$FAIL_COUNT" -gt 0 ] && EXIT_CODE=1
+
+if [ "$MODE" = "json" ]; then
+  printf '{\n  "fail_count": %d,\n  "warn_count": %d,\n  "exit_code": %d\n}\n' \
+    "$FAIL_COUNT" "$WARN_COUNT" "$EXIT_CODE"
+  exit "$EXIT_CODE"
+fi
+
+echo "═══════════════════════════════════════════════"
+echo "  .harness/init.sh — Project Health Check"
+echo "═══════════════════════════════════════════════"
+printf '%s\n' "$REPORT"
+echo ""
+echo "───────────────────────────────────────────────"
+if [ "$FAIL_COUNT" -eq 0 ] && [ "$WARN_COUNT" -eq 0 ]; then
+  echo "  ✓ Project is healthy."
+elif [ "$FAIL_COUNT" -eq 0 ]; then
+  echo "  ✓ Critical checks passed ($WARN_COUNT warning(s) — see above)."
+else
+  echo "  ✗ $FAIL_COUNT check(s) failed — fix before resuming the harness."
+fi
+echo "───────────────────────────────────────────────"
+
+exit "$EXIT_CODE"
