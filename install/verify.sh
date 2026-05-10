@@ -1,6 +1,7 @@
 #!/bin/bash
-# BELCORT Harness — Installation Verifier
-# Checks that all required files are in place.
+# BELCORT Harness — Legacy Installation Verifier
+# Checks the deprecated shell-install layout. Plugin installs should use
+# /harness:doctor instead.
 
 CLAUDE_DIR="${HOME}/.claude"
 ERRORS=0
@@ -31,8 +32,11 @@ check_executable() {
 }
 
 echo "══════════════════════════════════════════"
-echo "  BELCORT Harness — Verification"
+echo "  BELCORT Harness — Legacy Verification"
 echo "══════════════════════════════════════════"
+echo "This verifier is for the deprecated shell installer."
+echo "Plugin users should run /harness:doctor from Claude Code."
+echo ""
 echo ""
 
 echo "Skill:"

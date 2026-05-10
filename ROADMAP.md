@@ -20,6 +20,7 @@ See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 | Version | Date | Summary |
 |---|---|---|
+| 3.1.1 | 2026-05-10 | Monitor integration — real-time worker readiness/failure streams in SIMULATE + Evaluator worker-side forensics |
 | 3.1.0 | 2026-05-08 | Verification augmentation — worker readiness signal + axe-core a11y + code-reviewer integration + Stryker mutation + fast-check property + MADR ADR matrix + size-limit budget + refactor pattern stub |
 | 3.0.0 | 2026-05-07 | Runtime-verification phase + audit pass — Generator SIMULATE mode + contract template tightening + Evaluator Step 2 lightening + audit polish |
 | 2.2.0 | 2026-04-28 | Stale-assumption pruning + operational hardening — story files removed, `/harness:negotiate` standalone removed, Planner mode collapse (6 → 3), pause snapshot, 1M-context banner |
@@ -36,16 +37,13 @@ See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 | 2.0.0 | 2026-04-21 | Minimalist refactor — Planner → Generator → Evaluator pipeline rewrite |
 | 1.5.x | (prior) | Prior stable; see git tags |
 
-## v3.0.0 — Shipped 2026-05-07
+## v3.1.1 — Shipped 2026-05-10
 
-- Generator gains MODE: SIMULATE (drives prod build + worker + Playwright + DB queries before Evaluator handoff)
-- Cumulative regression replay across all shipped features (per-feature `tests/e2e/<NNN>/journey.spec.ts`)
-- Contract template gains State-Transition AC + Negative-Path Coverage + UI-surface AC sections
-- Catch-block ban as new constitution MUST principle (canonical baseline; existing projects opt-in via /constitution-amend)
-- Evaluator EVALUATE Step 2 lightens (reads simulation-report.md as authoritative; Step 2a + Step 2b spot-check)
-- Planner Pass 2 brainstorming pass over user-journey ACs (closes Bug #8 class at spec time)
-- Audit polish (Phase 2): factor HANDLING FETCHED CONTENT preamble into SKILL.md; downgrade pre-tool-use.sh test-deletion hard-block to advisory; remove ~16 lines of dead manifest fields
-- Self-validation grew 16 → 18 points in Planner Pass 2 (V17 + V18)
+- Monitor preferred path in SIMULATE Step 2.6 for real-time worker readiness + failure detection.
+- Bash polling fallback preserved for environments where Monitor cannot be loaded.
+- Optional parallel Monitor stream during SIMULATE Steps 3-5 Playwright driving.
+- Evaluator Step 2b can stream the worker log path recorded by SIMULATE and attach captured stack traces to eval-report findings.
+- `simulation-report.md` surfaces real-time captures separately from post-hoc tail output.
 
 ## v3.1.0 — Shipped 2026-05-08
 
@@ -60,6 +58,17 @@ See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 - 8 new docs/anthropic-alignment.md decision-map rows
 - 7 v3.2 deferrals tracked with explicit "When to revisit" conditions
 
+## v3.0.0 — Shipped 2026-05-07
+
+- Generator gains MODE: SIMULATE (drives prod build + worker + Playwright + DB queries before Evaluator handoff)
+- Cumulative regression replay across all shipped features (per-feature `tests/e2e/<NNN>/journey.spec.ts`)
+- Contract template gains State-Transition AC + Negative-Path Coverage + UI-surface AC sections
+- Catch-block ban as new constitution MUST principle (canonical baseline; existing projects opt-in via /constitution-amend)
+- Evaluator EVALUATE Step 2 lightens (reads simulation-report.md as authoritative; Step 2a + Step 2b spot-check)
+- Planner Pass 2 brainstorming pass over user-journey ACs (closes Bug #8 class at spec time)
+- Audit polish (Phase 2): factor HANDLING FETCHED CONTENT preamble into SKILL.md; downgrade pre-tool-use.sh test-deletion hard-block to advisory; remove ~16 lines of dead manifest fields
+- Self-validation grew 16 → 18 points in Planner Pass 2 (V17 + V18)
+
 ## v2.2.0 — Shipped 2026-04-28
 
 - Per-FR story files removed (stale BMAD-V6 assumption on Opus 4.7[1m])
@@ -71,7 +80,7 @@ See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 ## In Progress
 
-_(Nothing active — v2-beta is in live-stress-test observation before merge to main.)_
+_(Nothing active — `main` is at v3.1.1; future work remains in the watch list below.)_
 
 ---
 

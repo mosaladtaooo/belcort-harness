@@ -4,7 +4,7 @@
 # This script is kept for backwards compatibility with installs predating the
 # Claude Code plugin system. New users should install via the plugin instead:
 #
-#   /plugin marketplace add mosaladtaooo/belcort-harness
+#   /plugin marketplace add https://github.com/mosaladtaooo/belcort-harness.git
 #   /plugin install harness@belcort-harness
 #   /harness:setup
 #
@@ -18,7 +18,7 @@ echo ""
 echo "⚠️  DEPRECATION NOTICE"
 echo "──────────────────────"
 echo "The shell installer is deprecated. Prefer the plugin install:"
-echo "  /plugin marketplace add mosaladtaooo/belcort-harness"
+echo "  /plugin marketplace add https://github.com/mosaladtaooo/belcort-harness.git"
 echo "  /plugin install harness@belcort-harness"
 echo "  /harness:setup"
 echo ""

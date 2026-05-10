@@ -47,7 +47,7 @@ Exit codes:
 ## What it checks
 
 **CRITICAL** (blocks pipeline):
-- `claude` CLI on PATH (used by all subagent dispatches)
+- `claude` CLI on PATH (required for Claude Code plugin/MCP management and legacy recovery workflows)
 - `git` on PATH (atomic commits + worktrees)
 - Node ≥ 20 (MCP servers require modern Node)
 - `npx` on PATH (launches MCP servers)
@@ -55,39 +55,13 @@ Exit codes:
 - `context7` MCP registered (Planner + Generator use for live docs)
 - `playwright` MCP registered (Evaluator uses for browser-driven QA — **this is the one that burned us last time**)
 - Harness plugin present (SKILL.md findable)
-- Global harness rules installed in `~/.claude/CLAUDE.md`
+- Project-local `./CLAUDE.md` activation block present when `.harness/` exists
 - Project directory writable (so `.harness/` can be created)
 
 **RECOMMENDED** (warns, doesn't block):
 - Git working tree clean
 - Inside a git repository
+- `superpowers` plugin (soft-required for Generator TDD support and Evaluator Step 3a code-reviewer integration)
 - `frontend-design`, `security-guidance`, `agentlint` plugins
-
-`````markdown
-**superpowers plugin (v3.1+ — soft-required for Evaluator Step 3a)**
-
-Check whether `superpowers` plugin is installed:
-
-```bash
-ls ~/.claude/plugins/cache/claude-plugins-official/superpowers/ 2>/dev/null
-```
-
-- If installed: print `superpowers detected (Evaluator Step 3a will dispatch code-reviewer)`.
-- If missing: print MAJOR warning:
-
-```
-⚠️  MAJOR: superpowers plugin not installed.
-
-  Evaluator Step 3a (v3.1+ code-reviewer integration) will be skipped.
-  This is a soft requirement — the harness still functions without it,
-  falling back to v3.0's Step 3 (manual review + grep scans only).
-
-  To install:
-    /plugin install superpowers@claude-plugins-official
-```
-
-Do NOT block sprint dispatch on missing superpowers (soft-required, not
-hard-required). Doctor exits 0; warning is informational.
-`````
 
 Every failure prints the exact install command to copy-paste. No googling.

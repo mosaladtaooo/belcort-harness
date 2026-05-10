@@ -76,7 +76,7 @@ if command -v claude >/dev/null 2>&1; then
   add_result "CRITICAL" "PASS" "Claude Code CLI" "version: ${CC_VER:-unknown}"
 else
   add_result "CRITICAL" "FAIL" "Claude Code CLI" \
-    "\`claude\` not on PATH — harness dispatches subagents via \`claude -p\`" \
+    "\`claude\` not on PATH — required for Claude Code plugin/MCP management and legacy recovery workflows" \
     "Install Claude Code: https://claude.com/claude-code"
 fi
 
@@ -212,7 +212,7 @@ if [ -n "$PLUGIN_FOUND" ]; then
 else
   add_result "CRITICAL" "FAIL" "Harness plugin" \
     "SKILL.md not found under CLAUDE_PLUGIN_ROOT, ~/.claude/skills, or ~/.claude/plugins/*" \
-    "/plugin marketplace add mosaladtaooo/belcort-harness && /plugin install harness@belcort-harness"
+    "/plugin marketplace add https://github.com/mosaladtaooo/belcort-harness.git && /plugin install harness@belcort-harness"
 fi
 
 # Project-local CLAUDE.md check (v2+): verify ./CLAUDE.md has a BELCORT-HARNESS block
