@@ -826,30 +826,59 @@ Then:
    PIDs from 2.3 and 2.4, write `## Infrastructure failure` to
    simulation-report.md with verdict NEEDS-REPAIR, exit.
 
-**Sub-step 2.6: Worker readiness signal (v3.1+)**
+````markdown
+**Sub-step 2.6: Worker readiness signal (v3.1.1+ — Monitor preferred)**
 
 If a worker process exists (`pnpm worker` started in 2.4) AND
 architecture.md or proposal.md declares `worker_ready_pattern`, wait
-for the positive readiness signal via Bash `run_in_background: true`:
+for the positive readiness signal.
 
-```bash
-timeout 30 bash -c 'until grep -q "<pattern>" logs/worker.log; do sleep 0.5; done'
-```
+**Preferred path: Monitor-based real-time streaming (v3.1.1+)**
 
-Substitute `<pattern>` with the declared pattern (e.g., `^WORKER:READY$`).
+Step (a): Load Monitor's schema in this subagent's context (deferred tool):
 
-On match: proceed to Step 3 — and REMOVE the worker-readiness retry policy
-from Step 3 (the worker is already warm; retrying masks real bugs per
-the existing rule for non-worker rows).
+    ToolSearch query: "select:Monitor"
 
-On 30s timeout: kill captured PIDs from sub-steps 2.3 and 2.4, write
-`## Infrastructure failure: worker readiness timeout` to
-simulation-report.md with verdict NEEDS-REPAIR, exit.
+Step (b): Invoke Monitor with combined ready + failure pattern matching:
 
-If no `worker_ready_pattern` declared, use the convention-only fallback:
-match any of the canonical patterns from SKILL.md § Worker Readiness
-Patterns. If none match within 30s, fall back to v3.0's polling behavior
-(non-failure — the worker may simply be a silent-idle pattern).
+    Monitor command: tail -F logs/worker.log | grep --line-buffered -E "<worker_ready_pattern>|^ERROR|^FATAL|panic:|Traceback"
+    description: "watch worker stdout for readiness + early failures"
+    persistent: false
+    timeout_ms: 30000
+
+Substitute `<worker_ready_pattern>` with the declared pattern (e.g., `^WORKER:READY$`).
+
+Notifications arrive line-by-line as `<task-notification>` events:
+- If a notification matches the readiness pattern → proceed to Step 3
+  (and REMOVE the worker-readiness retry policy from Step 3 — the worker
+  is already warm)
+- If a notification matches ERROR/FATAL/panic/Traceback → kill captured PIDs
+  from sub-steps 2.3 and 2.4, write `## Infrastructure failure: worker
+  crashed during warmup` to simulation-report.md with the captured stack
+  trace as evidence, set verdict NEEDS-REPAIR, exit
+- On 30s timeout with no matching notification → kill captured PIDs, write
+  `## Infrastructure failure: worker readiness timeout (no ready signal
+  observed in 30s of stdout)` to simulation-report.md, set verdict
+  NEEDS-REPAIR, exit
+
+**Fallback path: Bash polling (when ToolSearch fails to load Monitor)**
+
+If `ToolSearch query: "select:Monitor"` returns "No matching deferred tools
+found" or otherwise fails to load Monitor (rare; documents subagent tool
+availability changing across Claude Code versions), fall back to v3.1.0's
+Bash polling:
+
+    timeout 30 bash -c 'until grep -q "<pattern>" logs/worker.log; do sleep 0.5; done'
+
+(Same on-timeout behavior: kill PIDs, write infrastructure failure, exit.)
+
+**Convention-only fallback (no `worker_ready_pattern` declared)**
+
+If neither Monitor nor declared pattern available, use the canonical
+patterns from SKILL.md § Worker Readiness Patterns. If none match within
+30s, fall back to v3.0's polling behavior (non-failure — the worker may
+simply be a silent-idle pattern).
+````
 
 #### Step 3: Drive State-Transition AC rows
 
@@ -933,6 +962,29 @@ section in Step 7. If a log file is empty or doesn't exist, skip it
 silently. If multiple logs have content, include all under sub-headings
 labeled with the path.
 
+**Real-time worker stream during driving (v3.1.1+, optional but recommended)**
+
+If Monitor was successfully loaded in Sub-step 2.6 (preferred path), keep
+a parallel Monitor stream alive during Step 3's Playwright driving:
+
+    Monitor command: tail -F logs/worker.log | grep --line-buffered -E "^ERROR|^FATAL|panic:|Traceback|UnhandledRejection"
+    description: "real-time worker stream during State-Transition driving"
+    persistent: true
+    timeout_ms: 600000  (10 min cap; SIMULATE Step 3 typically <5 min)
+
+If a notification arrives mid-Playwright-drive matching ERROR/FATAL/panic/Traceback:
+- Capture the surrounding context (the line + 5 lines after) into private notes
+- Mark the currently-driving State-Transition row's DB column as ❌ with
+  evidence "worker crashed during this transition: <captured stack trace>"
+- Continue driving subsequent rows (the worker may have restarted; if it
+  hasn't, subsequent rows will fail their own DB checks)
+- Surface all captured stack traces in simulation-report.md `## Worker logs
+  (real-time captures)` section in Step 7
+
+This complements (does not replace) the post-hoc tail-100 capture: real-time
+catches crashes during driving; tail-100 catches errors that didn't trigger
+the regex but were logged.
+
 #### Step 4: Drive Negative-Path Coverage rows
 
 Read `## Negative-Path Coverage` table. For each row:
@@ -954,6 +1006,29 @@ surface them in simulation-report.md's `## Worker logs (on failure)`
 section in Step 7. If a log file is empty or doesn't exist, skip it
 silently. If multiple logs have content, include all under sub-headings
 labeled with the path.
+
+**Real-time worker stream during driving (v3.1.1+, optional but recommended)**
+
+If Monitor was successfully loaded in Sub-step 2.6 (preferred path), keep
+a parallel Monitor stream alive during Step 4's Playwright driving:
+
+    Monitor command: tail -F logs/worker.log | grep --line-buffered -E "^ERROR|^FATAL|panic:|Traceback|UnhandledRejection"
+    description: "real-time worker stream during State-Transition driving"
+    persistent: true
+    timeout_ms: 600000  (10 min cap; SIMULATE Step 4 typically <5 min)
+
+If a notification arrives mid-Playwright-drive matching ERROR/FATAL/panic/Traceback:
+- Capture the surrounding context (the line + 5 lines after) into private notes
+- Mark the currently-driving State-Transition row's DB column as ❌ with
+  evidence "worker crashed during this transition: <captured stack trace>"
+- Continue driving subsequent rows (the worker may have restarted; if it
+  hasn't, subsequent rows will fail their own DB checks)
+- Surface all captured stack traces in simulation-report.md `## Worker logs
+  (real-time captures)` section in Step 7
+
+This complements (does not replace) the post-hoc tail-100 capture: real-time
+catches crashes during driving; tail-100 catches errors that didn't trigger
+the regex but were logged.
 
 #### Step 5: Cumulative regression replay
 
@@ -979,6 +1054,29 @@ surface them in simulation-report.md's `## Worker logs (on failure)`
 section in Step 7. If a log file is empty or doesn't exist, skip it
 silently. If multiple logs have content, include all under sub-headings
 labeled with the path.
+
+**Real-time worker stream during driving (v3.1.1+, optional but recommended)**
+
+If Monitor was successfully loaded in Sub-step 2.6 (preferred path), keep
+a parallel Monitor stream alive during Step 5's Playwright driving:
+
+    Monitor command: tail -F logs/worker.log | grep --line-buffered -E "^ERROR|^FATAL|panic:|Traceback|UnhandledRejection"
+    description: "real-time worker stream during State-Transition driving"
+    persistent: true
+    timeout_ms: 600000  (10 min cap; SIMULATE Step 5 typically <5 min)
+
+If a notification arrives mid-Playwright-drive matching ERROR/FATAL/panic/Traceback:
+- Capture the surrounding context (the line + 5 lines after) into private notes
+- Mark the currently-driving State-Transition row's DB column as ❌ with
+  evidence "worker crashed during this transition: <captured stack trace>"
+- Continue driving subsequent rows (the worker may have restarted; if it
+  hasn't, subsequent rows will fail their own DB checks)
+- Surface all captured stack traces in simulation-report.md `## Worker logs
+  (real-time captures)` section in Step 7
+
+This complements (does not replace) the post-hoc tail-100 capture: real-time
+catches crashes during driving; tail-100 catches errors that didn't trigger
+the regex but were logged.
 
 #### Step 6: Cross-runtime parity quick-check (5-min cap)
 
@@ -1046,6 +1144,27 @@ simulation-report.md titled `## Worker logs (on failure)`. Format:
 
 If no failures occurred OR no logs had content, omit this section
 entirely (it's optional in the simulation-report.md.txt template).
+
+**Real-time worker captures section (v3.1.1+).** If any Monitor-based
+real-time capture occurred in Steps 3-5 (v3.1.1+), surface them in
+simulation-report.md under a new top-level section:
+
+    ## Worker logs (real-time captures, v3.1.1+)
+
+    <emit only if real-time captures occurred during Step 3-5 driving>
+
+    ### Captured during Step <N> driving of <state-transition row>
+
+    ```
+    <captured stack trace + 5 lines after>
+    ```
+
+These are *real-time* captures (caught during driving) — distinct from the
+post-hoc `## Worker logs (on failure)` section which captures tail-100 from
+discovered log paths after a row was marked ❌.
+
+If no real-time captures occurred OR Monitor was not available, omit this
+section entirely.
 
 Verdict computation (mechanical — apply in order, return on first match):
 1. NEEDS-REPAIR if ANY per-FR row is ❌ Cannot-verify.

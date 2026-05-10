@@ -434,6 +434,42 @@ For cross-runtime parity findings: per simulation-report's classification
 
 This is the "did SIMULATE lie or miss?" check — NOT a re-run.
 
+**Pre-drive setup (v3.1.1+): parallel Monitor stream against worker log**
+
+Before driving, set up a real-time worker log stream so any worker-side
+crash that occurs during the spot-check is captured as forensic evidence
+(not just observed indirectly through UI errors).
+
+Step (a): Read the worker log path SIMULATE recorded in simulation-report.md
+(typically appears under `## Worker logs (on failure)` or
+`## Worker logs (real-time captures, v3.1.1+)`). If SIMULATE recorded NO
+worker log path (project has no worker process), skip Pre-drive setup
+entirely.
+
+Step (b): Load Monitor's schema in this subagent's context (deferred tool):
+
+    ToolSearch query: "select:Monitor"
+
+Step (c): Invoke Monitor with failure-pattern matching against the worker log:
+
+    Monitor command: tail -F <path-from-simulation-report> | grep --line-buffered -E "^ERROR|^FATAL|panic:|Traceback|UnhandledRejection"
+    description: "real-time worker stream during Evaluator spot-check"
+    persistent: true
+    timeout_ms: 900000  (15 min cap; matches Step 2b time-box)
+
+If `ToolSearch` cannot load Monitor (rare; documents subagent tool
+availability changing across Claude Code versions), proceed without the
+parallel stream — Evaluator's spot-check still works, just without
+real-time worker forensics. Note the absence in eval-report.md if a
+spot-check finding would have benefited from worker context.
+
+Notifications during the drive arrive line-by-line as `<task-notification>`
+events:
+- Capture the matching line + ~5 lines of context into private notes
+- Tag each capture with the State-Transition row OR ad-hoc spot-check action
+  that was in flight when the notification arrived
+- See "Record findings" below for surfacing rules
+
 Drive 1–2 of the most user-visible flows in the running app via Playwright
 MCP. The orchestrator started the app via `bash .harness/init.sh` (dev
 mode, lightweight) before dispatching you; SIMULATE already ran the prod
@@ -457,6 +493,19 @@ Record findings:
   appeared in /bookmarks list." A vague "alignment confirmed" without
   route + action + observed result is rubber-stamping; the tuning-log
   flags such patterns.
+- If real-time Monitor captured a worker stack trace during the spot-check
+  (v3.1.1+): append the captured trace + ~5 lines of context to
+  eval-report.md as worker-side evidence under the matching finding. Format:
+
+    **Worker-side evidence (real-time capture during spot-check):**
+    ```
+    <captured stack trace + 5 lines after>
+    ```
+
+  This applies whether the finding is a SIMULATE Gap (more common — Evaluator
+  found what SIMULATE missed) or a confirming spot-check (rarer — worker
+  emitted a non-fatal error that didn't break the UI flow but is worth
+  flagging as MAJOR for code quality follow-up).
 
 ### Step 3: Code Quality Review (v3.1+)
 

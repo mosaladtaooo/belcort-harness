@@ -6,6 +6,77 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## v3.1.1 — 2026-05-10 — Monitor integration (real-time worker log tailing)
+
+Closes ROADMAP item 11 (deferred from v3.1 pending empirical confirmation
+that Monitor was callable from plugin-declared subagents). Empirical test
+confirmed YES; shipping the integration as a patch.
+
+### Added
+
+- **SIMULATE Step 2.6 Monitor preferred path** — replaces v3.1.0's polling
+  with real-time Monitor streaming (combined readiness + failure regex).
+  Catches worker crashes during warmup (previously invisible until first
+  state-transition timeout). Bash polling preserved as fallback for
+  environments where ToolSearch can't load Monitor.
+- **SIMULATE Steps 3-5 parallel Monitor stream** — optional real-time
+  worker stdout monitoring during Playwright driving. Catches mid-drive
+  worker crashes immediately (vs v3.1.0's post-hoc tail-100 forensics).
+- **Evaluator Step 2b parallel Monitor stream** — for architectural consistency
+  with SIMULATE's parallel-stream pattern, Evaluator's 15-min spot-check now
+  starts a parallel Monitor stream against the worker log path SIMULATE
+  recorded in simulation-report.md. Real-time worker stack traces captured
+  during the spot-check are appended to eval-report.md findings as worker-side
+  evidence — upgrades "## Findings — SIMULATE Gap" entries from "UI broke"
+  to "UI broke + worker stack trace" (diagnostic-grade for Generator REPAIR).
+  Soft-fallback: if Monitor can't be loaded, spot-check still works without
+  real-time worker forensics; absence is noted in eval-report.md when relevant.
+- **simulation-report.md `## Worker logs (real-time captures, v3.1.1+)` section**
+  — surfaces real-time captures distinct from post-hoc tail-100 captures; also
+  serves as the worker log path source-of-truth that Evaluator Step 2b reads to
+  set up its own parallel Monitor stream.
+
+### Changed
+
+- **`skills/harness/SKILL.md` § Subagent Isolation Protocol** — fixed stale
+  pre-v2.1.1 doctrine ("Each frontmatter specifies `tools:` (default
+  allowlist)") to v2.1.1+ reality ("Each frontmatter omits `tools:`,
+  subagents inherit parent session's full tool set").
+
+### Closes
+
+- **ROADMAP item 11** (Real-time worker log tailing via Monitor tool) —
+  empirical confirmation + shipped implementation. v3.2 ROADMAP no longer
+  lists this item; renumbered or removed accordingly in next major release.
+
+### Migration
+
+- Existing v3.1.0 sprints continue to work unchanged (Bash polling fallback
+  preserved).
+- New sprints automatically use Monitor preferred path when ToolSearch can
+  load Monitor (currently always, per v3.1.1 empirical research).
+- No PRD / contract / manifest changes needed.
+
+### Operational notes
+
+- Monitor invocations from SIMULATE consume Anthropic API turns (each
+  notification = 1 turn). Generator's `maxTurns: 2000` budget accommodates
+  typical worker chatter; aggressive log filters (`^ERROR|^FATAL` only)
+  recommended over verbose patterns.
+- Monitor's auto-stop (excessive event volume) is the safety net against
+  runaway streams.
+
+### Spec / Plan / Research
+
+- Empirical research evidence: session `a9ded9c27131fe4e1` agent run
+  (2026-05-10) — full ToolSearch + Monitor invocation succeeded with 5/5
+  tick notifications.
+- No formal spec/plan files for this patch (small scope; CHANGELOG entry
+  is the spec equivalent).
+- Predecessor: v3.1.0 (verification augmentation).
+
+---
+
 ## v3.1.0 — 2026-05-08 — Verification augmentation
 
 Closes the highest-ROI gaps surfaced by post-v3.0 research. 8 additions across operational reliability, verification depth, planning rigor, and code-quality second-opinion. Anti-leniency framing preserved throughout.

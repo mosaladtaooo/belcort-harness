@@ -148,6 +148,15 @@ Deferred items with non-trivial value. Revisit when the "When to revisit" condit
 - **Why parked**: Public Anthropic docs don't confirm Monitor is callable from plugin-declared subagents. v2.1.1+ tool-inheritance SHOULD include Monitor, but unverified.
 - **When to revisit**: empirical sandbox test confirms Monitor invokes successfully from `harness:generator` subagent dispatched via Agent tool. OR: a real BELCORT project hits a worker crash that v3.1's post-hoc + readiness signal failed to surface root cause for.
 - **Context**: research-subagent finding 2026-05-08. v3.0 ROADMAP item 9 partial-closure preserved; this is the upgrade path.
+- *Update 2026-05-10 (v3.1.1):* CLOSED. Empirical research dispatched via
+  research subagent (session a9ded9c27131fe4e1) confirmed Monitor IS callable
+  from plugin-declared subagents. Shipped in v3.1.1 patch — SIMULATE Step 2.6
+  preferred path uses Monitor + ToolSearch `select:Monitor` for real-time
+  worker readiness + failure detection; Bash polling preserved as fallback.
+  Steps 3-5 gain optional parallel Monitor stream for real-time crash
+  detection during Playwright driving. Real-time captures surface in new
+  simulation-report.md `## Worker logs (real-time captures, v3.1.1+)` section.
+  Evaluator Step 2b also gains a parallel Monitor stream against the worker log path SIMULATE recorded — captured stack traces during the 15-min spot-check are appended to eval-report.md findings as worker-side evidence (upgrades SIMULATE Gap findings from "UI broke" to diagnostic-grade with stack context).
 
 ### 12. Parallel cumulative regression via fork-subagent (N2, deferred from v3.1)
 - **What**: SIMULATE Step 5 dispatches N parallel sub-SIMULATE Generators (one per shipped feature's regression replay) in a single Agent-tool message; main consolidates results.

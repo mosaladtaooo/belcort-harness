@@ -55,7 +55,7 @@ Subagents are dispatched via the **Agent tool** using plugin-declared `subagent_
 - `harness:generator` — Generator agent (NEGOTIATE, FINALIZE-CONTRACT, BUILD, SIMULATE modes)
 - `harness:evaluator` — Evaluator agent (REVIEW-PROPOSAL, EVALUATE, REVALIDATE modes)
 
-These are declared in `plugin.json` (`"agents": "./agents/"`) and resolve to the YAML-frontmatter-headed `.md` files in `agents/`. Each frontmatter specifies `tools:` (default allowlist) and `description:` (when Claude should use this agent).
+These are declared in `plugin.json` (`"agents": "./agents/"`) and resolve to the YAML-frontmatter-headed `.md` files in `agents/`. Each frontmatter omits `tools:`, so subagents inherit the parent session's full tool set per the v2.1.1+ convention (matches Anthropic's subagent docs default). Frontmatter declares `name`, `description` (when Claude should use this agent), `model`, `effort`, `permissionMode`, and `maxTurns`.
 
 Prior versions (≤2.0.0) used `claude -p` subprocess dispatch with `--append-system-prompt-file` + `--allowedTools` + `CLAUDE_SUBAGENT=1` env-var guard. v2.1.0 migrated to native Agent-tool dispatch, which provides the same fresh-context-window isolation without the subprocess overhead, env-var tricks, or stdout-parsing.
 
