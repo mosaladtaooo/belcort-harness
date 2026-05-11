@@ -46,8 +46,8 @@ confirmed YES; shipping the integration as a patch.
 ### Closes
 
 - **ROADMAP item 11** (Real-time worker log tailing via Monitor tool) —
-  empirical confirmation + shipped implementation. v3.2 ROADMAP no longer
-  lists this item; renumbered or removed accordingly in next major release.
+  empirical confirmation + shipped implementation. ROADMAP now marks this item
+  closed; it can be renumbered or removed in the next major roadmap cleanup.
 
 ### Migration
 
@@ -100,7 +100,6 @@ Closes the highest-ROI gaps surfaced by post-v3.0 research. 8 additions across o
 
 ### Deferred to v3.2 (with explicit "When to revisit" conditions in ROADMAP)
 
-- **Real-time worker log tailing via Monitor tool** (N1, A1). Pending empirical confirmation Monitor is callable from plugin-declared subagents.
 - **Parallel cumulative regression via fork-subagent** (N2, A5). Pending real project at N≥10 shipped features with documented serial regression pain.
 - **Visual regression** (N3, B3). Pending evidence Playwright font-rendering noise is manageable on BELCORT user projects.
 - **Cross-browser projects matrix** (N4, B5). Pending public-facing project demand.
@@ -248,7 +247,7 @@ Surfaced during live stress-test on BELCORT ACCOUNTING.
 Fixes:
 - **`agents/generator.md`** Phase 2 gains a "Secrets and environment files (v2.1.9+)" section above the numbered TDD rules. Explicit: Generator writes `.env.example` with obvious placeholders (`REPLACE_ME`, `<your-value>`); user writes `.env.local`. Forbids writing `pause-questions.md` for secret values (secrets must not enter conversation history).
 - **`templates/features/implementation-report.md.txt`** gains a `## Setup required (before Evaluator can run)` section. Generator populates with required files, env vars (with sources), other user steps, and the final `bash .harness/init.sh` command. If no setup needed, Generator writes "None — init.sh handles everything."
-- **`commands/sprint.md` Step 4 adds a "4a. Setup-required gate"** before Evaluator dispatch. Orchestrator reads the implementation-report's Setup section, checks required-file existence, and pauses for user completion if incomplete. Prevents false-FAIL Evaluator runs against apps that can't start because of missing env.
+- **`commands/sprint.md` adds a Setup-required gate** before SIMULATE/Evaluator dispatch. Orchestrator reads the implementation-report's Setup section, checks required-file existence, and pauses for user completion if incomplete. Prevents false verification failures against apps that can't start because of missing env.
 
 ### Why this fits Anthropic's GAN-isolation philosophy
 Secrets belong to the user's domain, not the agent's. The two-file convention makes the ownership boundary explicit: `.env.example` (agent-authored placeholder) lives in the agent's domain; `.env.local` (user-authored actual values) lives in the user's. The setup gate enforces the handoff: agent finishes building, user completes setup, evaluator tests the combined result. No role bleeds into another.

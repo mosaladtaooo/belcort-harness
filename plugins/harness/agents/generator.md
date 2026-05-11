@@ -776,7 +776,7 @@ Read inputs (per § Input). Verify these halt-gates:
 Then run `bash .harness/init.sh` to verify project health. If init.sh
 fails (env missing, build broken before SIMULATE even runs), emit CRITICAL
 halt and exit. The Evaluator will surface to user via the Setup-required
-gate (sprint.md Step 4a).
+gate (sprint.md Step 3.5).
 
 **Log path discovery (v3.0+).** Before driving Step 2, discover candidate
 log paths the project may write to. Build a list at minimum:

@@ -138,7 +138,7 @@ The harness writes `.env.example` placeholders + journey/fixture tests; **you** 
 **1. Production secrets** (per the v2.1.9+ two-file convention)
 - Generator writes `.env.example` with placeholders like `STRIPE_KEY=sk_test_REPLACE_ME`, `DATABASE_URL=postgresql://user:password@host:5432/db_REPLACE_ME`.
 - You copy it to `.env.local` (gitignored) and fill in real values.
-- The orchestrator's Setup-required gate (sprint.md Step 4a) pauses for you between BUILD and EVALUATE if `.env.local` is missing required keys.
+- The orchestrator's Setup-required gate (sprint.md Step 3.5) pauses for you before SIMULATE/EVALUATE if `.env.local` is missing required keys.
 
 **2. Test-account credentials** (v3.0+, for auth-gated apps)
 - Generator BUILD adds these to `.env.example` automatically when the project has any auth flow:
@@ -424,7 +424,7 @@ All paths are relative to your project root. The harness never touches files out
 
 ### `Validation errors: agents: Invalid input` during `/plugin install`
 
-You're on an older tag. v2.1.0+ uses the correct array format. Update: `/plugin marketplace remove belcort-harness && /plugin marketplace add https://github.com/mosaladtaooo/belcort-harness.git#v2-beta && /plugin install harness@belcort-harness`.
+You're on an older tag. v2.1.0+ uses the correct array format. Update to the current marketplace entry: `/plugin marketplace remove belcort-harness && /plugin marketplace add https://github.com/mosaladtaooo/belcort-harness.git && /plugin install harness@belcort-harness`.
 
 ### Safety rails (force-push block, sudo block, .harness/ deletion block) seem inactive on Windows
 
@@ -515,13 +515,13 @@ For full rationale behind every v2 change:
 - v2.1.6 — doc patch: replaced broken `.agentlint.toml` (never loaded — AgentLint reads `agentlint.yml`, not TOML) with proper `agentlint.yml`. `max-file-size` limit now set to 1500 globally since the rule supports only one `limit` option (verified in AgentLint source); rationale preserved as inline YAML comments.
 - v2.1.7 — explicit frontmatter tuning for max context + turns: all three agents declare `model: inherit`, `effort: max`, `permissionMode: default`, `maxTurns: 2000`. **Runtime pairing**: start Claude Code with `claude --model claude-opus-4-7[1m]` for the 1M context window; without this, `inherit` picks the default 200K Opus variant. See CHANGELOG for the full rationale including fields deliberately omitted.
 - v2.1.8 — closes the two-`.harness/`-folder cognitive confusion hazard (root = authoritative, worktree copy = stale snapshot). SKILL.md gains an explicit Working-directory-and-`.harness/`-location rule under File Ownership Contract; sprint.md dispatch prompts for Generator and Evaluator now lead with a "Working directory contract (v2.1.8)" paragraph; resume.md requires project-root invocation. Sparse-checkout-based mechanical prevention was considered and deferred to v3 — see ROADMAP.md.
-- v2.1.9 — secrets-handling contract: Generator writes `.env.example` (placeholders); user writes `.env.local` (actual values). Forbids pausing for secret values (secrets must not enter conversation history). implementation-report.md gains a mandatory `Setup required` section. sprint.md Step 4 adds a Setup-required gate before Evaluator dispatch — prevents false-FAILs against apps that can't start because of missing env.
+- v2.1.9 — secrets-handling contract: Generator writes `.env.example` (placeholders); user writes `.env.local` (actual values). Forbids pausing for secret values (secrets must not enter conversation history). implementation-report.md gains a mandatory `Setup required` section. The setup gate now runs before SIMULATE/EVALUATE so apps do not burn verification attempts before user-owned env is ready.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for per-release detail. See [`ROADMAP.md`](ROADMAP.md) for the v3 watch list + parked items.
 
 **v1.5.x** — prior stable. See git tag `v1.5.2` for the final pre-v2 release (main was v1.5 before 2026-04-24). For existing v1.5 installs upgrading to v2: run `scripts/uninstall-rules.sh` once to remove the legacy global `~/.claude/CLAUDE.md` block, then `/harness:setup` in each project.
 
-**`v2-beta`** — active development branch for post-v2.1.9 work; merges to `main` via FF at release points.
+Historical beta branches such as `v2-beta` are legacy. Install from the default marketplace entry unless a maintainer explicitly points you at an archived tag.
 
 **License**: MIT.
 **Author**: BELCORT AI Consulting `<tools@belcort.com>`.

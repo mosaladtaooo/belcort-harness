@@ -12,7 +12,7 @@
 #
 # Exit codes (Claude Code convention):
 #   0 — allow tool call
-#   1 — block tool call (stderr message is shown to the user)
+#   2 — block tool call (stderr message is shown to Claude Code as a tool error)
 #
 # Failure mode: if the JSON parse fails (no jq, no python3, malformed input),
 # the hook EXITS 0 — failing open. Failing closed would block every tool
@@ -85,8 +85,31 @@ fi
 
 TOOL_NAME=$(parse_json_field '.tool_name')
 
-# Only Bash invocations get the rest of the safety rails — other tools have
-# different schemas and different risk profiles.
+block() {
+  echo "BLOCKED: $1" >&2
+  exit 2
+}
+
+if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
+  TOOL_PATH=$(parse_json_field '.tool_input.file_path')
+  [ -n "$TOOL_PATH" ] || TOOL_PATH=$(parse_json_field '.tool_input.path')
+  [ -n "$TOOL_PATH" ] || exit 0
+
+  # The worktree copy of .harness/ is a stale snapshot. Project-root .harness/
+  # remains the source of truth; do not let agents write to the stale copy.
+  echo "$TOOL_PATH" | grep -qE '(^|/)\.worktrees/current/\.harness(/|$)' && \
+    block "cannot write .worktrees/current/.harness/ — use project-root .harness/ instead"
+
+  # Agents may create .env.example placeholders, but never write real env files.
+  ENV_BASENAME="${TOOL_PATH##*/}"
+  if echo "$ENV_BASENAME" | grep -qE '^\.env($|\.)' && [ "$ENV_BASENAME" != ".env.example" ]; then
+    block "agents must not write ${ENV_BASENAME}; use .env.example placeholders and let the user create real env files"
+  fi
+
+  exit 0
+fi
+
+# Only Bash invocations get command-pattern safety rails.
 [ "$TOOL_NAME" = "Bash" ] || exit 0
 
 TOOL_CMD=$(parse_json_field '.tool_input.command')
@@ -97,11 +120,6 @@ TOOL_CMD=$(parse_json_field '.tool_input.command')
 # ─────────────────────────────────────────────────────────────
 # Safety rails (universally applied to all Bash invocations)
 # ─────────────────────────────────────────────────────────────
-block() {
-  echo "BLOCKED: $1" >&2
-  exit 1
-}
-
 # 1. Force push — destroys remote history
 echo "$TOOL_CMD" | grep -qE 'git\s+push.*--force' && \
   block "force push not allowed in harness mode"
