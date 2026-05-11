@@ -80,6 +80,19 @@ Aggregated minor-severity axe findings (informational; not gating):
 
 ---
 
+## Worker logs (real-time captures, v3.1.1+)
+
+<emit only if Monitor-based real-time captures occurred during Steps 2.6 or
+3-5; otherwise omit this section entirely>
+
+### Step <N> — `<log path or stream label>`
+
+```
+<paste relevant real-time readiness/failure capture with surrounding context>
+```
+
+---
+
 ## Worker logs (on failure)
 
 <emit only if Steps 3-5 produced any failures and discovered log paths

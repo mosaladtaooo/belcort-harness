@@ -1,0 +1,15 @@
+name: Self Audit
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  self-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run repository self-audit
+        run: bash scripts/self-audit.sh

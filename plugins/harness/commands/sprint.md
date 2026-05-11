@@ -63,7 +63,7 @@ The Planner works in two passes:
 - Pass 1: PRD + constitution (the WHAT and WHY).
 - Pass 2: Architecture + criteria + contract (the HOW — informed by Pass 1).
 
-Dispatch pattern (v2.1.0+): the Planner is a plugin-shipped subagent type declared in `plugin.json` via `"agents": "./agents/"`. Its system prompt, allowed tools, and identity come from `agents/planner.md` frontmatter — the orchestrator invokes it through Claude Code's native Agent tool.
+Dispatch pattern (v2.1.0+): the Planner is a plugin-shipped subagent type declared in `plugin.json` via the `agents` array. Its system prompt, allowed tools, and identity come from `agents/planner.md` frontmatter — the orchestrator invokes it through Claude Code's native Agent tool.
 
 If a brainstorm file exists, the orchestrator includes its content in the Planner dispatch as additional context.
 
@@ -244,16 +244,48 @@ Loop (up to `MAX_PAUSES = 3`):
 
 After `MAX_PAUSES`, escalate: "Generator has paused N times on this sprint — the contract is likely under-determined. Recommend `/harness:rewind negotiating` to re-spec the affected FR(s) before continuing." Halt the sprint.
 
-Orchestrator updates `.harness/manifest.yaml` → `state.phase = "simulating"` after the Generator dispatch completes successfully (Step 3.5 then transitions `simulating → evaluating` on VERIFIED).
+After the Generator dispatch completes successfully, the setup-required gate runs before SIMULATE so auth/env gaps do not burn simulation or evaluation attempts.
 
 ---
 
-## 3.5. Simulate — drive prod-mode runtime (automatic)
+## 3.5. Setup-required gate before SIMULATE/EVALUATE (v2.1.9+)
+
+Before dispatching SIMULATE, the orchestrator reads `.harness/features/${FEATURE}/implementation-report.md` → `## Setup required` section. If it lists required files that the user must create (e.g., `.env.local`) OR other user-completable steps (database migrations with user credentials, external service config), the orchestrator:
+
+1. Checks whether each required file exists at the project-root path.
+2. If all required files exist AND the report doesn't flag remaining user steps, proceed to Step 3.6 (SIMULATE).
+3. Otherwise: present the Setup section to the user verbatim, with a message like *"Generator finished building. Before SIMULATE or Evaluator can run, complete this setup: [list]. Type 'continue' when ready."* Wait for confirmation. Do NOT auto-retry or skip — a SIMULATE/Evaluator run against an app that can't start produces a false failure that wastes retry budget.
+
+This gate exists because the app under test often needs secrets (DB URLs, API keys, signing keys) that the Generator cannot write (AgentLint's `no-env-commit` + `no-secrets` rules are unsuppressible errors, by design). The two-file convention `.env.example` (Generator) + `.env.local` (user) hands off cleanly at this gate.
+
+**Test-account env vars (v3.0+).** If the implementation-report's
+`## Setup required` section lists any `TEST_USER_*` or `TEST_TENANT_*` /
+`TEST_FIRM_*` env vars (Generator BUILD adds these to `.env.example` for
+auth-gated apps per the Test-account placeholders rule), the orchestrator
+explicitly enumerates them in the user-facing setup checklist:
+
+> Before SIMULATE can drive auth-gated flows, populate these test-account
+> values in `.env.local`:
+>   • `TEST_USER_EMAIL` — a valid email for a test user (e.g., `tester@yourdomain.test`)
+>   • `TEST_USER_PASSWORD` — at least 12 characters
+>   • [any other `TEST_*` vars listed in `.env.example`]
+>
+> Then run `bash .harness/init.sh` — its `seed_test_user` function will
+> use these to create the test user record. Type 'continue' when ready.
+
+Wait for confirmation. If the user types 'continue' but the env vars are
+still empty (sourced from `.env.local`), do NOT proceed — re-prompt with
+"TEST_USER_EMAIL is empty in .env.local; SIMULATE will fail at any auth
+flow. Set the values first, then type 'continue'."
+
+---
+
+## 3.6. Simulate — drive prod-mode runtime (automatic)
 
 After Generator BUILD returns successfully (and the pause-protocol loop in
-Step 3a has resolved), the orchestrator updates `manifest.yaml →
-state.phase = "simulating"` (Edit tool) and dispatches Generator in
-SIMULATE mode via the Agent tool.
+Step 3a plus the setup-required gate have resolved), the orchestrator updates
+`manifest.yaml → state.phase = "simulating"` (Edit tool) and dispatches
+Generator in SIMULATE mode via the Agent tool.
 
 The orchestrator dispatches:
 
@@ -306,33 +338,7 @@ After dispatch returns:
 
 ## 4. Evaluate — dispatch Evaluator subagent (FRESH context, SEPARATE from Generator)
 
-**4a. Setup-required gate (v2.1.9+).** Before dispatching the Evaluator, the orchestrator reads `.harness/features/${FEATURE}/implementation-report.md` → `## Setup required` section. If it lists required files that the user must create (e.g., `.env.local`) OR other user-completable steps (database migrations with user credentials, external service config), the orchestrator:
-
-1. Checks whether each required file exists at the project-root path.
-2. If all required files exist AND the report doesn't flag remaining user steps, proceed to 4b (Evaluator dispatch).
-3. Otherwise: present the Setup section to the user verbatim, with a message like *"Generator finished building. Before I dispatch the Evaluator, complete this setup: [list]. Type 'continue' when ready."* Wait for confirmation. Do NOT auto-retry or skip — an Evaluator run against an app that can't start produces a false FAIL that wastes retry budget.
-
-This gate exists because the app under test often needs secrets (DB URLs, API keys, signing keys) that the Generator cannot write (AgentLint's `no-env-commit` + `no-secrets` rules are unsuppressible errors, by design). The two-file convention `.env.example` (Generator) + `.env.local` (user) hands off cleanly at this gate.
-
-**Test-account env vars (v3.0+).** If the implementation-report's
-`## Setup required` section lists any `TEST_USER_*` or `TEST_TENANT_*` /
-`TEST_FIRM_*` env vars (Generator BUILD adds these to `.env.example` for
-auth-gated apps per the Test-account placeholders rule), the orchestrator
-explicitly enumerates them in the user-facing setup checklist:
-
-> Before SIMULATE can drive auth-gated flows, populate these test-account
-> values in `.env.local`:
->   • `TEST_USER_EMAIL` — a valid email for a test user (e.g., `tester@yourdomain.test`)
->   • `TEST_USER_PASSWORD` — at least 12 characters
->   • [any other `TEST_*` vars listed in `.env.example`]
->
-> Then run `bash .harness/init.sh` — its `seed_test_user` function will
-> use these to create the test user record. Type 'continue' when ready.
-
-Wait for confirmation. If the user types 'continue' but the env vars are
-still empty (sourced from `.env.local`), do NOT proceed — re-prompt with
-"TEST_USER_EMAIL is empty in .env.local; SIMULATE will fail at any auth
-flow. Set the values first, then type 'continue'."
+The setup-required gate already ran before SIMULATE in Step 3.5. If the Evaluator discovers missing setup anyway, report it as infrastructure/setup failure rather than spending a retry on Generator BUILD.
 
 **4b. Evaluator dispatch.** The orchestrator dispatches the Evaluator via the Agent tool:
 

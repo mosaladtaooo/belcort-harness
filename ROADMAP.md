@@ -149,10 +149,10 @@ Deferred items with non-trivial value. Revisit when the "When to revisit" condit
 - **What**: define how SIMULATE creates / authenticates against test users (DB seed fixture vs Playwright signup-form-driven vs test-mode auth provider). Currently project-dependent.
 - **Why parked**: heavily project-dependent (Clerk dev keys differ from custom auth differ from no-auth). Hard to standardize without project examples to abstract from.
 - **When to revisit**: when ≥3 projects' test-account patterns are visible — extract the common shape into a convention.
-- *Update 2026-05-08 (v3.0):* partial fix shipped — `TEST_USER_*` env-var convention + `init.sh` `seed_test_user` stub + sprint.md Step 4a enumeration. Auth-provider abstraction (Clerk/Auth0/custom) deferred.
+- *Update 2026-05-08 (v3.0):* partial fix shipped — `TEST_USER_*` env-var convention + `init.sh` `seed_test_user` stub + setup-gate enumeration (now sprint.md Step 3.5). Auth-provider abstraction (Clerk/Auth0/custom) deferred.
 - *Update 2026-05-08 (v3.1):* Stable in v3.1 — v3.0's `TEST_USER_*` env-var convention + init.sh `seed_test_user` stub continues. Auth-provider abstraction (Clerk vs Auth0 vs custom) remains deferred — research confirms each provider has its own admin API surface; right answer is convention + per-project examples in init.sh.
 
-### 11. Real-time worker log tailing via Monitor tool (N1, deferred from v3.1)
+### 11. CLOSED — Real-time worker log tailing via Monitor tool (N1, deferred from v3.1)
 - **What**: SIMULATE Steps 1, 3-5 use Claude Code's Monitor tool to stream worker stdout in real-time, reacting to ERROR/FATAL/panic patterns as they arrive.
 - **Why parked**: Public Anthropic docs don't confirm Monitor is callable from plugin-declared subagents. v2.1.1+ tool-inheritance SHOULD include Monitor, but unverified.
 - **When to revisit**: empirical sandbox test confirms Monitor invokes successfully from `harness:generator` subagent dispatched via Agent tool. OR: a real BELCORT project hits a worker crash that v3.1's post-hoc + readiness signal failed to surface root cause for.
@@ -205,7 +205,7 @@ Deferred items with non-trivial value. Revisit when the "When to revisit" condit
 
 ---
 
-## v3 watch list
+## Legacy v2.2 Watch List
 
 Items deferred from the v2.2 audit that may become load-bearing on future model regressions or revealed-by-use:
 
