@@ -100,7 +100,7 @@ In Claude Code:
 /reload-plugins
 ```
 
-Verify: `/plugin` → Installed tab → `harness@3.1.1`. `/agents` → three custom agents listed: `harness:planner`, `harness:generator`, `harness:evaluator`.
+Verify: `/plugin` → Installed tab → `harness@3.1.2`. `/agents` → three custom agents listed: `harness:planner`, `harness:generator`, `harness:evaluator`.
 
 ### Initialize a project
 

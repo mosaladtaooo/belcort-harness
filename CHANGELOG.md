@@ -6,6 +6,57 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
+## v3.1.2 — 2026-05-18 — Bundled coding principles (Karpathy/Yang)
+
+Bundles four behavioural principles into the harness-managed CLAUDE.md
+section so they apply continuously at the system-prompt level — between
+the harness's structured handoff checkpoints (PRD → contract → simulate
+→ evaluate). Reinforces discipline mid-loop, not just at checkpoints.
+
+### Added
+
+- **Coding principles section in project CLAUDE.md** — `/harness:setup`
+  now writes a `## Coding principles` section inside the
+  `<!-- BELCORT-HARNESS BEGIN v2 -->` markers. Source:
+  [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills)
+  (MIT), distilled by Jiayuan Yang from Andrej Karpathy's observations on
+  LLM coding pitfalls. Four principles: (1) Think Before Coding,
+  (2) Simplicity First, (3) Surgical Changes, (4) Goal-Driven Execution.
+
+### Why
+
+Subagents (Planner / Generator / Evaluator) inherit project CLAUDE.md
+into their system prompt. Structured harness checkpoints already enforce
+these behaviours at handoff boundaries (contract.md ties Generator to
+exact spec, Evaluator grep-scans for scope creep, etc.), but the
+principles reinforce the same discipline DURING agent work — between
+checkpoints — at no marginal cost beyond ~2.4 KB of context per dispatch.
+
+### Migration
+
+- Existing projects: re-run `/harness:setup` in each project. Idempotent
+  awk-based block replacement preserves all your other CLAUDE.md content
+  and refreshes the BELCORT-HARNESS block with the new principles
+  section. No other files affected.
+- New projects: first `/harness:setup` includes the section automatically.
+
+### Attribution
+
+Behavioural principles MIT-licensed, sourced from
+https://github.com/multica-ai/andrej-karpathy-skills. Original observations
+by Andrej Karpathy (https://x.com/karpathy/status/2015883857489522876).
+
+### Decision considered
+
+Considered for the same release but DEFERRED: agent-teams migration.
+Architectural analysis concluded the harness's GAN-style
+Planner/Generator/Evaluator separation depends on no chat back-channel
+between agents (file-based handoff only). Agent teams add direct
+mailbox messaging between teammates — would compromise the Evaluator's
+independence. Subagents continue as the harness's native dispatch model.
+
+---
+
 ## v3.1.1 — 2026-05-10 — Monitor integration (real-time worker log tailing)
 
 Closes ROADMAP item 11 (deferred from v3.1 pending empirical confirmation
