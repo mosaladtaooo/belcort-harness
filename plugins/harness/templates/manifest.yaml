@@ -46,14 +46,22 @@ state:
   #   pipeline:   planning | analyzing | negotiating | building | simulating | evaluating | retrospective | complete
   #   spec-edit:  amending | clarifying | editing | tuning | constitution-amending
   # Spec-edit phases are informational as of v2.0 (prose rule in SKILL.md governs;
-  # no mechanical hook enforcement). Subagents are the canonical writers of spec/
-  # files via CLAUDE_SUBAGENT=1 dispatch.
+  # no mechanical hook enforcement). spec/ files are written by the planner teammate
+  # (sprint) or planner subagent (standalone spec-edits).
   phase: "planning"
   current_feature: ""        # e.g., "001-bookmark-crud"
   current_task: ""           # e.g., "FR-005" — updated after each TDD cycle for mid-build recovery
   negotiation_round: 0       # incremented each proposal↔review cycle; max 3 before escalation
   retry_count: 0
   last_session: ""           # ISO timestamp of last agent dispatch
+
+  # Agent-teams state (experimental agents-team-testing branch) — populated by the lead when a sprint team is live; used by /harness:resume to rebuild the task list.
+  team_name: ""              # e.g. "harness-<feature-slug>" when a sprint team is live; empty when no team is running
+  teammates:                 # teammate ids/names once spawned; empty strings until the lead brings them up
+    planner: ""
+    generator: ""
+    evaluator: ""
+  active_task: ""            # current task-list pointer (T1–T10); empty when no team task is in flight
 
 features:
   completed: []              # List of completed feature folder names

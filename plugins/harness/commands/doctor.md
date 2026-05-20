@@ -4,7 +4,7 @@ description: Audit the local environment against every dependency the harness pi
 
 # `/harness:doctor` — Environment preflight
 
-The pipeline assumes a specific toolchain. When it's missing, agents fail in strange ways — a Generator writes code but the Evaluator's Playwright MCP returns nothing, the Planner's Context7 calls silently 404, or the whole sprint crashes halfway through. Doctor catches these *before* the first subagent is dispatched.
+The pipeline assumes a specific toolchain. When it's missing, agents fail in strange ways — a Generator writes code but the Evaluator's Playwright MCP returns nothing, the Planner's Context7 calls silently 404, or the whole sprint crashes halfway through. Doctor catches these *before* the first teammate is spawned.
 
 **This is meant to be brainless.** You should never have to remember which MCP to install or what Node version Context7 needs. Doctor tells you, gives you the exact command, and refuses to start the pipeline until you're ready.
 
@@ -23,12 +23,12 @@ Exit codes:
 
 **If exit is 0:** summarize "Environment ready" and let the caller continue.
 
-**If exit is non-zero:** show the full report (including the suggested fixes block at the bottom) and stop. Do NOT dispatch any subagent. Tell the user: "Fix the items above and re-run `/harness:doctor`, then retry your command."
+**If exit is non-zero:** show the full report (including the suggested fixes block at the bottom) and stop. Do NOT spawn any teammate. Tell the user: "Fix the items above and re-run `/harness:doctor`, then retry your command."
 
 ## When this runs automatically
 
-- **`/harness:sprint`** — first step, before Planner dispatch (see [sprint.md](sprint.md))
-- **`/harness:quick`** — first step, before Generator dispatch (see [quick.md](quick.md))
+- **`/harness:sprint`** — first step, before the Planner teammate is spawned (see [sprint.md](sprint.md))
+- **`/harness:quick`** — first step, before the Generator teammate is spawned (see [quick.md](quick.md))
 - **`/harness:setup`** — after rules installation, so you immediately see what else you need (see [setup.md](setup.md))
 
 ## When to invoke manually
@@ -47,7 +47,9 @@ Exit codes:
 ## What it checks
 
 **CRITICAL** (blocks pipeline):
-- `claude` CLI on PATH (used by all subagent dispatches)
+- `claude` CLI on PATH (used to spawn every teammate on the agent team)
+- `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` set (the agent-teams branch hard-replaces subagent dispatch — no fallback, so this is mandatory)
+- Claude Code v2.1.32+ (agent teams require this minimum; older versions lack the team primitives)
 - `git` on PATH (atomic commits + worktrees)
 - Node ≥ 20 (MCP servers require modern Node)
 - `npx` on PATH (launches MCP servers)

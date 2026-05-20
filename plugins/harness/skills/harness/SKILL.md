@@ -140,7 +140,13 @@ The team mailbox makes it *possible* for generator and evaluator to message each
 
 ### Bridging note for commands/*.md
 
-The per-command procedures in `commands/*.md` are written in subagent-dispatch language ("dispatch a fresh Generator subagent in BUILD mode"). Under this branch's team protocol, read every such instruction as: **the lead assigns / re-opens the corresponding task to the right teammate with that MODE.** The phase sequence, the ≤3-round negotiate cap, the human gate, the retry loop, and all file artifacts are unchanged — only the dispatch mechanism (Agent-tool call → team task assignment) differs.
+The per-command procedures in `commands/*.md` are written in subagent-dispatch language ("dispatch a fresh Generator subagent in BUILD mode"). **This re-mapping applies ONLY to the build pipeline — `/harness:sprint` and `/harness:quick`** (the commands that run a live team). For those two, read every subagent-dispatch instruction as: **the lead assigns / re-opens the corresponding task to the right teammate with that MODE.** The phase sequence, the ≤3-round negotiate cap, the human gate, the retry loop, and all file artifacts are unchanged — only the dispatch mechanism (Agent-tool call → team task assignment) differs.
+
+**Standalone utility commands KEEP plain subagent dispatch** — they run between features with no live team, so their `commands/*.md` dispatch language is literal (Agent-tool call, not a task assignment): `/harness:amend`, `/harness:edit`, `/harness:clarify`, `/harness:constitution-amend`, and `/harness:tune-evaluator`. (`/harness:resume` is the one exception that re-creates the team — see § Recovery.) These five spawn a fresh Planner/Evaluator subagent directly via the Agent tool; do NOT re-read them as team task assignments.
+
+### Dispatch model scope (team vs subagent — canonical answer)
+
+The **agent team is exactly the build pipeline**: `/harness:sprint` and `/harness:quick` create one team of long-lived planner/generator/evaluator teammates coordinated by the lead through the task list. Everything else uses **plain subagent dispatch** (a fresh Agent-tool call with `<SUBAGENT-CONTEXT>`, no live team): (a) the standalone utility commands `/harness:amend`, `/harness:edit`, `/harness:clarify`, `/harness:constitution-amend`, `/harness:tune-evaluator` (they run between features when no team exists); and (b) a teammate's nested helpers — the generator's TDD, code-reviewer, mutation, and property-test subagents — which stay ordinary subagents (nested subagents are allowed; nested teams are not). So: **team ⇔ the sprint/quick pipeline; subagent ⇔ standalone utilities + any nested helper.** When in doubt "is this a team or a subagent?", this is the answer.
 
 ## Prompt-Injection Defense (shared across all subagents)
 
@@ -661,7 +667,7 @@ What updates what, and when:
 | `manifest.yaml → state.current_feature` | Planner (init); Orchestrator (on new sprint) | Start of PLAN mode; start of new sprint |
 | `manifest.yaml → state.current_task` | Generator BUILD | After each FR commit (FR-NNN progresses) |
 | `manifest.yaml → state.retry_count` | Orchestrator | On FAIL verdict + retry |
-| `manifest.yaml → state.last_session` | Orchestrator; Generator | At every dispatch boundary |
+| `manifest.yaml → state.last_session` | Lead (orchestrator); Generator | At every task-assignment boundary (was "dispatch boundary" on `main`) |
 | `manifest.yaml → features.*` | Orchestrator | After Planner init, after merge |
 | `manifest.yaml → tuning_debt.*` | Orchestrator | After each tuning-check divergence log |
 | `manifest.yaml → constitution.amendments` | Orchestrator | After `/harness:constitution-amend` applies |
@@ -672,14 +678,14 @@ What updates what, and when:
 
 ## State Awareness
 
-Before every phase transition, the orchestrator MUST:
+Before every phase transition, the lead (orchestrator) MUST:
 
 1. `cat .harness/manifest.yaml` — read `state.phase`, `state.current_feature`, `state.current_task`, `state.retry_count`, `state.last_session`.
 2. `tail -20 .harness/progress/changelog.md` — see recent activity.
 3. `git log --oneline | grep 'harness:' | head -5` — cross-check commits against what the changelog claims.
 4. If any of these disagree (e.g., git shows FR-005 committed but changelog says FR-003 was last), **do not silently proceed**. Print the conflict clearly and ask the user which to trust.
 
-**Staleness signals** — surface a warning before dispatching if any of these hold:
+**Staleness signals** — surface a warning before opening the next task (assigning it to a teammate) if any of these hold:
 - `state.last_session` is ≥ 24 hours old (an unrelated session may have modified files).
 - `git status --porcelain` shows uncommitted changes to any file under `.harness/` that wasn't the current phase's designated writer.
 - Files referenced in the current phase (e.g., `features/${FEATURE}/contract.md` for a build) have mtime newer than the corresponding `changelog.md` entry.
@@ -692,26 +698,40 @@ This is the Anthropic "continuous-session" pattern: state lives in files, agents
 
 When `/harness:resume` is invoked (or when the user implicitly resumes a mid-sprint session):
 
+> **Re-spawn, not restore.** In-process teammates do NOT survive a session — `/resume` cannot bring back the planner/generator/evaluator that the prior sprint spawned. So resume *re-creates* the team and *re-spawns* fresh teammates, then replays the completed tasks as "done" from the on-disk artifacts. The harness already stores all work content in `.harness/` files, so a re-spawned team picks up exactly where the old one left off — but it is a re-spawn, not a true restore of the original in-memory teammates.
+
 1. Read state (per "State Awareness" above).
 2. Run `bash .harness/init.sh` for health check. If init.sh missing: copy from `@templates/init.sh.txt`, chmod +x, then run.
 3. Print the status report to the user (project name, feature, phase, current_task, retry_count, recent commits, recent changelog).
-4. Phase-specific recovery:
-   - **`planning`**: check which spec files exist. If PRD present but architecture missing, Planner was mid-Pass-2 — re-dispatch PLAN mode.
-   - **`analyzing`**: if `analysis-report.md` exists, present findings + proceed to human gate. Otherwise re-run `/harness:analyze`.
-   - **`negotiating`**: inspect `proposal.md`/`review.md` — dispatch the appropriate Generator/Evaluator mode next (NEGOTIATE → REVIEW-PROPOSAL → FINALIZE-CONTRACT). If ≥3 rounds with no agreement, escalate to human.
-   - **`building`**: mid-build recovery. First determine whether the stop was graceful (`pause-questions.md` exists → handle per sprint.md pause flow) or a hard-stop (subagent returned truncated, no pause file, may have uncommitted work).
-     - **Hard-stop mid-TDD** (per-FR commits exist on branch): read `state.current_task` + changelog to find last completed FR. Re-dispatch Generator BUILD: "Resume from FR-NNN. Previous commits: [list]. Skipping completed FRs."
-     - **Hard-stop mid-scaffolding** (zero FR commits, uncommitted worktree, Generator was in pre-TDD phase): scan `git log` for `[harness:scaffold] ... (checkpoint)` commits and the latest `scaffold-checkpoint` changelog entry. The "Next:" line tells you where to resume. Re-dispatch: "Resume from commit [hash]. Scaffolding groups done: [list]. Continue with [next group]." If NO scaffold-checkpoints exist (legacy Generator pre-v2.1.5, or rule skipped): manually checkpoint-commit the worktree, show the human what's on disk, ask them to confirm done vs in-flight, then re-dispatch with narrower scope.
+4. **Re-create the team and re-spawn teammates** (the team-rebuild preamble — do this before any phase-specific work):
+   a. **Verify the runtime is still enabled.** Confirm `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is still set (and Claude Code is v2.1.32+). If not, STOP and tell the user to re-enable it — resume cannot rebuild the team without it (there is no subagent fallback on this branch).
+   b. **Re-create the team** for the current feature, e.g. `harness-<feature-slug>` (same naming as § Team setup). The prior session's team is gone; this is a fresh team owned by the resuming lead.
+   c. **Re-spawn the three teammates** (`planner` / `generator` / `evaluator`) by their plugin agent types (`harness:planner` / `harness:generator` / `harness:evaluator`) — identical to § Team setup step 3.
+   d. **Rebuild the task list with already-completed tasks marked done.** Derive completion from `manifest.yaml` + the on-disk file artifacts that persist across sessions, then mark the corresponding tasks done so no teammate re-claims finished work:
+      - `analysis-report.md` exists → T2 Analyze done.
+      - `contract.md` (FINAL, overwriting the draft) exists → T3 Negotiate + T4 Review + T5 Finalize contract done.
+      - `implementation-report.md` exists → T6 Build done.
+      - `simulation-report.md` exists → T7 Simulate done.
+      - `eval-report.md` exists → T8 Evaluate done.
+
+      (`state.phase` from the manifest is the coarse cross-check; the file artifacts are the fine-grained truth, exactly as § State Awareness mandates — file evidence wins over a stale phase field.)
+5. **Resume from the current phase.** With the team rebuilt and completed tasks marked done, the lead re-opens the first unfinished task to the right teammate (phase-detection logic unchanged from the subagent model — only the dispatch verb changes from "re-dispatch X" to "the lead re-opens task Tn to the <x> teammate in Y mode"):
+   - **`planning`**: check which spec files exist. If PRD present but architecture missing, the planner was mid-Pass-2 — the lead re-opens **T1 Plan** to the **planner** teammate in PLAN mode.
+   - **`analyzing`**: if `analysis-report.md` exists, present findings + proceed to human gate (T2 already marked done). Otherwise the lead re-runs the **T2 Analyze** logic itself (lead-owned task).
+   - **`negotiating`**: inspect `proposal.md`/`review.md` — the lead re-opens the appropriate task to the right teammate next (**T3 Negotiate** → **generator** in NEGOTIATE; **T4 Review proposal** → **evaluator** in REVIEW-PROPOSAL; **T5 Finalize contract** → **generator** in FINALIZE-CONTRACT). If ≥3 rounds with no agreement, escalate to human.
+   - **`building`**: mid-build recovery for **T6 Build** (owned by the **generator** teammate). First determine whether the stop was graceful (`pause-questions.md` exists → handle per sprint.md pause flow) or a hard-stop (the prior teammate's session ended truncated, no pause file, may have uncommitted work — and remember the teammate itself is gone, so this is a fresh generator re-claiming T6).
+     - **Hard-stop mid-TDD** (per-FR commits exist on branch): read `state.current_task` + changelog to find last completed FR. The lead re-opens T6 Build to the generator teammate: "Resume from FR-NNN. Previous commits: [list]. Skipping completed FRs."
+     - **Hard-stop mid-scaffolding** (zero FR commits, uncommitted worktree, the generator was in pre-TDD phase): scan `git log` for `[harness:scaffold] ... (checkpoint)` commits and the latest `scaffold-checkpoint` changelog entry. The "Next:" line tells you where to resume. The lead re-opens T6 Build: "Resume from commit [hash]. Scaffolding groups done: [list]. Continue with [next group]." If NO scaffold-checkpoints exist (legacy Generator pre-v2.1.5, or rule skipped): manually checkpoint-commit the worktree, show the human what's on disk, ask them to confirm done vs in-flight, then re-open T6 with narrower scope.
    - **`simulating`**: if `simulation-report.md` exists for the current
-     feature, the SIMULATE dispatch finished but orchestrator was interrupted
-     before phase transition. Read verdict, transition to `evaluating`, and
-     proceed to Step 4 (EVALUATE). If `simulation-report.md` is absent, the
-     SIMULATE dispatch was interrupted; re-dispatch Generator SIMULATE with
-     the same prompt as sprint.md Step 3.5.
-   - **`evaluating`**: if `eval-report.md` exists, check whether tuning-check ran (look for a tuning-log entry referencing this feature today). If not, run tuning-check. Then proceed to PASS/FAIL handling.
-   - **`retrospective`**: if `retrospective.md` exists, present drift findings + await approval. Otherwise re-run retrospective.
-   - **`complete`**: report last shipped feature + offer `/harness:sprint "<next>"`.
-5. On any ambiguity, ask the user ONE focused question before proceeding.
+     feature, the **T7 Simulate** task finished but the lead was interrupted
+     before the phase transition. Read verdict, transition to `evaluating`, and
+     proceed to Step 4 (EVALUATE — i.e. open T8). If `simulation-report.md` is absent, T7
+     was interrupted; the lead re-opens **T7 Simulate** to the **generator** teammate with
+     the same framing as sprint.md Step 3.5.
+   - **`evaluating`**: if `eval-report.md` exists, **T8 Evaluate** is done — check whether tuning-check ran (look for a tuning-log entry referencing this feature today). If not, run tuning-check. Then proceed to PASS/FAIL handling (on FAIL, the lead opens **T9 Repair** to the **generator**, which re-opens T7). If `eval-report.md` is absent, the lead re-opens **T8 Evaluate** to the **evaluator** teammate.
+   - **`retrospective`**: if `retrospective.md` exists, present drift findings + await approval. Otherwise the lead re-runs the **T10 Retrospective** logic itself (lead-owned task).
+   - **`complete`**: report last shipped feature + offer `/harness:sprint "<next>"`. (No team needed; the lead may clean up the just-rebuilt team.)
+6. On any ambiguity, ask the user ONE focused question before proceeding.
 
 ## Optional Plugins
 

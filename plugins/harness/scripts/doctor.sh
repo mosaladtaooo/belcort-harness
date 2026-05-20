@@ -76,8 +76,44 @@ if command -v claude >/dev/null 2>&1; then
   add_result "CRITICAL" "PASS" "Claude Code CLI" "version: ${CC_VER:-unknown}"
 else
   add_result "CRITICAL" "FAIL" "Claude Code CLI" \
-    "\`claude\` not on PATH — harness dispatches subagents via \`claude -p\`" \
+    "\`claude\` not on PATH — harness spawns teammates on an agent team (lead-coordinated); \`claude -p\` subprocess dispatch is retired on this branch" \
     "Install Claude Code: https://claude.com/claude-code"
+fi
+
+# Agent-teams experimental gate — this branch hard-replaces subagent dispatch with
+# an agent team, so the env var is mandatory (no fallback). Read straight from env.
+if [ "${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-}" = "1" ]; then
+  add_result "CRITICAL" "PASS" "Agent teams enabled" "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
+else
+  add_result "CRITICAL" "FAIL" "Agent teams enabled" \
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS is not 1 (found: '${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-unset}') — the agent-teams branch has no subagent fallback" \
+    "export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 (or add to settings.json env block); required by the agent-teams branch (no subagent fallback)."
+fi
+
+# Minimum Claude Code version — agent teams need v2.1.32+. Parse CC_VER (captured
+# above) into major.minor.patch and compare numerically. If CC_VER is unparseable
+# (claude present but version string unexpected), FAIL with the same upgrade fix so
+# the user re-checks rather than proceeding blind on a hard-replace branch.
+if [ -n "${CC_VER:-}" ] && printf '%s' "$CC_VER" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+  CC_VER_NUM="${CC_VER%%[!0-9.]*}"     # strip any suffix (e.g. -beta) past the version triple
+  CC_MAJOR="${CC_VER_NUM%%.*}"
+  CC_REST="${CC_VER_NUM#*.}"
+  CC_MINOR="${CC_REST%%.*}"
+  CC_PATCH="${CC_REST#*.}"
+  CC_PATCH="${CC_PATCH%%.*}"
+  # Compose a zero-padded comparable integer: MAJOR*1_000_000 + MINOR*1_000 + PATCH
+  CC_CMP=$(( ${CC_MAJOR:-0} * 1000000 + ${CC_MINOR:-0} * 1000 + ${CC_PATCH:-0} ))
+  if [ "$CC_CMP" -ge 2001032 ]; then
+    add_result "CRITICAL" "PASS" "Claude Code ≥ 2.1.32" "version: ${CC_VER}"
+  else
+    add_result "CRITICAL" "FAIL" "Claude Code ≥ 2.1.32" \
+      "found v${CC_VER} — agent teams require a newer Claude Code" \
+      "agent teams require Claude Code v2.1.32+; upgrade Claude Code."
+  fi
+elif command -v claude >/dev/null 2>&1; then
+  add_result "CRITICAL" "FAIL" "Claude Code ≥ 2.1.32" \
+    "could not parse Claude Code version ('${CC_VER:-unknown}') — cannot confirm agent-teams support" \
+    "agent teams require Claude Code v2.1.32+; upgrade Claude Code."
 fi
 
 # Git
