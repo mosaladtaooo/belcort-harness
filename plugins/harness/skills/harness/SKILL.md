@@ -1,11 +1,25 @@
 ---
 name: harness
-description: BELCORT Planner → Generator → Evaluator pipeline. Invoke when the user runs a /harness:* slash command, when .harness/manifest.yaml is present, or when the user describes a substantial build task (3+ components, >15 minutes of work) and has not yet activated the harness. The procedure for each command lives in commands/*.md — this skill is the shared context: activation rules, agent communication protocol, subagent isolation, and TDD contract.
+description: BELCORT Planner → Generator → Evaluator pipeline. Invoke when the user runs a /harness:* slash command, when .harness/manifest.yaml is present, or when the user describes a substantial build task (3+ components, >15 minutes of work) and has not yet activated the harness. The procedure for each command lives in commands/*.md — this skill is the shared context: activation rules, agent communication protocol, agent team protocol (EXPERIMENTAL agents-team-testing branch), and TDD contract.
 ---
 
 # BELCORT Harness Engine
 
-A Planner → Generator → Evaluator pipeline for Claude Code, adapted from Anthropic's research on long-running agent harnesses. Three fresh subagents, each with clean context, communicating through files in `.harness/`.
+> **⚠️ EXPERIMENTAL BRANCH — `agents-team-testing`.** This variant replaces the
+> subagent dispatch model with Claude Code's **agent teams** framework: Planner /
+> Generator / Evaluator run as long-lived **teammates on a single team**, coordinated
+> by the orchestrator (team lead) through a shared task list. Requires
+> `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` and Claude Code v2.1.32+. The stable
+> subagent-based protocol lives on `main`. **Do NOT merge this branch without a
+> deliberate decision** — the team model has known tradeoffs around GAN separation,
+> `/harness:resume`, one-team-at-a-time, and token cost (see § Agent Team Protocol).
+
+A Planner → Generator → Evaluator pipeline for Claude Code, adapted from Anthropic's
+research on long-running agent harnesses. Under this experimental branch the three
+roles run as **teammates on one agent team**, coordinated by the orchestrator (team
+lead) through a shared task list with dependency ordering, while work artifacts are
+still handed off through files in `.harness/` (files remain the authoritative channel
+for work content; the team mailbox carries only coordination signals).
 
 This skill is a **reference manual**, not a procedure. Each slash command has its own self-contained procedure in `commands/*.md`. This file holds the cross-cutting contracts every command depends on.
 
@@ -16,9 +30,18 @@ This skill is live when any of the following are true:
 - The user ran `/harness:sprint`, `/harness:quick`, `/harness:resume`, or any other `/harness:*` command — the command file in `commands/` is your entry point; this skill is the shared context
 - The user described something to build with ≥1% chance the harness would help (the 1% rule in `~/.claude/CLAUDE.md`)
 
-## SUBAGENT ESCAPE HATCH
+## TEAMMATE / SUBAGENT ESCAPE HATCH
 
-**If you were dispatched as a subagent** — your prompt contains a `<SUBAGENT-CONTEXT>` block — **SKIP this skill entirely.** Subagents do one specific job (planning, generating, evaluating). They do NOT orchestrate the pipeline, do NOT re-invoke `/harness:*` commands, do NOT read this SKILL.md for procedure. The orchestrator is the only agent that reads this skill.
+**If you are a teammate** (spawned onto the harness team via the `harness:planner` /
+`harness:generator` / `harness:evaluator` agent type) **or a subagent** — your prompt
+contains a `<SUBAGENT-CONTEXT>` block — **SKIP this skill entirely.** Teammates do the
+specific role-tasks the lead assigns (planning, generating, evaluating). They do NOT
+orchestrate the pipeline, do NOT create or manage the team, do NOT re-invoke `/harness:*`
+commands, do NOT read this SKILL.md for procedure. **The team lead (orchestrator) is the
+only agent that reads this skill and the only agent that manages the team** (the docs
+forbid teammates from cleaning up or spawning nested teams). A teammate's authoritative
+instructions are: its agent `.md` body (appended to its system prompt) + the lead's
+task assignment + the files its MODE's INPUT section lists.
 
 ## Commands
 
@@ -43,39 +66,81 @@ Each procedure lives in its own file under `commands/`. This is a pointer table,
 | `/harness:doctor` | [commands/doctor.md](../../commands/doctor.md) | Environment preflight — verifies MCPs, Node, git, plugins. Auto-runs at sprint/quick start and blocks on CRITICAL failures. |
 | `/harness:constitution-amend "<reason>"` | [commands/constitution-amend.md](../../commands/constitution-amend.md) | High-ceremony constitution change: typed confirmation + ≥50-char reason + in-progress handling + mandatory ADR + revalidation against every completed feature. The ONLY authorized path to modify spec/constitution.md after Planner Pass 1. |
 
-## Subagent Isolation Protocol
+## Agent Team Protocol
 
-This is the GAN insight from the Anthropic harness research: **the agent judging the work must have separate context from the agent doing the work.** Violations invalidate the whole pipeline.
+This is the GAN insight from the Anthropic harness research: **the agent judging the work must have separate context from the agent doing the work.** On `main`, the platform's per-dispatch context isolation enforces this for free. **On this branch the teammates are long-lived and share a mailbox, so the separation is preserved by *protocol* — lead-mediation + file-only work content (see "GAN separation inside a team" below).** Violations invalidate the whole pipeline.
 
-### Dispatch mechanism (v2.1.0+)
+### Team setup (lead = orchestrator)
 
-Subagents are dispatched via the **Agent tool** using plugin-declared `subagent_type` values:
+At the start of `/harness:sprint` (or `/harness:quick`), after `doctor` passes, the orchestrator becomes the **team lead** and:
 
-- `harness:planner` — Planner agent (PLAN, CLARIFY-QUESTIONS, EDIT modes — EDIT covers AMENDMENT / EDIT / CLARIFY ANSWERS / CONSTITUTION AMENDMENT markers, see agents/planner.md § MODE: EDIT)
-- `harness:generator` — Generator agent (NEGOTIATE, FINALIZE-CONTRACT, BUILD, SIMULATE modes)
-- `harness:evaluator` — Evaluator agent (REVIEW-PROPOSAL, EVALUATE, REVALIDATE modes)
+1. **Verifies the runtime.** Confirm `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set and Claude Code is v2.1.32+. If not, STOP and tell the user to enable it (settings.json `env` block or shell export) — the team protocol cannot run without it. There is no subagent fallback on this branch (hard-replace).
 
-These are declared in `plugin.json` (`"agents": "./agents/"`) and resolve to the YAML-frontmatter-headed `.md` files in `agents/`. Each frontmatter omits `tools:`, so subagents inherit the parent session's full tool set per the v2.1.1+ convention (matches Anthropic's subagent docs default). Frontmatter declares `name`, `description` (when Claude should use this agent), `model`, `effort`, `permissionMode`, and `maxTurns`.
+2. **Creates one team** for the sprint, e.g. `harness-<feature-slug>`. One team per lead; one team at a time (platform limit). The team persists for the whole sprint.
 
-Prior versions (≤2.0.0) used `claude -p` subprocess dispatch with `--append-system-prompt-file` + `--allowedTools` + `CLAUDE_SUBAGENT=1` env-var guard. v2.1.0 migrated to native Agent-tool dispatch, which provides the same fresh-context-window isolation without the subprocess overhead, env-var tricks, or stdout-parsing.
+3. **Spawns three teammates** by referencing the plugin-declared agent types — the SAME definitions used as subagents on `main`:
+
+   | Teammate name | Agent type | Roles it plays (lead assigns MODE per task) |
+   |---|---|---|
+   | `planner` | `harness:planner` | PLAN (PASS 1+2), CLARIFY-QUESTIONS, EDIT |
+   | `generator` | `harness:generator` | NEGOTIATE, FINALIZE-CONTRACT, BUILD, SIMULATE |
+   | `evaluator` | `harness:evaluator` | REVIEW-PROPOSAL, EVALUATE, REVALIDATE |
+
+   These resolve to the YAML-frontmatter `.md` files in `agents/`. When run as a teammate, the definition's `tools` allowlist + `model` are honored and the **body is appended to the teammate's system prompt** (it does not replace it). The frontmatter omits `tools:`, so teammates inherit the session tool set. Per the docs, `skills` and `mcpServers` frontmatter would NOT apply to a teammate — the harness declares neither, so no impact. `SendMessage` + task-list tools are always available to teammates regardless of `tools`.
+
+4. **Builds the shared task list** as a dependency chain that mirrors the pipeline. The dependencies enforce sequential ordering *through* the parallel team mechanism — a task cannot be claimed until its dependency completes:
+
+   | Task | Owner | Depends on | MODE assigned |
+   |---|---|---|---|
+   | T1 Plan | planner | — | PLAN (plan-approval required → maps to human gate) |
+   | T2 Analyze | lead | T1 | lead runs `/harness:analyze` logic |
+   | T3 Negotiate | generator | T2 + gate | NEGOTIATE |
+   | T4 Review proposal | evaluator | T3 | REVIEW-PROPOSAL |
+   | T5 Finalize contract | generator | T4 | FINALIZE-CONTRACT |
+   | T6 Build | generator | T5 | BUILD (TDD) |
+   | T7 Simulate | generator | T6 | SIMULATE |
+   | T8 Evaluate | evaluator | T7 | EVALUATE |
+   | T9 Repair (conditional) | generator | T8 if FAIL | BUILD (retry) → re-opens T7 |
+   | T10 Retrospective | lead | T8 if PASS | lead runs retrospective logic |
+
+   The negotiate↔review loop (T3↔T4, ≤3 rounds) is modeled as the lead re-opening T3/T4 until the proposal converges — same round cap as today.
+
+### GAN separation inside a team (the central discipline)
+
+The team mailbox makes it *possible* for generator and evaluator to message each other — which would destroy the GAN separation. This branch forbids it by protocol:
+
+1. **Lead-mediation only.** Teammates report status to the **lead**, never to each other. The generator and evaluator MUST NOT exchange mailbox messages. The lead advances the task list when a teammate reports its task done.
+
+2. **Files are the sole channel for work content.** Every artifact handoff goes through `.harness/` files (contract.md, proposal.md, review.md, implementation-report.md, simulation-report.md, eval-report.md) exactly as on `main`. The mailbox carries only coordination signals ("T6 Build complete — see implementation-report.md"), never justifications, appeals, or implementation explanations.
+
+3. **The evaluator judges from files only.** When the evaluator teammate claims T8 (EVALUATE), it reads contract.md (final) + simulation-report.md + source — NOT any mailbox history about how the build went. The lead's task assignment states this explicitly. A persistent teammate sees other tasks' *status* (done/pending) but never their *content* (separate context windows) — so idle-then-evaluate keeps the evaluator clean.
 
 ### Rules every command follows
 
-1. **Every dispatch is a fresh Agent-tool call.** No nested conversation, no shared context. The Agent tool guarantees a fresh context window per dispatch — the subagent sees its system prompt (from `agents/<name>.md`) and the `prompt` parameter, nothing from the parent's conversation.
+1. **The lead manages the team; teammates do role-tasks.** The lead (orchestrator) creates the team, spawns teammates, builds + advances the task list, relays the human gate, and cleans up. Teammates self-claim unblocked tasks and execute the assigned MODE. Teammates never manage the team (platform forbids teammate cleanup + nested teams).
 
-2. **The Evaluator MUST NEVER share context with the Generator.** Always two separate Agent-tool calls. The Agent tool's context isolation enforces this at the platform level.
+2. **The Evaluator MUST NEVER receive Generator context.** Enforced by lead-mediation + file-only handoff (see "GAN separation inside a team"), since the platform no longer isolates per-dispatch. This is the load-bearing discipline of the whole branch — if it slips, the pipeline is invalid.
 
-3. **The `prompt` parameter carries three things**: (a) an explicit mode sentence ("You are being dispatched in PLAN mode" / NEGOTIATE / BUILD / SIMULATE / EVALUATE / REVIEW-PROPOSAL / FINALIZE-CONTRACT / CLARIFY-QUESTIONS / EDIT (with the appropriate marker — AMENDMENT / EDIT / CLARIFY ANSWERS / CONSTITUTION AMENDMENT) / REVALIDATE), (b) the concrete task framing for that mode, (c) the user's original request or the context-file list.
+3. **Each task assignment carries three things**: (a) an explicit MODE sentence ("Claim T6 in BUILD mode" — PLAN / NEGOTIATE / FINALIZE-CONTRACT / BUILD / SIMULATE / REVIEW-PROPOSAL / EVALUATE / CLARIFY-QUESTIONS / EDIT (with the appropriate marker — AMENDMENT / EDIT / CLARIFY ANSWERS / CONSTITUTION AMENDMENT) / REVALIDATE), (b) the concrete task framing for that mode, (c) the file list / user request the teammate must read. Same three-part contract as the subagent `prompt` on `main`, delivered as a task assignment instead of an Agent-tool prompt.
 
-4. **The `<SUBAGENT-CONTEXT>` block inside each agent.md is the isolation gate.** It tells the subagent: "you were dispatched for ONE job; do NOT re-invoke the harness pipeline; if SessionStart or SKILL.md fires in your context, SKIP IT." On Opus 4.7+, instruction-following is reliable — this prose rule is sufficient. Nothing mechanical enforces it beyond the Agent tool's native context isolation.
+4. **The `<SUBAGENT-CONTEXT>` block inside each agent.md is still the isolation gate.** It tells the teammate: "do your assigned role-task; do NOT orchestrate the pipeline or manage the team; if SessionStart or SKILL.md fires in your context, SKIP IT." On Opus 4.7+, instruction-following is reliable — this prose rule is sufficient.
 
-5. **Subagents write output to files** under `.harness/features/<current>/<filename>.md`; the orchestrator reads those files after the Agent-tool call returns. The Agent tool's return string is a summary, not the authoritative artifact. File-based communication per Anthropic's canonical pattern.
+5. **Teammates write output to files** under `.harness/features/<current>/<filename>.md`; the lead reads those files after the teammate reports its task complete. The mailbox / idle-notification is a coordination signal, not the authoritative artifact. File-based communication per Anthropic's canonical pattern.
 
-6. **No env-var tricks.** The legacy `CLAUDE_SUBAGENT=1` check in `session-start.sh` is retained as a backward-compat shim for any external `claude -p` invocations (rare), but within the harness pipeline no command sets it — Agent-tool dispatches are the single dispatch path.
+6. **Plan-approval = the human gate.** Spawn the planner with plan-approval required; when it finishes T1 it submits its plan to the lead, who relays to the human. Approve → unblock T3 (Negotiate). This replaces the standalone human-gate dispatch boundary on `main`. To bias the lead's judgment, the user's gate instructions ("only approve if scope ≤ N FRs", etc.) are passed to the lead.
 
-### Parallel-dispatch potential (unused today)
+### Known tradeoffs (why this is experimental, not merged)
 
-The Agent tool supports multiple Agent calls in one message — they run in parallel. The current pipeline is sequential (Planner → analyze → Negotiate → Build → Simulate → Evaluate). If a future version benefits from parallelism (e.g., revalidating 10 completed features concurrently during `/harness:constitution-amend` Step 7), that's a single refactor away: emit N Agent tool calls in one message instead of a sequential loop.
+- **No resume of in-process teammates.** `/harness:resume` cannot restore teammates. The branch's resume strategy: re-create the team, re-spawn teammates, rebuild the task list with completed tasks marked done (derived from manifest + the file artifacts that persist on disk), and resume from the current phase. Works because the harness already stores all state in files — but it is a re-spawn, not a true restore.
+- **One team at a time.** A second concurrent sprint cannot run its own team until this one is cleaned up. Cross-sprint parallelism (e.g., revalidating N features during `/harness:constitution-amend` Step 7) is not available in team mode.
+- **No nested teams.** The generator teammate CANNOT spawn its own team for internal work (TDD, mutation, property tests) — those stay as ordinary subagents the generator dispatches via the Agent tool (nested subagents are allowed; nested teams are not).
+- **Persistent context.** Unlike `main`'s fresh-subagent-per-phase, the generator teammate persists across NEGOTIATE→BUILD→SIMULATE→REPAIR, accumulating context (continuity gained, fresh-eyes lost). The evaluator stays clean only because it never observes build-task content (separate windows + file-only handoff).
+- **Higher token cost.** Each teammate is a full Claude instance held open for the sprint's duration.
+- **Cleanup.** At sprint end the lead cleans up the team (teammates must be idle / shut down first; only the lead cleans up — never a teammate).
+
+### Bridging note for commands/*.md
+
+The per-command procedures in `commands/*.md` are written in subagent-dispatch language ("dispatch a fresh Generator subagent in BUILD mode"). Under this branch's team protocol, read every such instruction as: **the lead assigns / re-opens the corresponding task to the right teammate with that MODE.** The phase sequence, the ≤3-round negotiate cap, the human gate, the retry loop, and all file artifacts are unchanged — only the dispatch mechanism (Agent-tool call → team task assignment) differs.
 
 ## Prompt-Injection Defense (shared across all subagents)
 
@@ -388,7 +453,7 @@ The worktree copy exists because `git worktree add` checks out every tracked fil
 
 ## Agent Communication Protocol
 
-Agents NEVER share conversation context. They communicate exclusively via `.harness/` files. Each feature has its own folder under `.harness/features/NNN-name/` for scoped artifacts.
+Under the team model, agents coordinate through **two channels with strict role separation**: (1) the **team task list + mailbox** for *coordination only* (who claims what, task done/blocked, idle notifications) — lead-mediated, never generator↔evaluator; and (2) **`.harness/` files** for all *work content* (specs, contracts, reports). Teammates NEVER exchange work content over the mailbox — files are the sole authoritative channel for what was planned / built / evaluated, exactly as on `main`. Teammates do not share conversation context (separate context windows). Each feature has its own folder under `.harness/features/NNN-name/` for scoped artifacts.
 
 ```
 GLOBAL files (persist across features):
@@ -499,9 +564,9 @@ See `@templates/manifest.yaml` for the authoritative schema with all fields, def
 ## Rules
 
 1. If `.harness/manifest.yaml` exists, read it before doing anything else.
-2. Evaluator is ALWAYS a separate subagent — never self-evaluate in the same context.
+2. Evaluator is ALWAYS a separate teammate that judges from files only — never self-evaluate, and never accept Generator context via the mailbox (lead-mediation enforces this).
 3. Every technical decision must align with `.harness/spec/constitution.md`.
-4. Agents communicate via `.harness/` files, never via shared context.
+4. Agents exchange work content via `.harness/` files only; the team mailbox carries lead-mediated coordination signals, never work content and never generator↔evaluator messages.
 5. When uncertain, ask the human ONE focused question.
 6. Planner does NOT specify files, components, data models, or API paths — those are negotiated between Generator and Evaluator before building.
 
