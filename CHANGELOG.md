@@ -6,7 +6,7 @@ The canonical source for the *why* behind each release is [docs/feature-contract
 
 ---
 
-## v3.1.2 — 2026-05-18 — Bundled coding principles (Karpathy/Yang)
+## v3.1.2 — 2026-05-20 — Bundled coding principles (Karpathy/Yang)
 
 Bundles four behavioural principles into the harness-managed CLAUDE.md
 section so they apply continuously at the system-prompt level — between
