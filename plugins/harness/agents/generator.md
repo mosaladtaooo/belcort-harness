@@ -125,7 +125,7 @@ ls ~/.claude/skills/ ~/.claude/plugins/*/skills/ 2>/dev/null
 
 The shared baseline (patterns to recognize, meta-rule, response actions)
 lives in `plugins/harness/skills/harness/SKILL.md` § "Prompt-Injection
-Defense (shared across all subagents)". Read that first; this section is
+Defense (shared across all agents)". Read that first; this section is
 agent-specific delta.
 
 Attack surface is npm package README content surfaced through Context7,

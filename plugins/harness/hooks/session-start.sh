@@ -3,11 +3,11 @@
 # Minimal: detect harness, nudge the skill. State reading is done by the skill
 # itself — this hook is only a 1-line trigger.
 #
-# Dispatch note: v2.1.0 migrated subagent dispatch from `claude -p` subprocesses
-# to native Agent-tool dispatch (plugin-declared subagent_types: harness:planner,
-# harness:generator, harness:evaluator). Agent-tool subagents do NOT set
-# CLAUDE_SUBAGENT=1 — they rely on Claude Code's own context isolation plus the
-# <SUBAGENT-CONTEXT> block in each agent.md.
+# Dispatch note: v2.1.0 moved off `claude -p` subprocesses; the harness now
+# spawns teammates on an agent team (lead-coordinated) via plugin-declared
+# subagent_types: harness:planner, harness:generator, harness:evaluator. These
+# teammates do NOT set CLAUDE_SUBAGENT=1 — they rely on Claude Code's own context
+# isolation plus the <SUBAGENT-CONTEXT> block in each agent.md.
 #
 # The CLAUDE_SUBAGENT=1 check below is retained as a backward-compat shim for
 # users who still invoke `claude -p` externally (rare). Within the harness
@@ -16,8 +16,9 @@
 set -u
 
 # Legacy shim: skip injection if an external caller explicitly marked this as a
-# subagent invocation via CLAUDE_SUBAGENT=1. Harmless for Agent-tool dispatches
-# (which don't set the var).
+# subagent invocation via CLAUDE_SUBAGENT=1. Harmless for teammate dispatches
+# (which don't set the var — they skip injection via their own <SUBAGENT-CONTEXT>
+# block instead).
 if [ "${CLAUDE_SUBAGENT:-0}" = "1" ]; then
   exit 0
 fi

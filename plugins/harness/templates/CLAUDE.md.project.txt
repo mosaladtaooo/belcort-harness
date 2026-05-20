@@ -18,9 +18,9 @@ For pipeline flow, file ownership, TDD contract, MCP setup, and every other oper
 
 ## Project-specific tools / MCPs / skills (OPTIONAL section to populate)
 
-The harness subagents (Planner, Generator, Evaluator) inherit the parent session's full tool set — they can use any MCP, skill, or tool registered in this Claude Code session. If your project needs specific tools the harness should reach for (e.g., Figma MCP for design-driven features, a company-internal docs MCP, a custom skill), declare them here.
+The harness teammates (Planner, Generator, Evaluator — and the standalone-command subagents) inherit the parent session's full tool set — they can use any MCP, skill, or tool registered in this Claude Code session. If your project needs specific tools the harness should reach for (e.g., Figma MCP for design-driven features, a company-internal docs MCP, a custom skill), declare them here.
 
-Format: one line per tool with WHEN to use it. The orchestrator reads this section before dispatching subagents and includes relevant guidance in the Agent-tool `prompt` parameter.
+Format: one line per tool with WHEN to use it. The lead reads this section and includes relevant guidance in each teammate's task assignment (and in standalone subagent dispatches).
 
 Example (uncomment and edit for your project):
 
@@ -34,7 +34,7 @@ Example (uncomment and edit for your project):
 
 Leave the section empty / commented out for projects that only need Context7 + Playwright (the harness defaults).
 
-## Coding principles (apply to all harness subagents)
+## Coding principles (apply to all harness agents)
 
 Bundled from [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) (MIT) — Andrej Karpathy's observations on LLM coding pitfalls, distilled by Jiayuan Yang. Apply continuously between structured harness handoff checkpoints (PRD → contract → simulate → evaluate) so behaviour stays disciplined mid-loop.
 

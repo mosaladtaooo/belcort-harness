@@ -2,9 +2,11 @@
 <!-- Written by: Generator BUILD mode (when it hits a genuine ambiguity
      it can't reasonably guess past — see agents/generator.md §Pause Protocol)
      Read by: orchestrator (sprint.md step 3 detects existence, surfaces to user,
-     accepts answers, then re-dispatches a fresh Generator)
+     accepts answers, then the lead re-opens the build task for the (persistent)
+     generator teammate)
      Lifetime: created by Generator, archived to features/NNN/paused-history/
-     after the orchestrator integrates answers and re-dispatches.
+     after the orchestrator integrates answers and the generator teammate resumes
+     the build task.
      Each pause increments calibration_metrics.agent_checkins in manifest.yaml. -->
 
 # Pause — Generator awaits human input
@@ -71,7 +73,7 @@
 ---
 
 ## Resolution
-<!-- Filled by orchestrator after dispatching the resumed Generator. -->
+<!-- Filled by orchestrator after the generator teammate resumes the build task. -->
 
 **Resumed**: {{ISO date when re-dispatch happened}}
 **Generator outcome**: {{FR completed | partial | re-paused (with new pause-questions.md)}}

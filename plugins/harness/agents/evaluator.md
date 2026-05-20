@@ -336,7 +336,7 @@ If installed, integrate `agentlint` (automated code-quality scan, 33 checks) and
 
 The shared baseline (patterns to recognize, meta-rule, response actions)
 lives in `plugins/harness/skills/harness/SKILL.md` § "Prompt-Injection
-Defense (shared across all subagents)". Read that first; this section is
+Defense (shared across all agents)". Read that first; this section is
 agent-specific delta.
 
 Fetched content reaches you primarily via Playwright DOM + DOM-rendered
