@@ -72,7 +72,7 @@ add_result() {
 
 # Claude Code CLI
 if command -v claude >/dev/null 2>&1; then
-  CC_VER=$(claude --version 2>/dev/null | head -1 | awk '{print $NF}')
+  CC_VER=$(claude --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
   add_result "CRITICAL" "PASS" "Claude Code CLI" "version: ${CC_VER:-unknown}"
 else
   add_result "CRITICAL" "FAIL" "Claude Code CLI" \
