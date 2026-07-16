@@ -23,22 +23,16 @@ BELCORT is a production-grade implementation of that harness, shipped as a Claud
 
 ---
 
-## What's new in v3.0
+## What's new in v3.1.1
 
-v3.0 closes the **visual-verification leg** of Anthropic's verification triad. Pre-v3.0, the Generator produced unit-tested code and the Evaluator drove Playwright in *dev mode* against the same artifact — bugs that only fired in production runtime (real worker process, real DB transactions, prod-build bundling) bypassed every gate. v3.0 introduces a new **Generator MODE: SIMULATE** dispatched between BUILD and EVALUATE that:
+v3.1.1 ships the real-time worker-log leg that was deferred from v3.1 until Monitor-in-subagent support could be tested empirically.
 
-- Builds the project (`pnpm build`), starts the production server + worker, drives every State-Transition AC row through Playwright with real DB-state queries, and replays every prior shipped feature's `journey.spec.ts` cumulatively as regression coverage.
-- Writes `simulation-report.md` as authoritative behavioural evidence — Evaluator EVALUATE Step 2 lightens to read this report + run a 15-min independent spot-check (no more redundant prod-stack spinning).
-- Catches the bug class that produced 8 production bugs on a real BELCORT ACC v2 demo-prep cycle (S3-stub, transaction-abort, status-never-extracted, review-queue-stuck, stack-walker dev-vs-prod divergence).
+- **Monitor preferred path in SIMULATE Step 2.6** — Generator SIMULATE now uses Monitor + `ToolSearch select:Monitor` to stream worker logs for readiness and failure patterns in real time. Bash polling remains as a fallback.
+- **Parallel worker streams during SIMULATE driving** — Steps 3-5 can keep a live failure-pattern stream open while Playwright drives state transitions, negative paths, and cumulative regression.
+- **Evaluator worker-side forensics** — Evaluator Step 2b can stream the worker log path recorded by SIMULATE and attach stack traces to findings, turning "UI broke" into diagnostic evidence.
+- **Report surface** — `simulation-report.md` gains a `## Worker logs (real-time captures, v3.1.1+)` section for captures that happen during driving, distinct from post-hoc tail output.
 
-Plus structural additions:
-
-- **Contract template** gains mandatory **State-Transition AC**, **Negative-Path Coverage**, and **UI-surface AC** sections — the Planner enumerates state transitions + constraints from the architecture data model; the Generator commits to test names during NEGOTIATE; SIMULATE drives them; EVALUATE Part A binary-gates on row-by-row passing tests.
-- **Catch-block ban** as a new MUST constitution principle (closes the silent-error-swallow bug class).
-- **Test-fixture + test-account conventions** standardized — every feature gets `tests/e2e/<NNN-feature-name>/{journey,fixtures}.spec.ts` with `beforeEach` seed + `afterEach` cleanup; auth-gated apps use `TEST_USER_*` env vars seeded by `init.sh`.
-- **Audit polish** — HANDLING FETCHED CONTENT preamble factored into SKILL.md (single source of truth), `pre-tool-use.sh` test-deletion hard-block downgraded to advisory (Evaluator git-archaeology covers same ground), ~16 dead manifest fields removed.
-
-See [CHANGELOG.md](CHANGELOG.md) for the full v3.0 entry and [docs/superpowers/specs/2026-05-07-belcort-v3-runtime-verification-and-audit-design.md](docs/superpowers/specs/2026-05-07-belcort-v3-runtime-verification-and-audit-design.md) for the design rationale.
+See [CHANGELOG.md](CHANGELOG.md) for the full v3.1.1 entry.
 
 ---
 
@@ -65,6 +59,25 @@ v3.1 closes the highest-ROI gaps surfaced by post-v3.0 research — 8 verificati
 - **Refactor pattern via /quick** — Generator RED FLAGS row 7 directs refactor-shaped work to `/harness:quick` with the new SKILL.md § Refactor Pattern template. Defers full `/harness:refactor` command to v3.2 pending usage data.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full v3.1.0 entry; [docs/superpowers/specs/2026-05-08-belcort-v3.1-verification-augmentation-design.md](docs/superpowers/specs/2026-05-08-belcort-v3.1-verification-augmentation-design.md) for the design rationale.
+
+---
+
+## What's new in v3.0
+
+v3.0 closes the **visual-verification leg** of Anthropic's verification triad. Pre-v3.0, the Generator produced unit-tested code and the Evaluator drove Playwright in *dev mode* against the same artifact — bugs that only fired in production runtime (real worker process, real DB transactions, prod-build bundling) bypassed every gate. v3.0 introduces a new **Generator MODE: SIMULATE** dispatched between BUILD and EVALUATE that:
+
+- Builds the project (`pnpm build`), starts the production server + worker, drives every State-Transition AC row through Playwright with real DB-state queries, and replays every prior shipped feature's `journey.spec.ts` cumulatively as regression coverage.
+- Writes `simulation-report.md` as authoritative behavioural evidence — Evaluator EVALUATE Step 2 lightens to read this report + run a 15-min independent spot-check (no more redundant prod-stack spinning).
+- Catches the bug class that produced 8 production bugs on a real BELCORT ACC v2 demo-prep cycle (S3-stub, transaction-abort, status-never-extracted, review-queue-stuck, stack-walker dev-vs-prod divergence).
+
+Plus structural additions:
+
+- **Contract template** gains mandatory **State-Transition AC**, **Negative-Path Coverage**, and **UI-surface AC** sections — the Planner enumerates state transitions + constraints from the architecture data model; the Generator commits to test names during NEGOTIATE; SIMULATE drives them; EVALUATE Part A binary-gates on row-by-row passing tests.
+- **Catch-block ban** as a new MUST constitution principle (closes the silent-error-swallow bug class).
+- **Test-fixture + test-account conventions** standardized — every feature gets `tests/e2e/<NNN-feature-name>/{journey,fixtures}.spec.ts` with `beforeEach` seed + `afterEach` cleanup; auth-gated apps use `TEST_USER_*` env vars seeded by `init.sh`.
+- **Audit polish** — HANDLING FETCHED CONTENT preamble factored into SKILL.md (single source of truth), `pre-tool-use.sh` test-deletion hard-block downgraded to advisory (Evaluator git-archaeology covers same ground), ~16 dead manifest fields removed.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full v3.0 entry and [docs/superpowers/specs/2026-05-07-belcort-v3-runtime-verification-and-audit-design.md](docs/superpowers/specs/2026-05-07-belcort-v3-runtime-verification-and-audit-design.md) for the design rationale.
 
 ---
 
@@ -488,8 +501,9 @@ For full rationale behind every v2 change:
 
 ## Status
 
-**v3.1.0 — shipped to `main` as current stable** (2026-05-08) — verification augmentation. 8 additions across operational reliability + verification depth + planning rigor + code-quality second-opinion. See [CHANGELOG.md](CHANGELOG.md) for full detail.
+**v3.1.1 — shipped to `main` as current stable** (2026-05-10) — Monitor integration for real-time worker log tailing during SIMULATE and Evaluator spot-checks. See [CHANGELOG.md](CHANGELOG.md) for full detail.
 
+- v3.1.1 — Monitor integration: real-time worker readiness/failure streams via Monitor preferred path, Bash polling fallback preserved, simulation-report real-time capture section, and Evaluator worker-side forensics during spot-checks.
 - v3.1.0 — verification augmentation: closes 8 highest-ROI gaps from post-v3.0 research. Worker readiness signal + axe-core a11y + code-reviewer integration with anti-leniency preservation + Stryker mutation + fast-check property + MADR ADR matrix + size-limit budget + refactor pattern stub. 7 v3.2 deferrals tracked with explicit revisit conditions in ROADMAP. See [CHANGELOG.md](CHANGELOG.md) for full detail.
 - v3.0.0 — runtime-verification phase + audit pass: Generator MODE: SIMULATE drives prod build + worker + Playwright + cumulative regression before Evaluator handoff. Contract template gains State-Transition + Negative-Path + UI-surface coverage. Catch-block ban added to canonical constitution. Evaluator EVALUATE Step 2 lightens. Audit polish on accretion since v2.3.0 (HANDLING FETCHED CONTENT factoring + pre-tool-use.sh hard-block downgrade + ~16 dead manifest fields removed). See [CHANGELOG.md](CHANGELOG.md) for full detail. Source: BELCORT ACC v2 demo-prep incident.
 - v2.1.0 — native Agent-tool dispatch (plugin-declared `harness:planner/generator/evaluator` subagent types), migrated from `claude -p` subprocess pattern

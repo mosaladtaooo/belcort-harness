@@ -88,11 +88,22 @@ The orchestrator dispatches the Planner via the Agent tool:
 2. If `.harness/brainstorm-current.md` still exists and the feature folder now exists, move the brainstorm file into the feature folder as `brainstorm.md`.
 3. Make `.harness/init.sh` executable. The Planner has no Bash tool, so it cannot chmod its own output.
 
-Then wait for the human gate in Step 2.
+Then run the consistency check in Step 2 before presenting the human gate.
 
 ---
 
-## 2. Human gate — present summary, wait for approval
+## 2. Analyze — cross-artifact consistency (automatic)
+
+Run the [`/harness:analyze`](analyze.md) procedure immediately after Planner output exists, before asking the user to approve the plan.
+
+- CRITICAL findings halt. Present the findings and route the user to `/harness:amend`, `/harness:edit`, `/harness:clarify`, or `/harness:rewind planning`.
+- Warnings pass through. Include them in the Step 2b summary so the user approves the plan with the consistency report in view.
+
+Do NOT update `state.phase = "negotiating"` yet. The human gate in Step 2b decides whether negotiation may start.
+
+---
+
+## 2b. Human gate — present summary, wait for approval
 
 Summarise what was planned:
 
@@ -110,6 +121,7 @@ Contract: [strategy], [N] deliverables, [N] ACs.
 Files: ✓ spec/prd.md, ✓ spec/constitution.md, ✓ spec/architecture.md,
        ✓ evaluator/criteria.md, ✓ features/NNN/contract.md, ✓ init.sh.
 Planner self-validation: [N/19 passed].
+Analyze: [PASS | N warning(s)].
 
 Next:
   • approved               → negotiate + build
@@ -126,13 +138,7 @@ If the user wants changes, route through a command — never edit spec files fro
 
 **Auto-suggest `/harness:clarify`** if: Planner self-validation mentioned ≥3 silent defaults, OR user's approval text contains uncertainty words ("maybe", "not sure", "probably").
 
----
-
-## 2b. Analyze — cross-artifact consistency (automatic)
-
-Run the [`/harness:analyze`](analyze.md) procedure. CRITICAL findings halt; warnings pass through.
-
-Orchestrator updates `.harness/manifest.yaml` → `state.phase = "negotiating"` (Edit tool).
+After explicit approval, orchestrator updates `.harness/manifest.yaml` → `state.phase = "negotiating"` (Edit tool).
 
 ---
 
